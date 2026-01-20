@@ -5,7 +5,7 @@
   "publisher": "MarcusGrau",
   "version": "0.0.2",
   "engines": {
-    "vscode": "^1.108.0"
+    "vscode": "^1.90.0"
   },
   "repository": {
     "type": "git",
@@ -15,7 +15,9 @@
     "Other"
   ],
   "icon": "AppIcon.ico",
-  "activationEvents": [],
+  "activationEvents": [
+    "*"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [

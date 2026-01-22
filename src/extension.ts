@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { StorageManager } from './storageManager';
+import { printSessionInfo } from './sessionInfo';
 
 // Define the shape of a single keystroke event
 interface StandardEvent {
@@ -26,6 +27,7 @@ function isIgnoredPath(relPath: string): boolean {
     const p = relPath.replace(/\\/g, '/');
     if (p.startsWith('.vscode/')) return true;
     if (p.includes('tbd-session-')) return true;
+    if (p.endsWith('.log')) return true;
     return false;
 }
 
@@ -65,6 +67,9 @@ let isFlushing = false;
 export async function activate(context: vscode.ExtensionContext) {
 
     console.log('Keystroke Tracker is active!');
+
+    // Print session info (user and project) on activation
+    try { printSessionInfo(); } catch (e) { /* no-op */ }
 
     await storageManager.init(context);
 

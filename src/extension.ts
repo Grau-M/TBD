@@ -79,6 +79,28 @@ export async function activate(context: vscode.ExtensionContext) {
     currentFocusedFile = isIgnoredPath(initialPath) ? '' : initialPath;
     focusStartTime = Date.now();
 
+    // Register command to open/reveal logs (shows informational message with View Logs button)
+    const openLogs = async () => {
+        try {
+            // Informational message only (no action buttons)
+            await vscode.window.showInformationMessage('TBD Logger is currently logging this programming session.');
+        } catch (err) {
+            console.error('[TBD Logger] openLogs error:', err);
+        }
+    };
+
+    const openLogsCommand = vscode.commands.registerCommand('tbd-logger.openLogs', openLogs);
+    context.subscriptions.push(openLogsCommand);
+
+    // Create a branded Status Bar item on the far left with very high priority
+    const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
+    // Use an octicon eye to the right of the label so we avoid custom image issues
+    statusBarItem.text = 'TBD Logger $(eye)';
+    statusBarItem.tooltip = 'Capstone TBD: Keystroke Logging Active';
+    statusBarItem.command = 'tbd-logger.openLogs';
+    statusBarItem.show();
+    context.subscriptions.push(statusBarItem);
+
     // Event listener: fires on user edits
     let listener = vscode.workspace.onDidChangeTextDocument((event) => {
         if (event.contentChanges.length === 0) { return; }

@@ -28,8 +28,6 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Test
-        run: npm test --if-present
       - name: Install Xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
 

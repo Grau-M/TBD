@@ -7,15 +7,41 @@ import { StorageManager } from './storageManager';
 interface StandardEvent {
     time: string;            // formatted timestamp MM-DD-YYYY hh:mm:ss:SSS
     flightTime: string;      // ms since last event, as a string
-    eventType: 'input' | 'paste' | 'delete' | 'undo' | 'focusChange';
+    eventType: 'input' | 'paste' | 'delete' | 'undo' | 'focusChange' | 'focusDuration' | 'save';
     fileEdit: string;        // relative path of edited file (or empty string)
     fileView: string;        // relative path of the active editor file (or empty string)
     possibleAiDetection?: string; // optional note when fileEdit and fileView differ
+    fileFocusCount?: string; // optional human-friendly duration on focused file
 }
 
 // Create a buffer to hold data in memory before saving
 let sessionBuffer: StandardEvent[] = [];
 let lastEventTime: number = Date.now();
+let currentFocusedFile: string = '';
+let focusStartTime: number = Date.now();
+
+// Ignore tracking for files inside .vscode or session log files
+function isIgnoredPath(relPath: string): boolean {
+    if (!relPath) return true;
+    const p = relPath.replace(/\\/g, '/');
+    if (p.startsWith('.vscode/')) return true;
+    if (p.includes('tbd-session-')) return true;
+    return false;
+}
+
+// Format duration in ms into human-friendly string
+function formatDuration(ms: number): string {
+    if (ms < 1000) return `${ms} ms`;
+    const totalSec = Math.floor(ms / 1000);
+    const s = totalSec % 60;
+    const m = Math.floor(totalSec / 60) % 60;
+    const h = Math.floor(totalSec / 3600);
+    const parts: string[] = [];
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    parts.push(`${s}s`);
+    return parts.join(' ');
+}
 
 // Format timestamp as MM-DD-YYYY hh:mm:ss:SSS
 function formatTimestamp(ms: number): string {
@@ -42,6 +68,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
     await storageManager.init(context);
 
+    // Initialize current focused file/time based on active editor
+    const initialActive = vscode.window.activeTextEditor;
+    const initialPath = initialActive && initialActive.document ? vscode.workspace.asRelativePath(initialActive.document.uri, false) : '';
+    currentFocusedFile = isIgnoredPath(initialPath) ? '' : initialPath;
+    focusStartTime = Date.now();
+
     // Event listener: fires on user edits
     let listener = vscode.workspace.onDidChangeTextDocument((event) => {
         if (event.contentChanges.length === 0) { return; }
@@ -54,9 +86,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Determine fileView once per change event (active editor at that moment)
         const active = vscode.window.activeTextEditor;
-        const fileView = active && active.document ? vscode.workspace.asRelativePath(active.document.uri, false) : '';
+        const fileViewRaw = active && active.document ? vscode.workspace.asRelativePath(active.document.uri, false) : '';
+        const fileView = isIgnoredPath(fileViewRaw) ? '' : fileViewRaw;
 
         event.contentChanges.forEach((change) => {
+            const fileEditRaw = event.document ? vscode.workspace.asRelativePath(event.document.uri, false) : '';
+            // If the edit is in our session file or .vscode, ignore it (we wrote it)
+            if (isIgnoredPath(fileEditRaw)) return;
+            const fileEdit = fileEditRaw;
+
             let eventType: StandardEvent['eventType'];
             if (change.text === '' && change.rangeLength > 0) {
                 eventType = 'delete';
@@ -66,8 +104,6 @@ export async function activate(context: vscode.ExtensionContext) {
                 eventType = 'input';
             }
 
-            const fileEdit = event.document ? vscode.workspace.asRelativePath(event.document.uri, false) : '';
-
             const logEntry: StandardEvent = {
                 time: formattedTime,
                 flightTime: String(timeDiff),
@@ -75,10 +111,16 @@ export async function activate(context: vscode.ExtensionContext) {
                 fileEdit,
                 fileView
             };
+            // Always include fileFocusCount: how long the current focused file has been focused
+            if (currentFocusedFile) {
+                const focusDurationMs = Date.now() - focusStartTime;
+                logEntry.fileFocusCount = formatDuration(focusDurationMs);
+            } else {
+                logEntry.fileFocusCount = '0s';
+            }
 
-            // If this is not a focusChange event and the edit/view files differ,
-            // annotate the event for possible AI detection.
-            if (eventType !== 'focusChange' && fileEdit !== fileView) {
+            // If the edit/view files differ, annotate the event for possible AI detection.
+            if (fileEdit !== fileView) {
                 logEntry.possibleAiDetection = 'The fileView and the fileEdit are not the same, IDE cannot focus one file while editing another.';
             }
 
@@ -97,20 +139,41 @@ export async function activate(context: vscode.ExtensionContext) {
     // Listen for focus/active-editor changes and record as focusChange events
     const focusListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
         const currentTime = Date.now();
+
+        // Compute and record duration for the file that was previously focused
+        if (currentFocusedFile) {
+            const durationMs = currentTime - focusStartTime;
+            const durationEvent: StandardEvent = {
+                time: formatTimestamp(currentTime),
+                flightTime: String(durationMs),
+                eventType: 'focusDuration',
+                fileEdit: '',
+                fileView: currentFocusedFile,
+                fileFocusCount: formatDuration(durationMs)
+            };
+            sessionBuffer.push(durationEvent);
+        }
+
         const timeDiff = currentTime - lastEventTime;
         lastEventTime = currentTime;
 
         const formattedTime = formatTimestamp(currentTime);
 
-        const fileView = editor && editor.document ? vscode.workspace.asRelativePath(editor.document.uri, false) : '';
+        const rawFileView = editor && editor.document ? vscode.workspace.asRelativePath(editor.document.uri, false) : '';
+        const fileView = isIgnoredPath(rawFileView) ? '' : rawFileView;
 
         const focusEvent: StandardEvent = {
             time: formattedTime,
             flightTime: String(timeDiff),
             eventType: 'focusChange',
             fileEdit: '',
-            fileView
+            fileView,
+            fileFocusCount: '0s'
         };
+
+        // update current focus tracking (ignore .vscode/session files)
+        currentFocusedFile = fileView;
+        focusStartTime = currentTime;
 
         sessionBuffer.push(focusEvent);
         if (sessionBuffer.length >= FLUSH_THRESHOLD) {
@@ -118,6 +181,37 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
     context.subscriptions.push(focusListener);
+
+    // Listen for saves (user-triggered or programmatic) and record save events
+    const saveListener = vscode.workspace.onDidSaveTextDocument((doc) => {
+        const currentTime = Date.now();
+        const timeDiff = currentTime - lastEventTime;
+        lastEventTime = currentTime;
+
+        const formattedTime = formatTimestamp(currentTime);
+        const fileEdit = doc ? vscode.workspace.asRelativePath(doc.uri, false) : '';
+        const active = vscode.window.activeTextEditor;
+        const fileView = active && active.document ? vscode.workspace.asRelativePath(active.document.uri, false) : '';
+
+        const saveEvent: StandardEvent = {
+            time: formattedTime,
+            flightTime: String(timeDiff),
+            eventType: 'save',
+            fileEdit,
+            fileView,
+            fileFocusCount: currentFocusedFile ? formatDuration(Date.now() - focusStartTime) : '0s'
+        };
+
+        if (fileEdit !== fileView) {
+            saveEvent.possibleAiDetection = 'The fileView and the fileEdit are not the same, IDE cannot focus one file while editing another.';
+        }
+
+        sessionBuffer.push(saveEvent);
+        if (sessionBuffer.length >= FLUSH_THRESHOLD) {
+            void flushBuffer();
+        }
+    });
+    context.subscriptions.push(saveListener);
 
     // Periodic flush timer
     const timer = setInterval(() => void flushBuffer(), FLUSH_INTERVAL_MS);
@@ -148,6 +242,20 @@ async function flushBuffer() {
 
 // Deactivate: flush remaining events
 export function deactivate() {
+    // Record final focus duration for the currently focused file
+    const now = Date.now();
+    if (currentFocusedFile) {
+        const durationMs = now - focusStartTime;
+        const durationEvent: StandardEvent = {
+            time: formatTimestamp(now),
+            flightTime: String(durationMs),
+            eventType: 'focusDuration',
+            fileEdit: '',
+            fileView: currentFocusedFile
+        };
+        sessionBuffer.push(durationEvent);
+    }
+
     void flushBuffer();
     console.log('Session ended. Total events captured (flushed on deactivate):', sessionBuffer.length);
 }

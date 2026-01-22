@@ -1,144 +1,201 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { StorageManager } from './storageManager';
 import { printSessionInfo } from './sessionInfo';
+import * as path from 'path';
 
-// Define the shape of a single keystroke event
+// --- 1. DEFINITIONS ---
+
+// Combined Interface (Superset of both)
 interface StandardEvent {
-    time: string;            // formatted timestamp MM-DD-YYYY hh:mm:ss:SSS
-    flightTime: string;      // ms since last event, as a string
-    eventType: 'input' | 'paste' | 'delete' | 'undo' | 'focusChange' | 'focusDuration' | 'save';
-    fileEdit: string;        // relative path of edited file (or empty string)
-    fileView: string;        // relative path of the active editor file (or empty string)
-    possibleAiDetection?: string; // optional note when fileEdit and fileView differ
-    fileFocusCount?: string; // optional human-friendly duration on focused file
+    time: string;
+    flightTime: string;
+    eventType: 'input' | 'paste' | 'delete' | 'replace' | 'undo' | 'focusChange' | 'focusDuration' | 'save' | 'ai-paste' | 'ai-delete' | 'ai-replace';
+    fileEdit: string;
+    fileView: string;
+    possibleAiDetection?: string;
+    fileFocusCount?: string; // Kept from File 1
 }
 
-// Create a buffer to hold data in memory before saving
 let sessionBuffer: StandardEvent[] = [];
 let lastEventTime: number = Date.now();
-let currentFocusedFile: string = '';
-let focusStartTime: number = Date.now();
 
-// Ignore tracking for files inside .vscode or session log files
+// TRACKING VARIABLES
+let focusAwayStartTime: number | null = null;
+let lastLoggedFileView: string = '';
+let sessionStartTime: number = Date.now();
+let currentFocusedFile: string = ''; // Kept from File 1
+let focusStartTime: number = Date.now(); // Kept from File 1
+
+// UI VARIABLES
+let statusBarItem: vscode.StatusBarItem;
+
+// CONSTANTS
+const FOCUS_THRESHOLD_MS = 15000; 
+const FLUSH_INTERVAL_MS = 10000; 
+const FLUSH_THRESHOLD = 50;
+
+const storageManager = new StorageManager();
+let isFlushing = false;
+
+// --- 2. HELPER FUNCTIONS ---
+
+function formatTimestamp(ms: number): string {
+    const d = new Date(ms);
+    return d.toISOString().replace('T', ' ').replace('Z', '');
+}
+
+function formatDuration(ms: number): string {
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// Kept from File 1: Essential for filtering noise
 function isIgnoredPath(relPath: string): boolean {
     if (!relPath) return true;
     const p = relPath.replace(/\\/g, '/');
     if (p.startsWith('.vscode/')) return true;
     if (p.includes('tbd-session-')) return true;
-    if (p.endsWith('.log')) return true;
+    if (p.endsWith('.log') || p.endsWith('.json')) return true;
     return false;
 }
 
-// Format duration in ms into human-friendly string
-function formatDuration(ms: number): string {
-    if (ms < 1000) return `${ms} ms`;
-    const totalSec = Math.floor(ms / 1000);
-    const s = totalSec % 60;
-    const m = Math.floor(totalSec / 60) % 60;
-    const h = Math.floor(totalSec / 3600);
-    const parts: string[] = [];
-    if (h > 0) parts.push(`${h}h`);
-    if (m > 0) parts.push(`${m}m`);
-    parts.push(`${s}s`);
-    return parts.join(' ');
+// --- 3. FOCUS LOGIC ---
+
+function handleFocusLost() {
+    // Only start the timer if we aren't ALREADY away
+    if (!focusAwayStartTime) {
+        focusAwayStartTime = Date.now();
+        
+        // Immediate UI Update (The Loop will take over shortly)
+        if (statusBarItem) {
+            statusBarItem.text = `$(warning) AWAY 00:00:00`;
+            statusBarItem.color = new vscode.ThemeColor('charts.yellow');
+            statusBarItem.tooltip = "Focus Lost! Come back to VS Code to stop this timer.";
+        }
+    }
 }
 
-// Format timestamp as MM-DD-YYYY hh:mm:ss:SSS
-function formatTimestamp(ms: number): string {
-    const d = new Date(ms);
-    const MM = String(d.getMonth() + 1).padStart(2, '0');
-    const DD = String(d.getDate()).padStart(2, '0');
-    const YYYY = String(d.getFullYear());
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    const ss = String(d.getSeconds()).padStart(2, '0');
-    const SSS = String(d.getMilliseconds()).padStart(3, '0');
-    return `${MM}-${DD}-${YYYY} ${hh}:${mm}:${ss}:${SSS}`;
+function handleFocusRegained() {
+    // Stop the "Away" timer
+    if (focusAwayStartTime) {
+        const currentTime = Date.now();
+        const timeAway = currentTime - focusAwayStartTime;
+        focusAwayStartTime = null; // Reset
+
+        // LOGGING LOGIC (Only log if > 15s)
+        if (timeAway >= FOCUS_THRESHOLD_MS) {
+            sessionBuffer.push({
+                time: formatTimestamp(currentTime),
+                flightTime: String(timeAway), 
+                eventType: 'focusChange',
+                fileEdit: '',
+                fileView: 'Focus Away (Major)' 
+            });
+        }
+    }
 }
 
-const storageManager = new StorageManager();
-const FLUSH_INTERVAL_MS = 30_000;
-const FLUSH_THRESHOLD = 50;
-let isFlushing = false;
+// --- 4. ACTIVATION ---
 
-// Activate — await storage initialization so logs are created in workspace .vscode
 export async function activate(context: vscode.ExtensionContext) {
-
     console.log('Keystroke Tracker is active!');
 
-    // Print session info (user and project) on activation
+    // Initialize Storage & Session Info
     try { printSessionInfo(); } catch (e) { /* no-op */ }
-
     await storageManager.init(context);
 
-    // Initialize current focused file/time based on active editor
+    // Initialize State
     const initialActive = vscode.window.activeTextEditor;
     const initialPath = initialActive && initialActive.document ? vscode.workspace.asRelativePath(initialActive.document.uri, false) : '';
     currentFocusedFile = isIgnoredPath(initialPath) ? '' : initialPath;
     focusStartTime = Date.now();
 
-    // Register command to open/reveal logs (shows informational message with View Logs button)
+    // REGISTER COMMAND: Open Logs (From File 1)
     const openLogs = async () => {
         try {
-            // Informational message only (no action buttons)
             await vscode.window.showInformationMessage('TBD Logger is currently logging this programming session.');
         } catch (err) {
             console.error('[TBD Logger] openLogs error:', err);
         }
     };
-
     const openLogsCommand = vscode.commands.registerCommand('tbd-logger.openLogs', openLogs);
     context.subscriptions.push(openLogsCommand);
 
-    // Create a branded Status Bar item on the far left with very high priority
-    const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
-    // Use an octicon eye to the right of the label so we avoid custom image issues
-    statusBarItem.text = 'TBD Logger $(eye)';
-    statusBarItem.tooltip = 'Capstone TBD: Keystroke Logging Active';
-    statusBarItem.command = 'tbd-logger.openLogs';
+    // STATUS BAR SETUP
+    // Combined: Used File 2's Right alignment for timer, but added File 1's command to make it clickable
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusBarItem.command = 'tbd-logger.openLogs'; 
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
 
-    // Event listener: fires on user edits
+    // TIMER LOOP (From File 2) - Updates the UI dynamically
+    const uiTimer = setInterval(() => {
+        const now = Date.now();
+
+        if (focusAwayStartTime) {
+            // AWAY MODE
+            const awayDuration = now - focusAwayStartTime;
+            statusBarItem.text = `$(warning) AWAY ${formatDuration(awayDuration)}`;
+            statusBarItem.color = new vscode.ThemeColor('charts.yellow'); 
+        } else {
+            // RECORDING MODE
+            const sessionDuration = now - sessionStartTime;
+            statusBarItem.text = `$(circle-filled) REC ${formatDuration(sessionDuration)}`;
+            statusBarItem.color = new vscode.ThemeColor('errorForeground'); 
+            statusBarItem.tooltip = "TBD Extension: Session Recording in Progress (Click for info)";
+        }
+    }, 1000);
+    context.subscriptions.push({ dispose: () => clearInterval(uiTimer) });
+
+    // --- LISTENERS ---
+
+    // 1. MAIN LISTENER (EDITS)
+    // Using File 1's logic (with isIgnoredPath) + File 2's AI detection logic
     let listener = vscode.workspace.onDidChangeTextDocument((event) => {
+        if (event.document.fileName.endsWith('.log') || event.document.fileName.endsWith('.json')) { return; }
         if (event.contentChanges.length === 0) { return; }
 
         const currentTime = Date.now();
         const timeDiff = currentTime - lastEventTime;
         lastEventTime = currentTime;
-
         const formattedTime = formatTimestamp(currentTime);
 
-        // Determine fileView once per change event (active editor at that moment)
-        const active = vscode.window.activeTextEditor;
-        const fileViewRaw = active && active.document ? vscode.workspace.asRelativePath(active.document.uri, false) : '';
+        const activeEditor = vscode.window.activeTextEditor;
+        const isFocusMismatch = activeEditor 
+            ? activeEditor.document.uri.toString() !== event.document.uri.toString() 
+            : true; 
+
+        const fileViewRaw = activeEditor ? path.basename(activeEditor.document.fileName) : 'System/Sidebar';
+        const fileEdit = path.basename(event.document.fileName);
         const fileView = isIgnoredPath(fileViewRaw) ? '' : fileViewRaw;
 
         event.contentChanges.forEach((change) => {
             const fileEditRaw = event.document ? vscode.workspace.asRelativePath(event.document.uri, false) : '';
-            // If the edit is in our session file or .vscode, ignore it (we wrote it)
+            // Filter internal edits (File 1 feature)
             if (isIgnoredPath(fileEditRaw)) return;
-            const fileEdit = fileEditRaw;
 
             let eventType: StandardEvent['eventType'];
-            if (change.text === '' && change.rangeLength > 0) {
-                eventType = 'delete';
-            } else if (change.text.length > 1) {
-                eventType = 'paste';
-            } else {
-                eventType = 'input';
-            }
+            const isReplace = change.rangeLength > 0 && change.text !== '';
+            const isDelete = change.rangeLength > 0 && change.text === '';
+            const isInsert = change.rangeLength === 0 && change.text.length > 0;
+
+            if (isDelete) eventType = isFocusMismatch ? 'ai-delete' : 'delete';
+            else if (isReplace) eventType = isFocusMismatch ? 'ai-replace' : 'replace';
+            else if (isInsert) eventType = change.text.length > 1 ? (isFocusMismatch ? 'ai-paste' : 'paste') : (isFocusMismatch ? 'ai-paste' : 'input');
+            else eventType = 'input';
 
             const logEntry: StandardEvent = {
                 time: formattedTime,
                 flightTime: String(timeDiff),
                 eventType,
-                fileEdit,
+                fileEdit: fileEditRaw,
                 fileView
             };
-            // Always include fileFocusCount: how long the current focused file has been focused
+
+            // Calculate Focus Count (File 1 feature)
             if (currentFocusedFile) {
                 const focusDurationMs = Date.now() - focusStartTime;
                 logEntry.fileFocusCount = formatDuration(focusDurationMs);
@@ -146,70 +203,68 @@ export async function activate(context: vscode.ExtensionContext) {
                 logEntry.fileFocusCount = '0s';
             }
 
-            // If the edit/view files differ, annotate the event for possible AI detection.
-            if (fileEdit !== fileView) {
-                logEntry.possibleAiDetection = 'The fileView and the fileEdit are not the same, IDE cannot focus one file while editing another.';
+            if (isFocusMismatch || fileEditRaw !== fileView) {
+                logEntry.possibleAiDetection = 'WARNING: The file cannot be edited when the cursor isn\'t being focused on that file. Potential AI usage detected.';
             }
-
-            // Push to in-memory buffer — no per-keystroke console output
             sessionBuffer.push(logEntry);
-
-            // Trigger flush if threshold reached
-            if (sessionBuffer.length >= FLUSH_THRESHOLD) {
-                void flushBuffer();
-            }
+            if (sessionBuffer.length >= FLUSH_THRESHOLD) void flushBuffer();
         });
     });
-
     context.subscriptions.push(listener);
 
-    // Listen for focus/active-editor changes and record as focusChange events
+    // 2. EDITOR FOCUS LISTENER (Tabs/Sidebar)
     const focusListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
-        const currentTime = Date.now();
+        lastEventTime = Date.now();
+        
+        if (!editor) {
+            // User clicked Terminal or Sidebar
+            handleFocusLost();
+        } else {
+            // User clicked an Editor Tab
+            handleFocusRegained();
 
-        // Compute and record duration for the file that was previously focused
-        if (currentFocusedFile) {
-            const durationMs = currentTime - focusStartTime;
-            const durationEvent: StandardEvent = {
-                time: formatTimestamp(currentTime),
-                flightTime: String(durationMs),
-                eventType: 'focusDuration',
-                fileEdit: '',
-                fileView: currentFocusedFile,
-                fileFocusCount: formatDuration(durationMs)
-            };
-            sessionBuffer.push(durationEvent);
-        }
+            // Track detailed focus stats (File 1 feature)
+            const newPath = editor.document ? vscode.workspace.asRelativePath(editor.document.uri, false) : '';
+            if (!isIgnoredPath(newPath)) {
+                currentFocusedFile = newPath;
+                focusStartTime = Date.now();
+            } else {
+                currentFocusedFile = '';
+            }
 
-        const timeDiff = currentTime - lastEventTime;
-        lastEventTime = currentTime;
-
-        const formattedTime = formatTimestamp(currentTime);
-
-        const rawFileView = editor && editor.document ? vscode.workspace.asRelativePath(editor.document.uri, false) : '';
-        const fileView = isIgnoredPath(rawFileView) ? '' : rawFileView;
-
-        const focusEvent: StandardEvent = {
-            time: formattedTime,
-            flightTime: String(timeDiff),
-            eventType: 'focusChange',
-            fileEdit: '',
-            fileView,
-            fileFocusCount: '0s'
-        };
-
-        // update current focus tracking (ignore .vscode/session files)
-        currentFocusedFile = fileView;
-        focusStartTime = currentTime;
-
-        sessionBuffer.push(focusEvent);
-        if (sessionBuffer.length >= FLUSH_THRESHOLD) {
-            void flushBuffer();
+            // Log Context Switch if file changed
+            const currentFileView = path.basename(editor.document.fileName);
+            if (currentFileView !== lastLoggedFileView) {
+                sessionBuffer.push({
+                    time: formatTimestamp(Date.now()),
+                    flightTime: '0',
+                    eventType: 'focusChange',
+                    fileEdit: '',
+                    fileView: currentFileView
+                });
+                lastLoggedFileView = currentFileView;
+            }
         }
     });
     context.subscriptions.push(focusListener);
 
-    // Listen for saves (user-triggered or programmatic) and record save events
+    // 3. WINDOW FOCUS LISTENER (Alt-Tab / OS Switching)
+    // CRITICAL ADDITION FROM FILE 2
+    const windowStateListener = vscode.window.onDidChangeWindowState((windowState) => {
+        if (windowState.focused) {
+            // User Alt-Tabbed BACK to VS Code
+            if (vscode.window.activeTextEditor) {
+                handleFocusRegained();
+            }
+            // If they landed on sidebar, we leave the timer running (handled by focusListener)
+        } else {
+            // User Alt-Tabbed AWAY from VS Code (Spotify, Chrome, etc.)
+            handleFocusLost();
+        }
+    });
+    context.subscriptions.push(windowStateListener);
+
+    // 4. SAVE LISTENER (From File 1)
     const saveListener = vscode.workspace.onDidSaveTextDocument((doc) => {
         const currentTime = Date.now();
         const timeDiff = currentTime - lastEventTime;
@@ -240,36 +295,30 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(saveListener);
 
-    // Periodic flush timer
-    const timer = setInterval(() => void flushBuffer(), FLUSH_INTERVAL_MS);
-    context.subscriptions.push({ dispose: () => clearInterval(timer) });
+    // Buffer Flush Timer
+    const flushTimer = setInterval(() => void flushBuffer(), FLUSH_INTERVAL_MS);
+    context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
 }
 
-// Flush in-memory buffer to storage (async-safe)
+// --- 5. TEARDOWN ---
+
 async function flushBuffer() {
-    if (isFlushing) return;
-    if (sessionBuffer.length === 0) return;
+    if (isFlushing || sessionBuffer.length === 0) return;
     isFlushing = true;
     const toSave = sessionBuffer.splice(0, sessionBuffer.length);
+    
     try {
-        const saved = await storageManager.flush(toSave);
-        if (saved > 0) {
-            console.log('[TBD Logger] Flushed', saved, 'events to disk');
-        }
+        await storageManager.flush(toSave);
     } catch (err) {
-        console.error('[TBD Logger] Flush error:', err);
-        // Re-queue on failure (bounded)
-        const prepend = toSave.concat(sessionBuffer).slice(-10000);
-        sessionBuffer.length = 0;
-        sessionBuffer.push(...prepend);
+        console.error('Flush error:', err);
+        sessionBuffer.unshift(...toSave);
     } finally {
         isFlushing = false;
     }
 }
 
-// Deactivate: flush remaining events
 export function deactivate() {
-    // Record final focus duration for the currently focused file
+    // Record final focus duration for the currently focused file (File 1 feature)
     const now = Date.now();
     if (currentFocusedFile) {
         const durationMs = now - focusStartTime;
@@ -284,5 +333,5 @@ export function deactivate() {
     }
 
     void flushBuffer();
-    console.log('Session ended. Total events captured (flushed on deactivate):', sessionBuffer.length);
+    if (statusBarItem) { statusBarItem.dispose(); }
 }

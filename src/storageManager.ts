@@ -1,121 +1,139 @@
 import * as vscode from 'vscode';
-import { getSessionInfo } from './sessionInfo';
+import * as crypto from 'crypto';
+
+// SECURITY CONFIGURATION
+// The fixed password stored in the code, as requested.
+const SECRET_PASSPHRASE = 'TBD_CAPSTONE_MASTER_KEY_2026';
+const SALT = 'salty_buffer_tbd';
+// We derive the actual encryption key from the fixed password
+const KEY = crypto.scryptSync(SECRET_PASSPHRASE, SALT, 32); 
+const ALGORITHM = 'aes-256-cbc';
+const IV_LENGTH = 16;
+const LOG_FILENAME = 'tbd-integrity-log.enc';
 
 export class StorageManager {
     private context!: vscode.ExtensionContext;
     private sessionFileUri: vscode.Uri | null = null;
     private initialized = false;
 
+    // --- ENCRYPTION HELPERS ---
+    private encrypt(text: string): Buffer {
+        const iv = crypto.randomBytes(IV_LENGTH);
+        const cipher = crypto.createCipheriv(ALGORITHM, KEY, iv);
+        const encrypted = Buffer.concat([cipher.update(text), cipher.final()]);
+        // Store IV + Encrypted Data (IV is needed for decryption)
+        return Buffer.concat([iv, encrypted]);
+    }
+
+    private decrypt(buffer: Uint8Array): string {
+        const buf = Buffer.from(buffer);
+        // Extract IV (first 16 bytes) and Content
+        const iv = buf.subarray(0, IV_LENGTH);
+        const content = buf.subarray(IV_LENGTH);
+        
+        const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv);
+        const decrypted = Buffer.concat([decipher.update(content), decipher.final()]);
+        return decrypted.toString();
+    }
+
     async init(context: vscode.ExtensionContext) {
         this.context = context;
-
         const workspaceFolders = vscode.workspace.workspaceFolders;
+        let storageDir: vscode.Uri;
+
+        // 1. Determine Storage Location
+        if (workspaceFolders && workspaceFolders.length > 0) {
+            const workspaceRoot = workspaceFolders[0].uri;
+            storageDir = vscode.Uri.joinPath(workspaceRoot, '.vscode');
+            await vscode.workspace.fs.createDirectory(storageDir);
+            console.log('[TBD Logger] Using workspace .vscode for logs:', storageDir.fsPath);
+        } else {
+            storageDir = context.globalStorageUri;
+            await vscode.workspace.fs.createDirectory(storageDir);
+            console.log('[TBD Logger] No workspace open — using global storage:', storageDir.fsPath);
+        }
+
+        this.sessionFileUri = vscode.Uri.joinPath(storageDir, LOG_FILENAME);
+
+        // 2. Integrity Check & File Creation
+        let exists = true;
         try {
-            let storageDir: vscode.Uri;
-            if (workspaceFolders && workspaceFolders.length > 0) {
-                const workspaceRoot = workspaceFolders[0].uri;
-                const vscodeDir = vscode.Uri.joinPath(workspaceRoot, '.vscode');
-                // ensure .vscode exists
-                await vscode.workspace.fs.createDirectory(vscodeDir);
-                storageDir = vscodeDir;
-                console.log('[TBD Logger] Using workspace .vscode for logs:', storageDir.fsPath);
-            } else {
-                storageDir = context.globalStorageUri;
-                await vscode.workspace.fs.createDirectory(storageDir);
-                console.log('[TBD Logger] No workspace open — using global storage for logs:', storageDir.fsPath);
-            }
+            await vscode.workspace.fs.stat(this.sessionFileUri);
+        } catch {
+            exists = false;
+        }
 
-            const ts = Date.now();
-            const sess = getSessionInfo();
-            // sanitize filename parts
-            const safeUser = String(sess.user).replace(/[^a-zA-Z0-9-_]/g, '-') || 'user';
-            const safeProject = String(sess.project).replace(/[^a-zA-Z0-9-_]/g, '-') || 'project';
-            const filename = `${safeUser}-${safeProject}.log`;
-            this.sessionFileUri = vscode.Uri.joinPath(storageDir, filename);
-
-            // initialize file if missing
-            let parsed: any = null;
+        if (exists) {
             try {
-                await vscode.workspace.fs.stat(this.sessionFileUri);
+                // Verify we can decrypt it
                 const data = await vscode.workspace.fs.readFile(this.sessionFileUri);
-                const text = new TextDecoder().decode(data);
-                parsed = JSON.parse(text);
-            } catch (e) {
-                parsed = { events: [] };
-            }
-
-            // append a session header object marking the start of this session
-            const header: any = { vscodeVersion: vscode.version, startTimestamp: ts };
-            try {
-                const pkgUri = vscode.Uri.joinPath(context.extensionUri, 'package.json');
-                const pkgData = await vscode.workspace.fs.readFile(pkgUri);
-                const pkgText = new TextDecoder().decode(pkgData);
-                const pkg = JSON.parse(pkgText);
-                header.extensionVersion = pkg.version || 'unknown';
+                const jsonStr = this.decrypt(data);
+                JSON.parse(jsonStr); 
+                console.log('[TBD Logger] Log integrity verified.');
             } catch (err) {
-                header.extensionVersion = 'unknown';
+                console.error('[TBD Logger] Log corruption detected! Archiving...');
+                const backupUri = vscode.Uri.joinPath(storageDir, `log_corrupt_${Date.now()}.bak`);
+                await vscode.workspace.fs.rename(this.sessionFileUri, backupUri);
+                exists = false; 
             }
+        }
 
-            // determine session number by inspecting last sessionHeader in parsed.events
-            let lastSessionNumber = 0;
-            if (Array.isArray(parsed.events)) {
-                for (let i = parsed.events.length - 1; i >= 0; i--) {
-                    const item = parsed.events[i];
-                    if (item && item.sessionHeader && typeof item.sessionHeader.sessionNumber === 'number') {
-                        lastSessionNumber = item.sessionHeader.sessionNumber;
-                        break;
-                    }
-                }
-            }
-            const sessionNumber = lastSessionNumber + 1;
+        if (!exists) {
+            const initialData = {
+                header: {
+                    created: Date.now(),
+                    version: '2.0 (Encrypted)',
+                    vscodeVersion: vscode.version
+                },
+                events: [] 
+            };
+            const encryptedData = this.encrypt(JSON.stringify(initialData, null, 2));
+            await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
+            console.log('[TBD Logger] Created new encrypted log file.');
+        }
 
-            const sessionHeader = { sessionHeader: { sessionNumber, startedBy: sess.user, project: sess.project, startTime: new Date(ts).toISOString(), metadata: header } };
-            if (!Array.isArray(parsed.events)) parsed.events = [];
-            parsed.events.push(sessionHeader);
+        this.initialized = true;
+    }
 
-            const enc = new TextEncoder();
-            await vscode.workspace.fs.writeFile(this.sessionFileUri, enc.encode(JSON.stringify(parsed, null, 2)));
+    // Used by background timer (automated)
+    async flush(newEvents: any[]): Promise<void> {
+        if (!this.initialized || !this.sessionFileUri) return;
+        if (newEvents.length === 0) return;
 
-            this.initialized = true;
-            console.log('[TBD Logger] StorageManager initialized at', this.sessionFileUri.fsPath);
+        try {
+            const fileData = await vscode.workspace.fs.readFile(this.sessionFileUri);
+            const jsonStr = this.decrypt(fileData);
+            const history = JSON.parse(jsonStr);
+
+            if (!Array.isArray(history.events)) history.events = [];
+            history.events.push(...newEvents);
+
+            const updatedJsonStr = JSON.stringify(history, null, 2);
+            const encryptedData = this.encrypt(updatedJsonStr);
+
+            await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
+            console.log(`[TBD Logger] Securely appended ${newEvents.length} events.`);
         } catch (err) {
-            console.error('[TBD Logger] StorageManager init error:', err);
+            console.error('[TBD Logger] Critical Error during flush:', err);
         }
     }
 
-    // Append events into the `events` array of the session JSON file
-    async flush(events: any[]): Promise<number> {
-        if (!this.initialized || !this.sessionFileUri) {
-            console.error('[TBD Logger] StorageManager not initialized; skipping flush');
-            return 0;
+    // NEW: Used by "Open Logs" command (Manual)
+    // Validates password before returning data
+    async retrieveLogContent(passwordAttempt: string): Promise<string> {
+        if (passwordAttempt !== SECRET_PASSPHRASE) {
+            throw new Error('Invalid Password');
         }
-        if (!events || events.length === 0) return 0;
+
+        if (!this.initialized || !this.sessionFileUri) {
+            throw new Error('Logger not initialized');
+        }
 
         try {
-            // Read existing JSON file
-            const data = await vscode.workspace.fs.readFile(this.sessionFileUri);
-            const text = new TextDecoder().decode(data);
-            let parsed: any;
-            try {
-                parsed = JSON.parse(text);
-            } catch (err) {
-                // If parsing fails, reinitialize structure
-                parsed = { header: { corrupted: true, recoveredAt: Date.now() }, events: [] };
-            }
-
-            if (!Array.isArray(parsed.events)) parsed.events = [];
-            parsed.events.push(...events);
-
-            const enc = new TextEncoder();
-            await vscode.workspace.fs.writeFile(this.sessionFileUri, enc.encode(JSON.stringify(parsed, null, 2)));
-
-            console.log('[TBD Logger] Appended', events.length, 'events to', this.sessionFileUri.fsPath);
-            return events.length;
+            const fileData = await vscode.workspace.fs.readFile(this.sessionFileUri);
+            return this.decrypt(fileData);
         } catch (err) {
-            console.error('[TBD Logger] Error flushing events:', err);
-            return 0;
+            throw new Error('Failed to read or decrypt file.');
         }
     }
 }
-
-export default StorageManager;

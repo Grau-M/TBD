@@ -8,15 +8,24 @@ import { createSaveListener } from './listeners/saveListener';
 import { startUiTimer } from './uiTimer';
 import { flushBuffer } from './flush';
 import { storageManager, state, CONSTANTS } from './state';
-import { isIgnoredPath } from './utils';
+import { isIgnoredPath, formatTimestamp } from './utils';
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TBD Logger: activate');
 
     try { printSessionInfo(); } catch (e) { /* no-op */ }
 
-    // Initialize storage manager (creates/ensures log file)
+    // Initialize storage manager (creates/ensures encrypted file)
     await storageManager.init(context);
+
+    // NEW: Log Session Start (Persistent Marker)
+    state.sessionBuffer.push({
+        time: formatTimestamp(Date.now()),
+        flightTime: '0',
+        eventType: 'session-start',
+        fileEdit: '',
+        fileView: 'VS Code Session Started'
+    });
 
     // Initialize focused file state
     const initialActive = vscode.window.activeTextEditor;
@@ -24,23 +33,43 @@ export async function activate(context: vscode.ExtensionContext) {
     state.currentFocusedFile = isIgnoredPath(initialPath) ? '' : initialPath;
     state.focusStartTime = Date.now();
 
-    // Register the Open Logs command once
+    // UPDATED: Open Logs Command with Password Prompt
     const openLogs = async () => {
         try {
-            await vscode.window.showInformationMessage('TBD Logger is currently logging this programming session.');
+            // 1. Ask for Password
+            const password = await vscode.window.showInputBox({
+                prompt: 'Enter Administrator Password to view encrypted logs',
+                password: true,
+                ignoreFocusOut: true,
+                placeHolder: 'TBD_CAPSTONE...'
+            });
+
+            if (!password) return; // User cancelled
+
+            // 2. Retrieve & Decrypt
+            const content = await storageManager.retrieveLogContent(password);
+            
+            // 3. Display
+            const doc = await vscode.workspace.openTextDocument({
+                content: content,
+                language: 'json'
+            });
+            await vscode.window.showTextDocument(doc);
+            vscode.window.showInformationMessage('Logs decrypted successfully.');
+
         } catch (err) {
-            console.error('[TBD Logger] openLogs error:', err);
+            vscode.window.showErrorMessage(`Access Denied: ${err}`);
         }
     };
     const openLogsCommand = vscode.commands.registerCommand('tbd-logger.openLogs', openLogs);
     context.subscriptions.push(openLogsCommand);
 
-    // Create status bar and start UI timer (status bar uses the commandId but doesn't register it)
+    // Create status bar and start UI timer
     const statusBarItem = createStatusBar(context, 'tbd-logger.openLogs');
     const uiTimerDisposable = startUiTimer(statusBarItem);
     context.subscriptions.push(uiTimerDisposable);
 
-    // Register listeners (each returns a Disposable)
+    // Register listeners
     const editListener = createEditListener();
     context.subscriptions.push(editListener);
 
@@ -59,17 +88,17 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
-    // Record final focus duration for the currently focused file
+    // Record final focus duration
     const now = Date.now();
     if (state.currentFocusedFile) {
         const durationMs = now - state.focusStartTime;
         state.sessionBuffer.push({
-            time: new Date(now).toISOString().replace('T', ' ').replace('Z', ''),
+            time: formatTimestamp(now),
             flightTime: String(durationMs),
             eventType: 'focusDuration',
             fileEdit: '',
             fileView: state.currentFocusedFile
-        } as any);
+        });
     }
 
     void flushBuffer();

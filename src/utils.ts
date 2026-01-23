@@ -15,7 +15,7 @@ export function isIgnoredPath(relPath: string): boolean {
     if (!relPath) return true;
     const p = relPath.replace(/\\/g, '/');
     if (p.startsWith('.vscode/')) return true;
-    if (p.includes('tbd-session-')) return true;
-    if (p.endsWith('.log') || p.endsWith('.json')) return true;
+    if (p.includes('tbd-integrity-log')) return true;
+    if (p.endsWith('.log') || p.endsWith('.json')|| p.endsWith('enc')) return true;
     return false;
 }

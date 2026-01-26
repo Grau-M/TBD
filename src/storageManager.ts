@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import { getSessionInfo } from './sessionInfo';
+import { formatTimestamp } from './utils';
 
 // SECURITY CONFIGURATION
 // The fixed password stored in the code, as requested.
@@ -9,11 +11,12 @@ const SALT = 'salty_buffer_tbd';
 const KEY = crypto.scryptSync(SECRET_PASSPHRASE, SALT, 32); 
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
-const LOG_FILENAME = 'tbd-integrity-log.enc';
+
 
 export class StorageManager {
     private context!: vscode.ExtensionContext;
     private sessionFileUri: vscode.Uri | null = null;
+    private storageDir: vscode.Uri | null = null;
     private initialized = false;
 
     // --- ENCRYPTION HELPERS ---
@@ -53,7 +56,34 @@ export class StorageManager {
             console.log('[TBD Logger] No workspace open — using global storage:', storageDir.fsPath);
         }
 
-        this.sessionFileUri = vscode.Uri.joinPath(storageDir, LOG_FILENAME);
+        // remember storage dir for later listing operations
+        this.storageDir = storageDir;
+
+        // Build a per-session filename: {user}-{project}-Session{n}-integrity.log
+        const info = getSessionInfo();
+
+        // Ensure storage directory exists and list files to find previous sessions
+        const files = await vscode.workspace.fs.readDirectory(storageDir);
+        const fileNames = files.map(f => f[0]);
+
+        // Pattern: `${user}-${project}-Session{number}-integrity.log`
+        const safeUser = info.user.replace(/[^a-zA-Z0-9-_]/g, '_');
+        const safeProject = info.project.replace(/[^a-zA-Z0-9-_]/g, '_');
+        const prefix = `${safeUser}-${safeProject}-Session`;
+        const re = new RegExp(`^${prefix}(\\d+)-integrity\\.log$`);
+
+        let maxSession = 0;
+        for (const name of fileNames) {
+            const m = name.match(new RegExp(`^${prefix}(\\d+)-integrity\\.log$`));
+            if (m && m[1]) {
+                const n = parseInt(m[1], 10);
+                if (!isNaN(n) && n > maxSession) maxSession = n;
+            }
+        }
+
+        const sessionNumber = maxSession + 1;
+        const filename = `${safeUser}-${safeProject}-Session${sessionNumber}-integrity.log`;
+        this.sessionFileUri = vscode.Uri.joinPath(storageDir, filename);
 
         // 2. Integrity Check & File Creation
         let exists = true;
@@ -68,28 +98,48 @@ export class StorageManager {
                 // Verify we can decrypt it
                 const data = await vscode.workspace.fs.readFile(this.sessionFileUri);
                 const jsonStr = this.decrypt(data);
-                JSON.parse(jsonStr); 
+                JSON.parse(jsonStr);
                 console.log('[TBD Logger] Log integrity verified.');
             } catch (err) {
                 console.error('[TBD Logger] Log corruption detected! Archiving...');
                 const backupUri = vscode.Uri.joinPath(storageDir, `log_corrupt_${Date.now()}.bak`);
                 await vscode.workspace.fs.rename(this.sessionFileUri, backupUri);
-                exists = false; 
+                exists = false;
             }
         }
 
         if (!exists) {
+            // Try to read extension version from the extension's package.json
+            let extensionVersion = 'unknown';
+            try {
+                const pkgUri = vscode.Uri.joinPath(context.extensionUri, 'package.json');
+                const raw = await vscode.workspace.fs.readFile(pkgUri);
+                const pkg = JSON.parse(Buffer.from(raw).toString('utf8'));
+                extensionVersion = pkg.version || extensionVersion;
+            } catch (e) {
+                // ignore
+            }
+
+            const startTs = Date.now();
+            const formattedStart = formatTimestamp(startTs);
             const initialData = {
-                header: {
-                    created: Date.now(),
-                    version: '2.0 (Encrypted)',
-                    vscodeVersion: vscode.version
+                sessionHeader: {
+                    sessionNumber,
+                    startedBy: info.user,
+                    project: info.project,
+                    startTime: formattedStart,
+                    metadata: {
+                        vscodeVersion: vscode.version,
+                        startTimestamp: formattedStart,
+                        extensionVersion
+                    }
                 },
-                events: [] 
+                events: []
             };
+
             const encryptedData = this.encrypt(JSON.stringify(initialData, null, 2));
             await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
-            console.log('[TBD Logger] Created new encrypted log file.');
+            console.log('[TBD Logger] Created new encrypted per-session log file:', filename);
         }
 
         this.initialized = true;
@@ -134,6 +184,43 @@ export class StorageManager {
             return this.decrypt(fileData);
         } catch (err) {
             throw new Error('Failed to read or decrypt file.');
+        }
+    }
+
+    // Retrieve/decrypt a specific log file URI after validating password
+    async retrieveLogContentForUri(passwordAttempt: string, fileUri: vscode.Uri): Promise<string> {
+        if (passwordAttempt !== SECRET_PASSPHRASE) {
+            throw new Error('Invalid Password');
+        }
+
+        try {
+            const fileData = await vscode.workspace.fs.readFile(fileUri);
+            return this.decrypt(fileData);
+        } catch (err) {
+            throw new Error('Failed to read or decrypt file.');
+        }
+    }
+
+    // List available per-session integrity log files in storage directory
+    async listLogFiles(): Promise<Array<{ label: string; uri: vscode.Uri }>> {
+        if (!this.storageDir) return [];
+        try {
+            const files = await vscode.workspace.fs.readDirectory(this.storageDir);
+            const matches: Array<{ label: string; uri: vscode.Uri }> = [];
+            for (const [name] of files) {
+                if (/Session\d+-integrity\.log$/.test(name)) {
+                    matches.push({ label: name, uri: vscode.Uri.joinPath(this.storageDir, name) });
+                }
+            }
+            // sort by session number ascending
+            matches.sort((a, b) => {
+                const na = (a.label.match(/Session(\d+)-/) || [])[1] || '0';
+                const nb = (b.label.match(/Session(\d+)-/) || [])[1] || '0';
+                return parseInt(na, 10) - parseInt(nb, 10);
+            });
+            return matches;
+        } catch (e) {
+            return [];
         }
     }
 }

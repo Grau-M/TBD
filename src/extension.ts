@@ -9,6 +9,8 @@ import { startUiTimer } from './uiTimer';
 import { flushBuffer } from './flush';
 import { storageManager, state, CONSTANTS } from './state';
 import { isIgnoredPath, formatTimestamp } from './utils';
+import { SessionInterruptionTracker } from './sessionInterruptions';
+
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TBD Logger: activate');
@@ -17,6 +19,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Initialize storage manager (creates/ensures encrypted file)
     await storageManager.init(context);
+
+    // NEW FEATURE: Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
+    await SessionInterruptionTracker.install(context, {
+        inactivityThresholdMs: 10_000, // 5 minutes (change if you want)
+        checkEveryMs: 10_000
+    });
+
 
     // NEW: Log Session Start (Persistent Marker)
     state.sessionBuffer.push({
@@ -89,6 +98,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
     // Record final focus duration
+
+    // NEW FEATURE: Mark clean shutdown (lets us detect force-close/crash next time)
+    SessionInterruptionTracker.markCleanShutdown();
+
     const now = Date.now();
     if (state.currentFocusedFile) {
         const durationMs = now - state.focusStartTime;

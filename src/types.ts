@@ -6,4 +6,5 @@ export interface StandardEvent {
     fileView: string;
     possibleAiDetection?: string;
     fileFocusCount?: string;
+    pasteCharCount?: number;
 }

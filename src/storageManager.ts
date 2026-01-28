@@ -5,7 +5,7 @@ import { formatTimestamp } from './utils';
 
 // SECURITY CONFIGURATION
 // The fixed password stored in the code, as requested.
-const SECRET_PASSPHRASE = 'TBD_CAPSTONE_MASTER_KEY_2026';
+const SECRET_PASSPHRASE = 'password';
 const SALT = 'salty_buffer_tbd';
 // We derive the actual encryption key from the fixed password
 const KEY = crypto.scryptSync(SECRET_PASSPHRASE, SALT, 32); 

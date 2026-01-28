@@ -28,7 +28,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // NEW FEATURE: Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
-        inactivityThresholdMs: 10_000, // 5 minutes (change if you want)
+        inactivityThresholdMs: 5 * 60 * 1000, // 5 minutes (change if you want)
         checkEveryMs: 10_000
     });
 

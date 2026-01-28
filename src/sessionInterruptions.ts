@@ -55,7 +55,7 @@ export class SessionInterruptionTracker {
         await tracker.detectAbnormalEndOnStartup();
 
         // 2) Mark session started + set cleanShutdown=false
-        tracker.logMarker('Session Started', 'session_start');
+        tracker.logMarker('Session Started', 'Session started normally');
         await tracker.writeState({ cleanShutdown: false, lastSeenMs: Date.now() });
         void flushBuffer();
 
@@ -79,7 +79,7 @@ export class SessionInterruptionTracker {
         const tracker = SessionInterruptionTracker.instance;
         if (!tracker) return;
 
-        tracker.logMarker('Session Ended (Clean Shutdown)', 'clean_shutdown');
+        tracker.logMarker('Session Ended (Clean Shutdown)', 'Session shutdown cleanly.');
         void flushBuffer();
         void tracker.writeState({ cleanShutdown: true, lastSeenMs: Date.now() });
     }
@@ -100,7 +100,7 @@ export class SessionInterruptionTracker {
             eventType: 'focusChange',
             fileEdit: '',
             fileView: `[INTERRUPTION] ${message}`,
-            possibleAiDetection: `interruptionKind=${kind}`
+            possibleAiDetection: `interruptionKind= ${kind}`
         });
     }
 
@@ -111,7 +111,7 @@ export class SessionInterruptionTracker {
         // If we were paused, first activity becomes "resume"
         if (this.paused) {
             this.paused = false;
-            this.logMarker(`Session Resumed (${source})`, 'resumed_activity');
+            this.logMarker(`Session Resumed (${source})`, 'Session resumed after inactivity');
             void flushBuffer();
         }
 
@@ -130,7 +130,7 @@ export class SessionInterruptionTracker {
                 this.paused = true;
                 this.logMarker(
                     `Session Paused (Inactivity ${this.formatDuration(inactiveFor)})`,
-                    'paused_inactivity'
+                    'Session paused due to inactivity'
                 );
                 void flushBuffer();
                 void this.writeState({ cleanShutdown: false, lastSeenMs: now });
@@ -173,8 +173,8 @@ export class SessionInterruptionTracker {
         if (st && st.cleanShutdown === false) {
             // Previous session likely crashed / force-closed / sleep
             this.logMarker(
-                'Abnormal End Detected (Previous session did not cleanly shutdown)',
-                'abnormal_end_detected'
+                'Session End Detected (Previous session has shutdown)',
+                'The User has ended the Session'
             );
             void flushBuffer();
         }

@@ -12,6 +12,11 @@ import { isIgnoredPath, formatTimestamp } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
 
 import * as path from 'path';
+// define api for testing purposes
+export interface ExtensionApi {
+    state: typeof state;
+    storageManager: typeof storageManager;
+}
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TBD Logger: activate');
@@ -120,6 +125,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // Periodic flush timer
     const flushTimer = setInterval(() => void flushBuffer(), CONSTANTS.FLUSH_INTERVAL_MS);
     context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
+    //Return the internals so the Test Suite can see them
+    return { state, storageManager };
 }
 
 export function deactivate() {

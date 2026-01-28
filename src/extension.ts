@@ -90,8 +90,27 @@ export async function activate(context: vscode.ExtensionContext) {
     const openLogsCommand = vscode.commands.registerCommand('tbd-logger.openLogs', openLogs);
     context.subscriptions.push(openLogsCommand);
 
-    // Create status bar and start UI timer
-    const statusBarItem = createStatusBar(context, 'tbd-logger.openLogs');
+    // Command: Show Hidden Deletions — open the single deletion activity file after password
+    const showHidden = async () => {
+        try {
+            const password = await vscode.window.showInputBox({
+                prompt: 'Enter Administrator Password to view deletion activity log',
+                password: true,
+                ignoreFocusOut: true
+            });
+            if (!password) return;
+            const content = await storageManager.retrieveHiddenLogContent(password);
+            const doc = await vscode.workspace.openTextDocument({ content: content, language: 'json' });
+            await vscode.window.showTextDocument(doc, { preview: false });
+        } catch (err) {
+            vscode.window.showErrorMessage(`Unable to access deletion activity log: ${err}`);
+        }
+    };
+    const showHiddenCommand = vscode.commands.registerCommand('tbd-logger.showHiddenDeletions', showHidden);
+    context.subscriptions.push(showHiddenCommand);
+
+    // Create status bar and start UI timer (also show small lock icon wired to hidden deletions)
+    const statusBarItem = createStatusBar(context, 'tbd-logger.openLogs', 'tbd-logger.showHiddenDeletions');
     const uiTimerDisposable = startUiTimer(statusBarItem);
     context.subscriptions.push(uiTimerDisposable);
 

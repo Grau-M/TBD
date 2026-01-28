@@ -11,6 +11,7 @@ import { storageManager, state, CONSTANTS } from './state';
 import { isIgnoredPath, formatTimestamp } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
 
+import * as path from 'path';
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TBD Logger: activate');
@@ -45,9 +46,34 @@ export async function activate(context: vscode.ExtensionContext) {
     // UPDATED: Open Logs Command with Password Prompt
     const openLogs = async () => {
         try {
+            // Determine if the active editor is focused on an integrity log
+            const active = vscode.window.activeTextEditor;
+            let targetUri: vscode.Uri | null = null;
+
+            if (active && active.document) {
+                const fname = path.basename(active.document.uri.fsPath);
+                if (/Session\d+-integrity\.log$/.test(fname)) {
+                    targetUri = active.document.uri;
+                }
+            }
+
+            // If no focused log file, present a QuickPick of available session logs
+            if (!targetUri) {
+                const files = await storageManager.listLogFiles();
+                if (files.length === 0) {
+                    vscode.window.showInformationMessage('No integrity logs found.');
+                    return;
+                }
+                const pick = await vscode.window.showQuickPick(files.map(f => f.label), { placeHolder: 'Select integrity log to open' });
+                if (!pick) return;
+                const chosen = files.find(f => f.label === pick);
+                if (!chosen) return;
+                targetUri = chosen.uri;
+            }
+
             // 1. Ask for Password
             const password = await vscode.window.showInputBox({
-                prompt: 'Enter Administrator Password to view encrypted logs',
+                prompt: `Enter Administrator Password to view ${path.basename(targetUri.fsPath)}`,
                 password: true,
                 ignoreFocusOut: true,
                 placeHolder: 'TBD_CAPSTONE...'
@@ -55,9 +81,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
             if (!password) return; // User cancelled
 
-            // 2. Retrieve & Decrypt
-            const content = await storageManager.retrieveLogContent(password);
-            
+            // 2. Retrieve & Decrypt selected file
+            const content = await storageManager.retrieveLogContentForUri(password, targetUri);
+
             // 3. Display
             const doc = await vscode.workspace.openTextDocument({
                 content: content,

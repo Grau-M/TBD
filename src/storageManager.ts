@@ -65,7 +65,12 @@ export class StorageManager {
                 let settingsObj: any = { filesExclude: { '.vscode/logs': true, '.vscode/logs/**': true, '.vscode/settings.json': true } };
                 try {
                     const workspaceSettingsUri = vscode.Uri.joinPath(workspaceRoot, '.vscode', 'settings.json');
-                    const stat = await vscode.workspace.fs.stat(workspaceSettingsUri).catch(() => null);
+                    let stat = null;
+                    try {
+                        stat = await vscode.workspace.fs.stat(workspaceSettingsUri);
+                    } catch {
+                        stat = null;
+                    }
                     if (stat) {
                         const raw = await vscode.workspace.fs.readFile(workspaceSettingsUri);
                         try { settingsObj = JSON.parse(Buffer.from(raw).toString('utf8')); } catch { /* keep defaults */ }

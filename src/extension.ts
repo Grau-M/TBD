@@ -1,4 +1,10 @@
-﻿import * as vscode from 'vscode';
+﻿// Module: extension.ts
+// Purpose: Extension activation and deactivation entrypoints.
+// This file initializes the extension: it sets up the storage manager,
+// session interruption tracker, status bar UI, listeners, commands,
+// and periodic background flush. It also exposes a minimal API for
+// tests and marks clean shutdown on deactivate.
+import * as vscode from 'vscode';
 import { printSessionInfo } from './sessionInfo';
 import { createStatusBar } from './statusBar';
 import { createEditListener } from './listeners/editListener';
@@ -18,6 +24,10 @@ export interface ExtensionApi {
     storageManager: typeof storageManager;
 }
 
+// Function: activate
+// Purpose: VS Code extension activation entrypoint. Initializes
+// storage, session interruption tracking, UI, commands, listeners,
+// and background timers. Returns an object useful for tests.
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TBD Logger: activate');
 
@@ -149,6 +159,10 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+    // Function: deactivate
+    // Purpose: VS Code extension deactivation entrypoint. Records final
+    // focus duration, marks clean shutdown for the interruption
+    // tracker, flushes the buffer and disposes the status bar item.
     // Record final focus duration
 
     // NEW FEATURE: Mark clean shutdown (lets us detect force-close/crash next time)

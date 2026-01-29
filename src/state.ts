@@ -1,3 +1,8 @@
+// Module: state.ts
+// Purpose: Central in-memory state and constants used across the extension.
+// Exports a shared `state` object used by listeners and handlers, a
+// `storageManager` singleton instance responsible for encrypted persistence,
+// and configuration `CONSTANTS` for thresholds and intervals.
 import { StandardEvent } from './types';
 import { StorageManager } from './storageManager';
 

@@ -1,3 +1,9 @@
+// Module: sessionInterruptions.ts
+// Purpose: Track and record session interruptions such as inactivity pauses,
+// resumes, clean shutdowns, and abnormal terminations. This module writes
+// lightweight state to disk so that the next startup can detect an
+// unclean shutdown, and it emits markers into the session buffer for
+// auditing purposes.
 import * as vscode from 'vscode';
 import { state } from './state';
 import { formatTimestamp } from './utils';
@@ -43,6 +49,11 @@ export class SessionInterruptionTracker {
         context: vscode.ExtensionContext,
         opts?: { inactivityThresholdMs?: number; checkEveryMs?: number }
     ): Promise<void> {
+        // Function: install
+        // Purpose: Create and initialize a SessionInterruptionTracker
+        // instance. Detects abnormal end from previous run, logs session
+        // start markers, installs lightweight activity listeners, and
+        // starts the inactivity monitoring timer.
         if (SessionInterruptionTracker.instance) return;
 
         const inactivity = opts?.inactivityThresholdMs ?? 5 * 60 * 1000; // default 5 min
@@ -76,6 +87,10 @@ export class SessionInterruptionTracker {
      * You will call this from extension.ts (added lines only).
      */
     static markCleanShutdown(): void {
+        // Function: markCleanShutdown
+        // Purpose: Called during extension deactivate to record a clean
+        // shutdown marker and flush the buffer so the next startup can
+        // distinguish between normal and abnormal ends.
         const tracker = SessionInterruptionTracker.instance;
         if (!tracker) return;
 
@@ -94,6 +109,10 @@ export class SessionInterruptionTracker {
     // --------------------------
 
     private logMarker(message: string, kind: string) {
+        // Function: logMarker
+        // Purpose: Push a standardized interruption marker into the
+        // session buffer. Used for session start, pause, resume, and end
+        // markers so these events are recorded persistently.
         state.sessionBuffer.push({
             time: formatTimestamp(Date.now()),
             flightTime: '0',
@@ -105,6 +124,10 @@ export class SessionInterruptionTracker {
     }
 
     private recordActivitySignal(source: string) {
+        // Function: recordActivitySignal
+        // Purpose: Update internal timestamps when user activity is
+        // detected. If the tracker was paused, emit a resume marker and
+        // flush the buffer.
         const now = Date.now();
         this.lastActivityMs = now;
 
@@ -120,6 +143,10 @@ export class SessionInterruptionTracker {
     }
 
     private startInactivityMonitor() {
+        // Function: startInactivityMonitor
+        // Purpose: Begin a periodic timer that checks for prolonged
+        // inactivity. When inactivity exceeds the configured threshold
+        // a pause marker is emitted and the buffer flushed.
         if (this.timer) return;
 
         this.timer = setInterval(() => {
@@ -139,6 +166,10 @@ export class SessionInterruptionTracker {
     }
 
     private installActivityListeners() {
+        // Function: installActivityListeners
+        // Purpose: Register lightweight workspace/window listeners that
+        // call `recordActivitySignal` on edit, save, editor focus, and
+        // window focus events to track the user's activity.
         // Typing/editing anywhere
         this.context.subscriptions.push(
             vscode.workspace.onDidChangeTextDocument(() => {
@@ -169,6 +200,10 @@ export class SessionInterruptionTracker {
     }
 
     private async detectAbnormalEndOnStartup(): Promise<void> {
+        // Function: detectAbnormalEndOnStartup
+        // Purpose: Read the small state file from disk and if the previous
+        // run did not record a clean shutdown, emit an abnormal end
+        // marker into the session buffer.
         const st = await this.readState();
         if (st && st.cleanShutdown === false) {
             // Previous session likely crashed / force-closed / sleep
@@ -181,6 +216,10 @@ export class SessionInterruptionTracker {
     }
 
     private async getStateUri(): Promise<vscode.Uri> {
+        // Function: getStateUri
+        // Purpose: Return a URI for the small state file used to record
+        // lastSeen and cleanShutdown flags. Uses the workspace .vscode
+        // folder when available, otherwise falls back to global storage.
         const workspaceFolders = vscode.workspace.workspaceFolders;
 
         if (workspaceFolders && workspaceFolders.length > 0) {

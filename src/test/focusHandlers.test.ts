@@ -1,3 +1,7 @@
+// Test: focusHandlers.test.ts
+// Purpose: Verify that focus handler helpers update `state` correctly
+// and push expected events into the session buffer when focus is
+// lost and regained.
 import * as assert from 'assert';
 import { state, CONSTANTS } from '../state';
 import { handleFocusLost, handleFocusRegained } from '../handlers/focusHandlers';
@@ -9,6 +13,7 @@ suite('Unit Tests: Focus Handlers', () => {
         state.sessionBuffer = [];
     });
 
+    // Ensures the first call sets `focusAwayStartTime` and subsequent calls don't overwrite it
     test('handleFocusLost sets focusAwayStartTime when previously null', () => {
         assert.strictEqual(state.focusAwayStartTime, null);
         handleFocusLost();
@@ -19,6 +24,7 @@ suite('Unit Tests: Focus Handlers', () => {
         assert.strictEqual(state.focusAwayStartTime, first);
     });
 
+    // Simulates an away period longer than the threshold and verifies a "Focus Away (Major)" event is logged
     test('handleFocusRegained clears focusAwayStartTime and logs major away events', () => {
         // simulate being away longer than threshold
         state.focusAwayStartTime = Date.now() - (CONSTANTS.FOCUS_THRESHOLD_MS + 1000);

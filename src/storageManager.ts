@@ -1,3 +1,10 @@
+// Module: storageManager.ts
+// Purpose: Manage secure, encrypted on-disk session logs and an internal
+// hidden deletion activity log. Responsibilities include creating and
+// validating per-session encrypted log files, archiving copies on changes,
+// recreating logs if deleted, and exposing APIs to retrieve decrypted
+// contents after password validation. This module intentionally performs
+// file operations via the VS Code workspace FS and handles encryption.
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { getSessionInfo } from './sessionInfo';
@@ -8,7 +15,7 @@ import { formatTimestamp } from './utils';
 const SECRET_PASSPHRASE = 'password';
 const SALT = 'salty_buffer_tbd';
 // We derive the actual encryption key from the fixed password
-const KEY = crypto.scryptSync(SECRET_PASSPHRASE, SALT, 32); 
+const KEY = crypto.scryptSync(SECRET_PASSPHRASE, SALT, 32);
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
 
@@ -27,6 +34,10 @@ export class StorageManager {
     private initialized = false;
 
     // --- ENCRYPTION HELPERS ---
+    // Function: encrypt
+    // Purpose: Encrypt a UTF-8 string using AES-256-CBC and return a
+    // Buffer that contains the IV followed by the ciphertext. The IV is
+    // required for decryption and is stored in clear at the start.
     private encrypt(text: string): Buffer {
         const iv = crypto.randomBytes(IV_LENGTH);
         const cipher = crypto.createCipheriv(ALGORITHM, KEY, iv);
@@ -35,6 +46,10 @@ export class StorageManager {
         return Buffer.concat([iv, encrypted]);
     }
 
+    // Function: decrypt
+    // Purpose: Reverse the `encrypt` operation. Expects a Buffer/Uint8Array
+    // containing the IV (first 16 bytes) followed by ciphertext; returns
+    // the decrypted UTF-8 string. Throws if decryption fails.
     private decrypt(buffer: Uint8Array): string {
         const buf = Buffer.from(buffer);
         // Extract IV (first 16 bytes) and Content
@@ -47,6 +62,11 @@ export class StorageManager {
     }
 
     async init(context: vscode.ExtensionContext) {
+        // Function: init
+        // Purpose: Initialize storage locations, create hidden/archive
+        // directories, create or verify the per-session encrypted log
+        // file, and set up any file watchers. This prepares the manager
+        // for subsequent read/write operations.
         this.context = context;
         const workspaceFolders = vscode.workspace.workspaceFolders;
         let storageDir: vscode.Uri;
@@ -301,6 +321,11 @@ export class StorageManager {
 
     // Ensure the hidden log exists and contains a JSON array
     private async ensureHiddenLog(): Promise<void> {
+        // Function: ensureHiddenLog
+        // Purpose: Ensure the hidden deletion activity log exists and is a
+        // valid JSON structure. If the hidden log is missing or corrupt,
+        // create or recreate it with an initial header and empty deletions
+        // array.
         if (!this.hiddenLogUri) return;
         let exists = true;
         try {
@@ -345,6 +370,10 @@ export class StorageManager {
 
     // Restore logger_settings.json from backup in hidden dir (or recreate defaults)
     private async handleLoggerSettingsDeleted(settingsUri: vscode.Uri) {
+        // Function: handleLoggerSettingsDeleted
+        // Purpose: Attempt to restore `logger_settings.json` from a
+        // backup stored in the hidden directory; if no backup exists,
+        // recreate a sensible default and reapply files.exclude.
         try {
             const backupUri = vscode.Uri.joinPath(this.hiddenDir!, 'logger_settings.bak');
             let written = false;
@@ -377,6 +406,11 @@ export class StorageManager {
     }
 
     private async appendToHiddenLog(entry: any): Promise<void> {
+        // Function: appendToHiddenLog
+        // Purpose: Read the hidden log, append an entry to its
+        // `deletions` array, and write the file back encrypted. If the
+        // file is missing or append fails, recreate it with the single
+        // provided entry.
         if (!this.hiddenLogUri) return;
         try {
             let data = await vscode.workspace.fs.readFile(this.hiddenLogUri);
@@ -398,6 +432,9 @@ export class StorageManager {
 
     // Format bytes into human readable using KB/MB/GB with KB as smallest unit
     private formatSize(bytes: number): string {
+        // Function: formatSize
+        // Purpose: Convert a numeric byte count into a human-readable
+        // string using KB/MB/GB units, rounding to two decimals.
         const KB = 1024;
         if (!bytes || bytes <= 0) return '0 KB';
         if (bytes < KB) return '1 KB';
@@ -409,6 +446,9 @@ export class StorageManager {
     }
 
     private async handleLogCreated(uri: vscode.Uri) {
+        // Function: handleLogCreated
+        // Purpose: Track metadata for a newly created log file and store
+        // an archived copy in the archive directory for later recovery.
         try {
             const name = uri.path.split('/').pop() || '';
             const stat = await vscode.workspace.fs.stat(uri);
@@ -427,6 +467,9 @@ export class StorageManager {
     }
 
     private async handleLogChanged(uri: vscode.Uri) {
+        // Function: handleLogChanged
+        // Purpose: Update the internal index when a log file changes and
+        // refresh the archived copy to keep a recent backup.
         try {
             const name = uri.path.split('/').pop() || '';
             const stat = await vscode.workspace.fs.stat(uri);
@@ -445,6 +488,11 @@ export class StorageManager {
     }
 
     private async handleLogDeleted(uri: vscode.Uri) {
+        // Function: handleLogDeleted
+        // Purpose: When a per-session integrity log is deleted, record a
+        // deletion entry in the hidden log, attempt to recreate a minimal
+        // file at the same path (to preserve session continuity), and
+        // remove it from the internal index.
         const name = uri.path.split('/').pop() || uri.fsPath;
         const recorded = this.fileIndex.get(name) || { size: 0, mtime: 0 };
         const entry = {
@@ -516,6 +564,10 @@ export class StorageManager {
     }
 
     private async handleHiddenLogDeleted(uri: vscode.Uri) {
+        // Function: handleHiddenLogDeleted
+        // Purpose: Ensure that deletion of the hidden log itself is
+        // recorded — try to append a record, and if append fails create a
+        // new hidden log containing the deletion entry.
         // The hidden log was deleted — recreate with a record of that deletion
         const name = uri.path.split('/').pop() || 'hidden_log';
         const entry = { note: 'Hidden log file deleted', file: name, deletedAt: formatTimestamp(Date.now()) };
@@ -533,6 +585,9 @@ export class StorageManager {
 
     // Public: retrieve decrypted array of hidden deletion entries (validates password)
     async retrieveHiddenEntries(passwordAttempt: string): Promise<any[]> {
+        // Function: retrieveHiddenEntries
+        // Purpose: Validate the supplied password and return the parsed
+        // array of deletion entries from the hidden deletion activity log.
         if (passwordAttempt !== SECRET_PASSPHRASE) {
             throw new Error('Invalid Password');
         }
@@ -549,6 +604,9 @@ export class StorageManager {
 
     // Public: retrieve decrypted full deletion activity log JSON string (validates password)
     async retrieveHiddenLogContent(passwordAttempt: string): Promise<string> {
+        // Function: retrieveHiddenLogContent
+        // Purpose: Return the full decrypted JSON string of the hidden
+        // deletion activity log after validating the provided password.
         if (passwordAttempt !== SECRET_PASSPHRASE) {
             throw new Error('Invalid Password');
         }
@@ -564,6 +622,10 @@ export class StorageManager {
 
     // Used by background timer (automated)
     async flush(newEvents: any[]): Promise<void> {
+        // Function: flush
+        // Purpose: Append `newEvents` to the on-disk per-session encrypted
+        // file. No-op if the manager is not initialized. Errors are logged
+        // but do not throw to callers.
         if (!this.initialized || !this.sessionFileUri) return;
         if (newEvents.length === 0) return;
 
@@ -588,6 +650,9 @@ export class StorageManager {
     // NEW: Used by "Open Logs" command (Manual)
     // Validates password before returning data
     async retrieveLogContent(passwordAttempt: string): Promise<string> {
+        // Function: retrieveLogContent
+        // Purpose: Return decrypted content of the current session file
+        // after validating the administrator password.
         if (passwordAttempt !== SECRET_PASSPHRASE) {
             throw new Error('Invalid Password');
         }
@@ -606,6 +671,10 @@ export class StorageManager {
 
     // Retrieve/decrypt a specific log file URI after validating password
     async retrieveLogContentForUri(passwordAttempt: string, fileUri: vscode.Uri): Promise<string> {
+        // Function: retrieveLogContentForUri
+        // Purpose: Decrypt and return the contents of the provided file
+        // URI after successful password validation. Throws descriptive
+        // errors on failure.
         if (passwordAttempt !== SECRET_PASSPHRASE) {
             throw new Error('Invalid Password');
         }
@@ -620,6 +689,10 @@ export class StorageManager {
 
     // List available per-session integrity log files in storage directory
     async listLogFiles(): Promise<Array<{ label: string; uri: vscode.Uri }>> {
+        // Function: listLogFiles
+        // Purpose: Return an ordered list of per-session integrity log
+        // files located in the configured storage directory. Each item
+        // contains a label and the corresponding `vscode.Uri`.
         if (!this.storageDir) return [];
         try {
             const files = await vscode.workspace.fs.readDirectory(this.storageDir);

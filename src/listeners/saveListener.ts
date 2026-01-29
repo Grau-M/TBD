@@ -1,9 +1,20 @@
+// Module: listeners/saveListener.ts
+// Purpose: Listen for document save events and translate them into
+// `StandardEvent` records pushed into the session buffer. Adds timing
+// metadata, detects mismatches between the saved file and the currently
+// active editor (possible AI indicator), and triggers flush when needed.
 import * as vscode from 'vscode';
 import { state, CONSTANTS } from '../state';
 import { formatTimestamp, formatDuration } from '../utils';
 import { StandardEvent } from '../types';
 import { flushBuffer } from '../flush';
 
+// Function: createSaveListener
+// Purpose: Return a Disposable that listens for document save events and
+// transforms them into `StandardEvent` records which are appended to the
+// session buffer. Adds metadata such as focus duration and performs a
+// simple AI-suspicion check when the saved file differs from the active
+// file view.
 export function createSaveListener(): vscode.Disposable {
     return vscode.workspace.onDidSaveTextDocument((doc) => {
         const currentTime = Date.now();

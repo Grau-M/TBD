@@ -1,3 +1,11 @@
+// Module: utils.ts
+// Purpose: Lightweight formatting and helper utilities used across the
+// extension. Includes timestamp formatting (using America/New_York), a
+// duration formatter (HH:MM:SS), and a helper to determine which paths
+// should be ignored by the logger (logs, encrypted files, etc.).
+// Function: formatTimestamp
+// Purpose: Format a millisecond timestamp into a human-readable
+// string using the America/New_York timezone (handles EST/EDT).
 export function formatTimestamp(ms: number): string {
     // Use America/New_York timezone (handles EST/EDT automatically)
     const dtf = new Intl.DateTimeFormat('en-US', {
@@ -23,6 +31,9 @@ export function formatTimestamp(ms: number): string {
     return `${MM}-${DD}-${YYYY} ${hh}:${mm}:${ss}:${SSS} ${tz}`;
 }
 
+// Function: formatDuration
+// Purpose: Convert milliseconds to an HH:MM:SS string suitable for UI
+// and logging output.
 export function formatDuration(ms: number): string {
     const totalSeconds = Math.floor(ms / 1000);
     const h = Math.floor(totalSeconds / 3600);
@@ -31,6 +42,9 @@ export function formatDuration(ms: number): string {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// Function: isIgnoredPath
+// Purpose: Determine whether a relative file path should be ignored by
+// the logger (e.g., editor settings, log files, encrypted files).
 export function isIgnoredPath(relPath: string): boolean {
     if (!relPath) return true;
     const p = relPath.replace(/\\/g, '/');

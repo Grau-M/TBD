@@ -1,3 +1,10 @@
+// Module: listeners/editListener.ts
+// Purpose: Create a listener for text document changes. The listener
+// classifies edits (insert, delete, replace, paste) and heuristically
+// detects potential AI-assisted edits when the active editor does not
+// match the document being edited. It then constructs `StandardEvent`
+// objects and pushes them into the shared session buffer, triggering
+// flushes when thresholds are reached.
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { state, CONSTANTS } from '../state';
@@ -5,6 +12,11 @@ import { flushBuffer } from '../flush';
 import { isIgnoredPath, formatTimestamp, formatDuration } from '../utils';
 import { StandardEvent } from '../types';
 
+// Function: createEditListener
+// Purpose: Return a Disposable that listens for text document changes and
+// converts them into `StandardEvent` entries stored in `state.sessionBuffer`.
+// The listener classifies edits (input, paste, delete, replace) and adds
+// heuristics for detecting potential AI-assisted edits.
 export function createEditListener(): vscode.Disposable {
     return vscode.workspace.onDidChangeTextDocument((event) => {
         // 1. IGNORE CHECKS

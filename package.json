@@ -16,7 +16,19 @@
   ],
   "icon": "AppIcon.ico",
   "activationEvents": [
-    "*"
+    "onStartupFinished",
+    "onDebug",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:python",
+    "onLanguage:java",
+    "onLanguage:markdown",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:csharp",
+    "onLanguage:go",
+    "onLanguage:rust",
+    "workspaceContains:**/*"
   ],
   "main": "./dist/extension.js",
   "contributes": {

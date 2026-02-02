@@ -26,13 +26,13 @@ export function createEditListener(): vscode.Disposable {
         const docPath = vscode.workspace.asRelativePath(event.document.uri, false);
         if (isIgnoredPath(docPath)) return;
 
-        // 2. TIMING
+        // TIMING
         const currentTime = Date.now();
         const timeDiff = currentTime - state.lastEventTime;
         state.lastEventTime = currentTime;
         const formattedTime = formatTimestamp(currentTime);
 
-        // 3. AI & CONTEXT DETECTION
+        // 2. AI & CONTEXT DETECTION
         const activeEditor = vscode.window.activeTextEditor;
         
         // Check if the user is focusing on the file they are editing
@@ -45,7 +45,7 @@ export function createEditListener(): vscode.Disposable {
         const fileEdit = path.basename(event.document.fileName);
         const fileView = isIgnoredPath(fileViewRaw) ? '' : fileViewRaw;
 
-        // 4. PROCESS CHANGES
+        // 3. PROCESS CHANGES
         event.contentChanges.forEach((change) => {
             // Skip if the edit itself is in an ignored path (redundant safety)
             const fileEditRaw = event.document ? vscode.workspace.asRelativePath(event.document.uri, false) : '';
@@ -80,8 +80,7 @@ export function createEditListener(): vscode.Disposable {
                 fileView
             };
 
-            // NEW: ADD CHARACTER COUNT FOR PASTES
-            // We check if the event involves adding text (paste, replace, or ai-paste)
+            // We check if the event involves adding text (paste, replace, or ai-paste) and log the character count
             if (eventType === 'paste' || eventType === 'ai-paste' || eventType === 'replace' || eventType === 'ai-replace') {
                 logEntry.pasteCharCount = change.text.length;
             }

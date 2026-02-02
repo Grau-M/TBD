@@ -3,7 +3,7 @@
   "displayName": "TBD Logger",
   "description": "A defensible behavioral analysis tool.",
   "publisher": "MarcusGrau",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.108.1"
   },

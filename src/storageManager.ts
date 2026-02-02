@@ -29,6 +29,7 @@ export class StorageManager {
     private archiveDir: vscode.Uri | null = null;
     private settingsWatcher: vscode.FileSystemWatcher | null = null;
     private fileIndex: Map<string, { size: number; mtime: number }> = new Map();
+    private internalWriteTimestamps: Map<string, number> = new Map();
     private watcher: vscode.FileSystemWatcher | null = null;
     private hiddenWatcher: vscode.FileSystemWatcher | null = null;
     private initialized = false;
@@ -142,7 +143,7 @@ export class StorageManager {
         } catch (e) {
             // ignore
         }
-        this.hiddenLogUri = vscode.Uri.joinPath(this.hiddenDir, '.undeletable_deletions.log');
+        this.hiddenLogUri = vscode.Uri.joinPath(this.hiddenDir, '.deleted_and_edited.log');
         this.archiveDir = vscode.Uri.joinPath(this.hiddenDir, 'archive');
         try {
             await vscode.workspace.fs.createDirectory(this.archiveDir);
@@ -172,7 +173,7 @@ export class StorageManager {
             if (workspaceFolders && workspaceFolders.length > 0) {
                 const config = vscode.workspace.getConfiguration();
                 const filesExclude = config.get<any>('files.exclude') || {};
-                const keysToRemove = ['.vscode/.tbd_hidden', '.vscode/.tbd_hidden/**', '.vscode/.tbd_hidden/.undeletable_deletions.log'];
+                const keysToRemove = ['.vscode/.tbd_hidden', '.vscode/.tbd_hidden/**', '.vscode/.tbd_hidden/.deleted_and_edited.log'];
                 let changed = false;
                 for (const k of keysToRemove) {
                     if (Object.prototype.hasOwnProperty.call(filesExclude, k)) {
@@ -286,6 +287,12 @@ export class StorageManager {
 
             const encryptedData = this.encrypt(JSON.stringify(initialData, null, 2));
             await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
+            // Mark this write as an internal write so the watcher doesn't treat
+            // the subsequent change event as a user edit.
+            try {
+                const fn = filename;
+                this.internalWriteTimestamps.set(fn, Date.now());
+            } catch (_) {}
             // update index for this new file
             try {
                 const stat = await vscode.workspace.fs.stat(this.sessionFileUri);
@@ -360,7 +367,7 @@ export class StorageManager {
 
         if (!exists) {
             const initial = {
-                header: { createdAt: formatTimestamp(Date.now()), note: 'Deletion activity log' },
+                header: { createdAt: formatTimestamp(Date.now()), note: 'Deleted and edited activity log' },
                 deletions: [] as any[]
             };
             const buf = this.encrypt(JSON.stringify(initial, null, 2));
@@ -416,15 +423,27 @@ export class StorageManager {
             let data = await vscode.workspace.fs.readFile(this.hiddenLogUri);
             let text = '';
             try { text = this.decrypt(data); } catch { text = Buffer.from(data).toString('utf8'); }
-            let obj: any = { header: { createdAt: formatTimestamp(Date.now()), note: 'Deletion activity log' }, deletions: [] };
+            let obj: any = { header: { createdAt: formatTimestamp(Date.now()), note: 'Deleted and edited activity log' }, deletions: [] };
             try { obj = JSON.parse(text); } catch { obj = obj; }
             if (!Array.isArray(obj.deletions)) obj.deletions = [];
-            obj.deletions.push(entry);
+            // Sanitize entry: ensure we never store raw log contents or large blobs
+            const sanitized: any = {};
+            for (const k of Object.keys(entry || {})) {
+                if ([ 'content', 'data', 'body', 'events', 'raw', 'fileContent', 'log' ].includes(k)) continue;
+                sanitized[k] = entry[k];
+            }
+            obj.deletions.push(sanitized);
             const buf = this.encrypt(JSON.stringify(obj, null, 2));
             await vscode.workspace.fs.writeFile(this.hiddenLogUri, buf);
         } catch (e) {
             // If append fails because file missing, recreate with a single entry
-            const obj = { header: { createdAt: formatTimestamp(Date.now()), note: 'Deletion activity log' }, deletions: [entry] };
+            // sanitize fallback entry as well
+            const fallbackSanitized: any = {};
+            for (const k of Object.keys(entry || {})) {
+                if ([ 'content', 'data', 'body', 'events', 'raw', 'fileContent', 'log' ].includes(k)) continue;
+                fallbackSanitized[k] = entry[k];
+            }
+            const obj = { header: { createdAt: formatTimestamp(Date.now()), note: 'Deleted and edited activity log' }, deletions: [fallbackSanitized] };
             const buf = this.encrypt(JSON.stringify(obj, null, 2));
             await vscode.workspace.fs.writeFile(this.hiddenLogUri, buf);
         }
@@ -473,6 +492,27 @@ export class StorageManager {
         try {
             const name = uri.path.split('/').pop() || '';
             const stat = await vscode.workspace.fs.stat(uri);
+            const recorded = this.fileIndex.get(name) || { size: 0, mtime: 0 };
+            // If file size or mtime changed from our last known state, record an "edited" entry
+            if (recorded.mtime !== 0 && (recorded.mtime !== stat.mtime || recorded.size !== stat.size)) {
+                // If the most recent internal write timestamp is very recent, this
+                // change was likely caused by the extension itself — ignore it.
+                const lastInternal = this.internalWriteTimestamps.get(name) || 0;
+                const now = Date.now();
+                const INTERNAL_IGNORE_MS = 3000; // 3 seconds
+                if (now - lastInternal > INTERNAL_IGNORE_MS) {
+                    const editEntry = {
+                        modifiedFile: name,
+                        modifiedAt: formatTimestamp(now),
+                        previousSize: this.formatSize(recorded.size),
+                        newSize: this.formatSize(stat.size),
+                        previousMtime: recorded.mtime,
+                        newMtime: stat.mtime,
+                        note: `File modified outside the extension (manual edit detected). Previous size: ${this.formatSize(recorded.size)}; new size: ${this.formatSize(stat.size)}.`
+                    };
+                    try { await this.appendToHiddenLog(editEntry); } catch (e) { /* ignore */ }
+                }
+            }
             this.fileIndex.set(name, { size: stat.size, mtime: stat.mtime });
             // Update archived copy when file changes
             try {
@@ -498,10 +538,9 @@ export class StorageManager {
         const entry = {
             deletedFile: name,
             deletedAt: formatTimestamp(Date.now()),
-            // lastKnownSize: recorded.size,
-            lastKnownSize: this.formatSize(recorded.size)
-            // lastKnownSizeHuman: this.formatSize(recorded.size),
-            // lastKnownMtime: recorded.mtime
+            lastKnownSize: this.formatSize(recorded.size),
+            // lastKnownMtime: recorded.mtime,
+            note: `File deleted from workspace.`
         };
 
         try {
@@ -553,6 +592,8 @@ export class StorageManager {
 
                 const enc = this.encrypt(JSON.stringify(initialData, null, 2));
                 await vscode.workspace.fs.writeFile(recreateUri, enc);
+                // Mark this recreation as an internal write so the watcher ignores it
+                try { this.internalWriteTimestamps.set(name, Date.now()); } catch (_) {}
                 try { const stat = await vscode.workspace.fs.stat(recreateUri); this.fileIndex.set(name, { size: stat.size, mtime: stat.mtime }); } catch {}
             }
         } catch (e) {
@@ -576,7 +617,7 @@ export class StorageManager {
         } catch (e) {
             // If append fails because file missing, create a new file with the entry
             if (this.hiddenLogUri) {
-                const obj = { header: { createdAt: formatTimestamp(Date.now()), note: 'Deletion activity log' }, deletions: [entry] };
+                const obj = { header: { createdAt: formatTimestamp(Date.now()), note: 'Deleted and edited activity log' }, deletions: [entry] };
                 const buf = this.encrypt(JSON.stringify(obj, null, 2));
                 try { await vscode.workspace.fs.writeFile(this.hiddenLogUri, buf); } catch (_) {}
             }
@@ -642,6 +683,11 @@ export class StorageManager {
 
             await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
             console.log(`[TBD Logger] Securely appended ${newEvents.length} events.`);
+            // Mark this flush as an internal write to avoid false-positive "edited" events
+            try {
+                const name = this.sessionFileUri?.path.split('/').pop() || '';
+                if (name) this.internalWriteTimestamps.set(name, Date.now());
+            } catch (_) {}
         } catch (err) {
             console.error('[TBD Logger] Critical Error during flush:', err);
         }

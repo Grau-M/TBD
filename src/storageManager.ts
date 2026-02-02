@@ -7,6 +7,7 @@
 // file operations via the VS Code workspace FS and handles encryption.
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import { getSessionInfo } from './sessionInfo';
 import { formatTimestamp } from './utils';
 
@@ -60,6 +61,55 @@ export class StorageManager {
         const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv);
         const decrypted = Buffer.concat([decipher.update(content), decipher.final()]);
         return decrypted.toString();
+    }
+
+    // Attempt partial decryption when full decryption fails.
+    // Returns { text, partial } where `partial` is true when we could
+    // only decrypt a prefix (file truncated or tampered) or false for a
+    // successful full decryption.
+    private tryPartialDecrypt(buffer: Uint8Array): { text: string; partial: boolean } {
+        const buf = Buffer.from(buffer);
+        if (buf.length < IV_LENGTH) {
+            // Not enough data even for IV — return raw
+            return { text: buf.toString('utf8'), partial: true };
+        }
+        const iv = buf.subarray(0, IV_LENGTH);
+        const content = buf.subarray(IV_LENGTH);
+
+        try {
+            // Try normal full decryption first
+            const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv);
+            const out = Buffer.concat([decipher.update(content), decipher.final()]);
+            return { text: out.toString('utf8'), partial: false };
+        } catch (e) {
+            // Full decrypt failed — attempt to decrypt only full AES blocks
+            try {
+                const fullBlocks = Math.floor(content.length / 16) * 16;
+                if (fullBlocks <= 0) return { text: '', partial: true };
+                const slice = content.subarray(0, fullBlocks);
+                const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv);
+                const out = decipher.update(slice);
+                // Do not call final() since padding/last-block may be missing
+                return { text: out.toString('utf8'), partial: true };
+            } catch (e2) {
+                // Give up and return raw bytes as utf8
+                return { text: buf.toString('utf8'), partial: true };
+            }
+        }
+    }
+
+    // Toggle read-only attribute on a file. On success this helps prevent
+    // accidental external edits; write operations in the extension will
+    // temporarily clear the readonly bit before writing.
+    private async setFileReadOnly(uri: vscode.Uri, readOnly: boolean): Promise<void> {
+        if (!uri) return;
+        try {
+            const mode = readOnly ? 0o444 : 0o666;
+            await fs.promises.chmod(uri.fsPath, mode);
+        } catch (e) {
+            // Ignore — some platforms/FS may not support chmod from the
+            // extension runtime or the permission change may fail.
+        }
     }
 
     async init(context: vscode.ExtensionContext) {
@@ -287,6 +337,7 @@ export class StorageManager {
 
             const encryptedData = this.encrypt(JSON.stringify(initialData, null, 2));
             await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
+            try { await this.setFileReadOnly(this.sessionFileUri, true); } catch (_) {}
             // Mark this write as an internal write so the watcher doesn't treat
             // the subsequent change event as a user edit.
             try {
@@ -591,7 +642,9 @@ export class StorageManager {
                 };
 
                 const enc = this.encrypt(JSON.stringify(initialData, null, 2));
+                try { await this.setFileReadOnly(recreateUri, false); } catch (_) {}
                 await vscode.workspace.fs.writeFile(recreateUri, enc);
+                try { await this.setFileReadOnly(recreateUri, true); } catch (_) {}
                 // Mark this recreation as an internal write so the watcher ignores it
                 try { this.internalWriteTimestamps.set(name, Date.now()); } catch (_) {}
                 try { const stat = await vscode.workspace.fs.stat(recreateUri); this.fileIndex.set(name, { size: stat.size, mtime: stat.mtime }); } catch {}
@@ -681,7 +734,9 @@ export class StorageManager {
             const updatedJsonStr = JSON.stringify(history, null, 2);
             const encryptedData = this.encrypt(updatedJsonStr);
 
+            try { await this.setFileReadOnly(this.sessionFileUri, false); } catch (_) {}
             await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
+            try { await this.setFileReadOnly(this.sessionFileUri, true); } catch (_) {}
             console.log(`[TBD Logger] Securely appended ${newEvents.length} events.`);
             // Mark this flush as an internal write to avoid false-positive "edited" events
             try {
@@ -709,7 +764,10 @@ export class StorageManager {
 
         try {
             const fileData = await vscode.workspace.fs.readFile(this.sessionFileUri);
-            return this.decrypt(fileData);
+            const res = this.tryPartialDecrypt(fileData);
+            if (!res.partial) return res.text;
+            // partial decrypt — likely tampered/truncated
+            return `WARNING: File appears tampered or truncated. Cannot derypt the file with missing data.\n\n${res.text}`;
         } catch (err) {
             throw new Error('Failed to read or decrypt file.');
         }
@@ -727,7 +785,9 @@ export class StorageManager {
 
         try {
             const fileData = await vscode.workspace.fs.readFile(fileUri);
-            return this.decrypt(fileData);
+            const res = this.tryPartialDecrypt(fileData);
+            if (!res.partial) return res.text;
+            return `WARNING: File appears tampered or truncated. Cannot derypt the file with missing data.\n\n${res.text}`;
         } catch (err) {
             throw new Error('Failed to read or decrypt file.');
         }

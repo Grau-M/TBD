@@ -5,7 +5,7 @@
   "publisher": "MarcusGrau",
   "version": "0.0.2",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.108.1"
   },
   "repository": {
     "type": "git",

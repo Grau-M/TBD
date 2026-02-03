@@ -16,6 +16,7 @@ import { flushBuffer } from './flush';
 import { storageManager, state, CONSTANTS } from './state';
 import { isIgnoredPath, formatTimestamp } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
+import { openTeacherView } from './teacherView';
 
 import * as path from 'path';
 // define api for testing purposes
@@ -132,6 +133,10 @@ export async function activate(context: vscode.ExtensionContext) {
     };
     const showHiddenCommand = vscode.commands.registerCommand('tbd-logger.showHiddenDeletions', showHidden);
     context.subscriptions.push(showHiddenCommand);
+
+    // Command: Open Teacher Dashboard (Webview)
+    const openTeacherCommand = vscode.commands.registerCommand('tbd-logger.openTeacherView', () => openTeacherView(context));
+    context.subscriptions.push(openTeacherCommand);
 
     // Create status bar and start UI timer (also show small lock icon wired to hidden deletions)
     const statusBarItem = createStatusBar(context, 'tbd-logger.openLogs', 'tbd-logger.showHiddenDeletions');

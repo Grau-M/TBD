@@ -42,6 +42,10 @@
         "title": "TBD Logger: Open Logs Folder"
       },
       {
+        "command": "tbd-logger.openTeacherView",
+        "title": "TBD Logger: Open Teacher Dashboard"
+      },
+      {
         "command": "tbd-logger.flush",
         "title": "TBD Logger: Flush Events to Disk"
       }
@@ -56,7 +60,8 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "generate-test-log": "node ./test/scripts/generate_test_log.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

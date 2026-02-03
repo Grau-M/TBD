@@ -1,0 +1,2829 @@
+{
+  "sessionHeader": {
+    "sessionNumber": 1,
+    "startedBy": "developer",
+    "project": "devproject",
+    "startTime": "2026-02-03T18:28:09.619Z",
+    "metadata": {
+      "vscodeVersion": "test",
+      "startTimestamp": "2026-02-03T18:28:09.619Z",
+      "extensionVersion": "0.0.0-test"
+    }
+  },
+  "events": [
+    {
+      "time": "2026-02-03T20:28:17.621Z",
+      "flightTime": "8000",
+      "eventType": "delete",
+      "deletedChars": 1
+    },
+    {
+      "time": "2026-02-03T20:28:31.621Z",
+      "flightTime": "14000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "props reduce if reject function function useEffect props console.log hook if reduce Promise class test ref ref it reject",
+      "generatedSummary": "export filter Promise import state variable let Promise export export return export console.log let Promise const async variable return props component handler expect ref"
+    },
+    {
+      "time": "2026-02-03T20:28:45.621Z",
+      "flightTime": "14000",
+      "eventType": "delete",
+      "deletedChars": 32
+    },
+    {
+      "time": "2026-02-03T20:28:53.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "props console.log handler expect await reject test export export"
+    },
+    {
+      "time": "2026-02-03T20:29:14.621Z",
+      "flightTime": "21000",
+      "eventType": "fileView",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T20:29:25.621Z",
+      "flightTime": "11000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "async hook import return render it export import test variable it state it useEffect reject class",
+      "generatedSummary": "else it props async else async const handler map reduce props expect useEffect hook"
+    },
+    {
+      "time": "2026-02-03T20:29:40.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "import async ref"
+    },
+    {
+      "time": "2026-02-03T20:29:52.621Z",
+      "flightTime": "12000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "handler async async console.log return export handler component it"
+    },
+    {
+      "time": "2026-02-03T20:30:02.621Z",
+      "flightTime": "10000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "describe handler console.log"
+    },
+    {
+      "time": "2026-02-03T20:30:10.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "filter it const expect"
+    },
+    {
+      "time": "2026-02-03T20:30:23.621Z",
+      "flightTime": "13000",
+      "eventType": "paste",
+      "pastedLength": 9,
+      "pastePreview": "component expect import"
+    },
+    {
+      "time": "2026-02-03T20:30:36.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "if return handler class class ref describe"
+    },
+    {
+      "time": "2026-02-03T20:30:57.621Z",
+      "flightTime": "21000",
+      "eventType": "paste",
+      "pastedLength": 101,
+      "pastePreview": "props resolve console.log export it async let await filter let expect let map hook ref function return handler return resolve return test await if import resolve reject state let console.log Promise test await"
+    },
+    {
+      "time": "2026-02-03T20:31:22.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "class async useEffect const useEffect resolve Promise await let"
+    },
+    {
+      "time": "2026-02-03T20:31:40.621Z",
+      "flightTime": "18000",
+      "eventType": "delete",
+      "deletedChars": 34
+    },
+    {
+      "time": "2026-02-03T20:31:51.621Z",
+      "flightTime": "11000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "ref filter variable export render class if let map reject if",
+      "generatedSummary": "export await resolve return it export filter import hook variable useEffect else props import resolve map filter component state class variable it describe expect component else useEffect export console.log component handler Promise async async"
+    },
+    {
+      "time": "2026-02-03T20:32:18.621Z",
+      "flightTime": "27000",
+      "eventType": "delete",
+      "deletedChars": 24
+    },
+    {
+      "time": "2026-02-03T20:32:31.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "variable return useEffect let if else return"
+    },
+    {
+      "time": "2026-02-03T20:32:51.621Z",
+      "flightTime": "20000",
+      "eventType": "paste",
+      "pastedLength": 133,
+      "pastePreview": "class export resolve export function function import const variable class resolve if handler map render render import class async if props class render import it import else test reject await props reject reduce console.log render map describe class filter filter expect async async const"
+    },
+    {
+      "time": "2026-02-03T20:33:20.621Z",
+      "flightTime": "29000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "await filter async return describe variable describe ref state console.log await state filter const variable const else",
+      "generatedSummary": "it describe props props handler it useEffect else map console.log Promise resolve hook it variable console.log handler return return useEffect const function import reject reduce useEffect"
+    },
+    {
+      "time": "2026-02-03T20:33:31.621Z",
+      "flightTime": "11000",
+      "eventType": "fileView",
+      "file": "/workspace/src/utils.ts"
+    },
+    {
+      "time": "2026-02-03T20:33:39.621Z",
+      "flightTime": "8000",
+      "eventType": "paste",
+      "pastedLength": 65,
+      "pastePreview": "console.log props hook async export hook render function component component handler Promise function export Promise render describe if render else component"
+    },
+    {
+      "time": "2026-02-03T20:34:07.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "async state if Promise resolve"
+    },
+    {
+      "time": "2026-02-03T20:34:27.621Z",
+      "flightTime": "20000",
+      "eventType": "delete",
+      "deletedChars": 14
+    },
+    {
+      "time": "2026-02-03T20:34:42.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "component reject Promise map function filter return class Promise variable"
+    },
+    {
+      "time": "2026-02-03T20:35:10.621Z",
+      "flightTime": "28000",
+      "eventType": "fileView",
+      "file": "/workspace/src/utils.ts"
+    },
+    {
+      "time": "2026-02-03T20:35:25.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "Promise it variable"
+    },
+    {
+      "time": "2026-02-03T20:35:38.621Z",
+      "flightTime": "13000",
+      "eventType": "paste",
+      "pastedLength": 25,
+      "pastePreview": "function hook render import async let if handler"
+    },
+    {
+      "time": "2026-02-03T20:36:00.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "hook class export reject handler import"
+    },
+    {
+      "time": "2026-02-03T20:36:09.621Z",
+      "flightTime": "9000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "props console.log component class async return"
+    },
+    {
+      "time": "2026-02-03T20:36:36.621Z",
+      "flightTime": "27000",
+      "eventType": "paste",
+      "pastedLength": 185,
+      "pastePreview": "component return async resolve useEffect render variable reject import const if resolve map expect describe handler component const variable handler reduce component class state console.log let describe await Promise reduce useEffect if hook reject Promise describe let hook reject import resolve expect let variable handler import filter function map state"
+    },
+    {
+      "time": "2026-02-03T20:36:54.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "return class function if"
+    },
+    {
+      "time": "2026-02-03T20:37:01.621Z",
+      "flightTime": "7000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "state describe return export await describe map"
+    },
+    {
+      "time": "2026-02-03T20:37:30.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "handler ref await async else"
+    },
+    {
+      "time": "2026-02-03T20:37:41.621Z",
+      "flightTime": "11000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "return function reduce class expect const resolve",
+      "generatedSummary": "let variable Promise resolve export ref ref props reduce import console.log resolve const if describe render let hook import handler else filter ref import hook describe return class export map"
+    },
+    {
+      "time": "2026-02-03T20:37:49.621Z",
+      "flightTime": "8000",
+      "eventType": "save",
+      "file": "/workspace/src/app.ts"
+    },
+    {
+      "time": "2026-02-03T20:38:10.621Z",
+      "flightTime": "21000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "expect await ref else resolve useEffect"
+    },
+    {
+      "time": "2026-02-03T20:38:40.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "component filter ref async filter state handler reduce"
+    },
+    {
+      "time": "2026-02-03T20:39:05.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "test reject resolve component reduce hook reject Promise reduce console.log"
+    },
+    {
+      "time": "2026-02-03T20:39:22.621Z",
+      "flightTime": "17000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "import resolve map test else filter",
+      "generatedSummary": "Promise reduce variable hook ref console.log let class import useEffect variable function variable console.log import resolve else if let resolve handler describe describe export class console.log useEffect async reduce handler function variable variable class"
+    },
+    {
+      "time": "2026-02-03T20:39:35.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "render variable if function Promise ref return function if"
+    },
+    {
+      "time": "2026-02-03T20:39:47.621Z",
+      "flightTime": "12000",
+      "eventType": "save",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T20:39:55.621Z",
+      "flightTime": "8000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "export else return console.log const async function props handler it console.log",
+      "generatedSummary": "Promise async expect return async async describe test reduce render render reject if ref render test else"
+    },
+    {
+      "time": "2026-02-03T20:40:19.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "else useEffect it it return render handler else describe"
+    },
+    {
+      "time": "2026-02-03T20:40:25.621Z",
+      "flightTime": "6000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "const reject reject resolve handler async else handler props export",
+      "generatedSummary": "Promise import variable variable class props test state test import props let console.log props console.log class const class async filter ref filter console.log resolve handler"
+    },
+    {
+      "time": "2026-02-03T20:40:40.621Z",
+      "flightTime": "15000",
+      "eventType": "fileView",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T20:40:54.621Z",
+      "flightTime": "14000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "import render filter export render map describe props state async else else if describe expect ref function Promise filter filter",
+      "generatedSummary": "function reject props async component test filter describe await render resolve describe variable useEffect props reject handler const reduce filter if import async props return state render else Promise async let state class"
+    },
+    {
+      "time": "2026-02-03T20:41:23.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "state expect if expect variable component import import describe export"
+    },
+    {
+      "time": "2026-02-03T20:41:52.621Z",
+      "flightTime": "29000",
+      "eventType": "save",
+      "file": "/workspace/src/app.ts"
+    },
+    {
+      "time": "2026-02-03T20:42:17.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "if let let else"
+    },
+    {
+      "time": "2026-02-03T20:42:24.621Z",
+      "flightTime": "7000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "component reduce await hook resolve it render console.log map"
+    },
+    {
+      "time": "2026-02-03T20:42:54.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "hook map hook ref return it export"
+    },
+    {
+      "time": "2026-02-03T20:43:03.621Z",
+      "flightTime": "9000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "async useEffect props"
+    },
+    {
+      "time": "2026-02-03T20:43:15.621Z",
+      "flightTime": "12000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "render variable map async it"
+    },
+    {
+      "time": "2026-02-03T20:43:33.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "hook export variable"
+    },
+    {
+      "time": "2026-02-03T20:44:01.621Z",
+      "flightTime": "28000",
+      "eventType": "paste",
+      "pastedLength": 125,
+      "pastePreview": "await state import expect return reduce variable const class const expect return handler map component await resolve resolve else async import console.log function props props describe if class useEffect else function map else console.log return const resolve await const expect export"
+    },
+    {
+      "time": "2026-02-03T20:44:15.621Z",
+      "flightTime": "14000",
+      "eventType": "delete",
+      "deletedChars": 36
+    },
+    {
+      "time": "2026-02-03T20:44:40.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "export state let useEffect hook state const"
+    },
+    {
+      "time": "2026-02-03T20:44:57.621Z",
+      "flightTime": "17000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "Promise props async"
+    },
+    {
+      "time": "2026-02-03T20:45:03.621Z",
+      "flightTime": "6000",
+      "eventType": "paste",
+      "pastedLength": 132,
+      "pastePreview": "render test filter function it resolve state reject ref else state describe expect state hook resolve function await const hook hook export component export test class expect describe let filter Promise state test console.log class const const map function hook describe const Promise filter"
+    },
+    {
+      "time": "2026-02-03T20:45:23.621Z",
+      "flightTime": "20000",
+      "eventType": "delete",
+      "deletedChars": 36
+    },
+    {
+      "time": "2026-02-03T20:45:31.621Z",
+      "flightTime": "8000",
+      "eventType": "paste",
+      "pastedLength": 54,
+      "pastePreview": "useEffect export ref class expect return Promise it render else map handler describe map props else Promise filter"
+    },
+    {
+      "time": "2026-02-03T20:45:38.621Z",
+      "flightTime": "7000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "render handler class render"
+    },
+    {
+      "time": "2026-02-03T20:46:04.621Z",
+      "flightTime": "26000",
+      "eventType": "paste",
+      "pastedLength": 196,
+      "pastePreview": "it state return let ref console.log Promise resolve export const ref import ref filter class let hook map else class component state reduce const else handler function export async if import filter function describe expect component import Promise function props function const handler export resolve props handler class map let"
+    },
+    {
+      "time": "2026-02-03T20:46:13.621Z",
+      "flightTime": "9000",
+      "eventType": "delete",
+      "deletedChars": 37
+    },
+    {
+      "time": "2026-02-03T20:46:18.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "else class describe filter function"
+    },
+    {
+      "time": "2026-02-03T20:46:42.621Z",
+      "flightTime": "24000",
+      "eventType": "paste",
+      "pastedLength": 10,
+      "pastePreview": "Promise export reduce"
+    },
+    {
+      "time": "2026-02-03T20:47:07.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "render else Promise ref"
+    },
+    {
+      "time": "2026-02-03T20:47:17.621Z",
+      "flightTime": "10000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "else handler filter component"
+    },
+    {
+      "time": "2026-02-03T20:47:23.621Z",
+      "flightTime": "6000",
+      "eventType": "paste",
+      "pastedLength": 74,
+      "pastePreview": "Promise filter reject if render await hook props export console.log filter variable hook async function if function map map return if handler describe console.log"
+    },
+    {
+      "time": "2026-02-03T20:47:41.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "render handler export component if reject ref function function"
+    },
+    {
+      "time": "2026-02-03T20:47:46.621Z",
+      "flightTime": "5000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "class import variable filter return export it hook handler console.log render",
+      "generatedSummary": "expect const return props ref import console.log useEffect test const filter else useEffect test hook reject it resolve component render let"
+    },
+    {
+      "time": "2026-02-03T20:48:10.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "resolve export component export export map component"
+    },
+    {
+      "time": "2026-02-03T20:48:23.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "function props resolve export function"
+    },
+    {
+      "time": "2026-02-03T20:48:50.621Z",
+      "flightTime": "27000",
+      "eventType": "delete",
+      "deletedChars": 12
+    },
+    {
+      "time": "2026-02-03T20:49:20.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "hook component component function export variable await it reduce class"
+    },
+    {
+      "time": "2026-02-03T20:49:40.621Z",
+      "flightTime": "20000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "else test filter reject filter expect if",
+      "generatedSummary": "hook reduce console.log filter else const const render export variable import component map handler ref"
+    },
+    {
+      "time": "2026-02-03T20:49:47.621Z",
+      "flightTime": "7000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "variable it render const hook map Promise await filter resolve function",
+      "generatedSummary": "import hook state expect props export await async props expect component map import else reduce props reject useEffect test console.log return render"
+    },
+    {
+      "time": "2026-02-03T20:50:16.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "state reject Promise reject hook reject ref const resolve import"
+    },
+    {
+      "time": "2026-02-03T20:50:31.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 2,
+      "textFragment": "await console.log expect if"
+    },
+    {
+      "time": "2026-02-03T20:50:42.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "it import variable function"
+    },
+    {
+      "time": "2026-02-03T20:50:57.621Z",
+      "flightTime": "15000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "const else state hook reduce useEffect if function",
+      "generatedSummary": "export async map const test export else export return Promise console.log map variable variable const expect resolve if test else return Promise state variable test filter filter resolve import render variable Promise hook hook it export"
+    },
+    {
+      "time": "2026-02-03T20:51:04.621Z",
+      "flightTime": "7000",
+      "eventType": "paste",
+      "pastedLength": 52,
+      "pastePreview": "let render state ref variable async else resolve reject variable let map useEffect expect resolve resolve Promise"
+    },
+    {
+      "time": "2026-02-03T20:51:33.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "if expect it filter expect it reject state"
+    },
+    {
+      "time": "2026-02-03T20:51:55.621Z",
+      "flightTime": "22000",
+      "eventType": "fileView",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T20:52:09.621Z",
+      "flightTime": "14000",
+      "eventType": "paste",
+      "pastedLength": 184,
+      "pastePreview": "class class hook it class let component state ref if ref render const hook variable useEffect props props Promise variable reject class async class resolve variable reject Promise reject variable async render handler async const function render import await let describe ref reduce component function if it export export describe"
+    },
+    {
+      "time": "2026-02-03T20:52:16.621Z",
+      "flightTime": "7000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "reduce map describe"
+    },
+    {
+      "time": "2026-02-03T20:52:41.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 2,
+      "textFragment": "if return reduce export describe map"
+    },
+    {
+      "time": "2026-02-03T20:53:04.621Z",
+      "flightTime": "23000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "class test useEffect map let resolve expect let Promise"
+    },
+    {
+      "time": "2026-02-03T20:53:28.621Z",
+      "flightTime": "24000",
+      "eventType": "paste",
+      "pastedLength": 143,
+      "pastePreview": "useEffect reject render let async const test state console.log describe await async Promise let filter useEffect render hook function return reject await props import component function test async if if export filter class handler return test export export Promise export function render resolve ref else async hook"
+    },
+    {
+      "time": "2026-02-03T20:53:49.621Z",
+      "flightTime": "21000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "map Promise handler map export"
+    },
+    {
+      "time": "2026-02-03T20:54:07.621Z",
+      "flightTime": "18000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "test import it render ref Promise filter import state it return ref",
+      "generatedSummary": "props component render async const filter reduce import const describe it return state function state component props else variable console.log reject test Promise export console.log state else"
+    },
+    {
+      "time": "2026-02-03T20:54:18.621Z",
+      "flightTime": "11000",
+      "eventType": "fileView",
+      "file": "/workspace/src/app.ts"
+    },
+    {
+      "time": "2026-02-03T20:54:30.621Z",
+      "flightTime": "12000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "let map handler hook state hook handler reject map"
+    },
+    {
+      "time": "2026-02-03T20:55:00.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "state props const"
+    },
+    {
+      "time": "2026-02-03T20:55:27.621Z",
+      "flightTime": "27000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "it reduce props"
+    },
+    {
+      "time": "2026-02-03T20:55:42.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "expect state render async map variable state"
+    },
+    {
+      "time": "2026-02-03T20:56:09.621Z",
+      "flightTime": "27000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "props else test return resolve expect import describe function"
+    },
+    {
+      "time": "2026-02-03T20:56:31.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "state test variable reject describe hook"
+    },
+    {
+      "time": "2026-02-03T20:56:53.621Z",
+      "flightTime": "22000",
+      "eventType": "paste",
+      "pastedLength": 66,
+      "pastePreview": "function const if resolve const reject resolve useEffect else return map useEffect test Promise filter import props async const render const map"
+    },
+    {
+      "time": "2026-02-03T20:57:03.621Z",
+      "flightTime": "10000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "const filter reduce reject resolve async render Promise ref filter"
+    },
+    {
+      "time": "2026-02-03T20:57:09.621Z",
+      "flightTime": "6000",
+      "eventType": "paste",
+      "pastedLength": 72,
+      "pastePreview": "else it async export import variable describe render export map render export handler return map resolve resolve component state function function map describe Promise"
+    },
+    {
+      "time": "2026-02-03T20:57:33.621Z",
+      "flightTime": "24000",
+      "eventType": "delete",
+      "deletedChars": 40
+    },
+    {
+      "time": "2026-02-03T20:57:56.621Z",
+      "flightTime": "23000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "else state render handler console.log export describe resolve class"
+    },
+    {
+      "time": "2026-02-03T20:58:17.621Z",
+      "flightTime": "21000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "export filter let let component import import await expect reduce state const async import",
+      "generatedSummary": "function map expect import reject variable hook class test render reduce component return hook variable test render class expect let filter render resolve function it console.log render render import props Promise resolve ref component variable useEffect function import variable"
+    },
+    {
+      "time": "2026-02-03T20:58:37.621Z",
+      "flightTime": "20000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "import else ref test props filter"
+    },
+    {
+      "time": "2026-02-03T20:58:56.621Z",
+      "flightTime": "19000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "resolve hook Promise hook if function handler import Promise"
+    },
+    {
+      "time": "2026-02-03T20:59:15.621Z",
+      "flightTime": "19000",
+      "eventType": "keystroke",
+      "keys": 3,
+      "textFragment": "Promise variable else state export"
+    },
+    {
+      "time": "2026-02-03T20:59:24.621Z",
+      "flightTime": "9000",
+      "eventType": "paste",
+      "pastedLength": 121,
+      "pastePreview": "const hook if Promise handler variable Promise await let component component import import props async useEffect reject function if function ref class class map console.log resolve describe Promise class filter ref state resolve hook async state expect return useEffect useEffect"
+    },
+    {
+      "time": "2026-02-03T20:59:38.621Z",
+      "flightTime": "14000",
+      "eventType": "fileView",
+      "file": "/workspace/src/utils.ts"
+    },
+    {
+      "time": "2026-02-03T21:00:02.621Z",
+      "flightTime": "24000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "expect it map if console.log component",
+      "generatedSummary": "component variable return map props else render state export map ref Promise function resolve function resolve test function return component test hook test useEffect reduce import filter state return describe state await let"
+    },
+    {
+      "time": "2026-02-03T21:00:24.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "Promise useEffect test test console.log async"
+    },
+    {
+      "time": "2026-02-03T21:00:47.621Z",
+      "flightTime": "23000",
+      "eventType": "keystroke",
+      "keys": 2,
+      "textFragment": "else return class useEffect export"
+    },
+    {
+      "time": "2026-02-03T21:01:05.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "if filter handler it test"
+    },
+    {
+      "time": "2026-02-03T21:01:13.621Z",
+      "flightTime": "8000",
+      "eventType": "paste",
+      "pastedLength": 30,
+      "pastePreview": "component handler async variable it props render expect variable it"
+    },
+    {
+      "time": "2026-02-03T21:01:22.621Z",
+      "flightTime": "9000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "filter render else export expect reject hook class handler"
+    },
+    {
+      "time": "2026-02-03T21:01:50.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "import export const const Promise"
+    },
+    {
+      "time": "2026-02-03T21:02:20.621Z",
+      "flightTime": "30000",
+      "eventType": "save",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T21:02:26.621Z",
+      "flightTime": "6000",
+      "eventType": "paste",
+      "pastedLength": 43,
+      "pastePreview": "component useEffect return let async function render export useEffect filter describe if function hook"
+    },
+    {
+      "time": "2026-02-03T21:02:54.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "ref it map describe function"
+    },
+    {
+      "time": "2026-02-03T21:03:05.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "ref let component const return function filter variable ref"
+    },
+    {
+      "time": "2026-02-03T21:03:12.621Z",
+      "flightTime": "7000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "reject reduce const function import return console.log render if await",
+      "generatedSummary": "reduce render resolve props import reduce function hook reject resolve handler reduce filter describe reduce export let await let class function hook export console.log test console.log Promise handler describe props state describe component import"
+    },
+    {
+      "time": "2026-02-03T21:03:40.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "hook function map it it expect component"
+    },
+    {
+      "time": "2026-02-03T21:04:05.621Z",
+      "flightTime": "25000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "expect hook class it reduce function state console.log console.log",
+      "generatedSummary": "ref console.log variable return render console.log component render render await reduce ref else props map Promise filter resolve async it"
+    },
+    {
+      "time": "2026-02-03T21:04:35.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "test describe handler ref hook"
+    },
+    {
+      "time": "2026-02-03T21:05:01.621Z",
+      "flightTime": "26000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "ref component import else Promise expect ref import export export it Promise else test",
+      "generatedSummary": "resolve Promise export console.log ref handler console.log it Promise import let ref map useEffect import render else console.log class test console.log if if"
+    },
+    {
+      "time": "2026-02-03T21:05:21.621Z",
+      "flightTime": "20000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "resolve state console.log ref render let variable class resolve describe"
+    },
+    {
+      "time": "2026-02-03T21:05:44.621Z",
+      "flightTime": "23000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "let test variable useEffect handler hook render ref resolve Promise let reduce class else reject else resolve const const",
+      "generatedSummary": "variable function async await map it map import Promise await filter let"
+    },
+    {
+      "time": "2026-02-03T21:05:52.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "filter return function if handler expect const test export"
+    },
+    {
+      "time": "2026-02-03T21:06:04.621Z",
+      "flightTime": "12000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "let render it resolve map render ref hook"
+    },
+    {
+      "time": "2026-02-03T21:06:16.621Z",
+      "flightTime": "12000",
+      "eventType": "keystroke",
+      "keys": 3,
+      "textFragment": "map return Promise import hook reject import state await Promise"
+    },
+    {
+      "time": "2026-02-03T21:06:23.621Z",
+      "flightTime": "7000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "map let filter Promise props let"
+    },
+    {
+      "time": "2026-02-03T21:06:30.621Z",
+      "flightTime": "7000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "reduce map filter else test const useEffect console.log reject return export state state it",
+      "generatedSummary": "test resolve handler describe function useEffect console.log else const resolve import import console.log resolve reduce const component reject else filter function reduce class props expect let else import function state import"
+    },
+    {
+      "time": "2026-02-03T21:06:35.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "else reject const describe useEffect"
+    },
+    {
+      "time": "2026-02-03T21:06:40.621Z",
+      "flightTime": "5000",
+      "eventType": "save",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T21:06:51.621Z",
+      "flightTime": "11000",
+      "eventType": "paste",
+      "pastedLength": 156,
+      "pastePreview": "const import return async resolve class let reject console.log variable variable reduce async handler if expect await class if variable const async class await hook state reduce component class class async return export component it component test map map test return render hook else const export component handler map Promise"
+    },
+    {
+      "time": "2026-02-03T21:07:16.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "Promise props hook hook variable"
+    },
+    {
+      "time": "2026-02-03T21:07:30.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "variable variable console.log console.log resolve if hook"
+    },
+    {
+      "time": "2026-02-03T21:07:44.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "hook render console.log Promise"
+    },
+    {
+      "time": "2026-02-03T21:07:49.621Z",
+      "flightTime": "5000",
+      "eventType": "delete",
+      "deletedChars": 9
+    },
+    {
+      "time": "2026-02-03T21:08:00.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 3,
+      "textFragment": "if reduce props expect"
+    },
+    {
+      "time": "2026-02-03T21:08:12.621Z",
+      "flightTime": "12000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "filter reduce props variable describe"
+    },
+    {
+      "time": "2026-02-03T21:08:37.621Z",
+      "flightTime": "25000",
+      "eventType": "paste",
+      "pastedLength": 186,
+      "pastePreview": "props function import map let map state it if const import props class const ref export handler reduce handler useEffect if reject expect await hook function else export export describe return resolve reduce import useEffect handler component props console.log else it else const handler export component props class return function"
+    },
+    {
+      "time": "2026-02-03T21:09:07.621Z",
+      "flightTime": "30000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "return it const if handler map props Promise handler",
+      "generatedSummary": "let props console.log Promise import import import resolve it variable filter if Promise expect ref render filter resolve await hook const test props render handler const state function let map if return Promise function it let"
+    },
+    {
+      "time": "2026-02-03T21:09:18.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "test variable render await test await else it"
+    },
+    {
+      "time": "2026-02-03T21:09:48.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "else filter const"
+    },
+    {
+      "time": "2026-02-03T21:10:08.621Z",
+      "flightTime": "20000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "reject return if Promise props if test component ref hook export state ref else const class props handler return",
+      "generatedSummary": "const map await import state handler it reject it Promise reduce import hook expect export filter hook export return filter hook"
+    },
+    {
+      "time": "2026-02-03T21:10:26.621Z",
+      "flightTime": "18000",
+      "eventType": "delete",
+      "deletedChars": 13
+    },
+    {
+      "time": "2026-02-03T21:10:54.621Z",
+      "flightTime": "28000",
+      "eventType": "fileView",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T21:11:20.621Z",
+      "flightTime": "26000",
+      "eventType": "delete",
+      "deletedChars": 20
+    },
+    {
+      "time": "2026-02-03T21:11:43.621Z",
+      "flightTime": "23000",
+      "eventType": "paste",
+      "pastedLength": 174,
+      "pastePreview": "props handler props describe component describe render map reject filter useEffect const ref console.log hook ref useEffect reduce const map handler hook class resolve class await ref Promise map Promise describe import render describe props useEffect if reduce ref console.log expect import await expect describe state await map handler Promise"
+    },
+    {
+      "time": "2026-02-03T21:11:48.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 12,
+      "textFragment": "await reject Promise"
+    },
+    {
+      "time": "2026-02-03T21:12:17.621Z",
+      "flightTime": "29000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "reduce filter async console.log test describe useEffect",
+      "generatedSummary": "props reduce export render reject hook useEffect resolve reject it function component export const console.log function return class export test it if useEffect render return"
+    },
+    {
+      "time": "2026-02-03T21:12:28.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "const useEffect resolve hook Promise"
+    },
+    {
+      "time": "2026-02-03T21:12:43.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "return let state"
+    },
+    {
+      "time": "2026-02-03T21:12:52.621Z",
+      "flightTime": "9000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "console.log handler expect variable await ref import Promise state props export map component console.log",
+      "generatedSummary": "expect resolve function resolve export import const if expect console.log function it filter handler map filter import"
+    },
+    {
+      "time": "2026-02-03T21:13:17.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "reject hook props handler async else resolve handler let"
+    },
+    {
+      "time": "2026-02-03T21:13:41.621Z",
+      "flightTime": "24000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "props await if let state variable state export else render state else",
+      "generatedSummary": "useEffect let reject let map let variable it test reduce if describe Promise console.log filter render variable component return hook return else describe component reduce Promise const Promise reduce"
+    },
+    {
+      "time": "2026-02-03T21:14:03.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "let hook console.log"
+    },
+    {
+      "time": "2026-02-03T21:14:25.621Z",
+      "flightTime": "22000",
+      "eventType": "delete",
+      "deletedChars": 4
+    },
+    {
+      "time": "2026-02-03T21:14:49.621Z",
+      "flightTime": "24000",
+      "eventType": "paste",
+      "pastedLength": 139,
+      "pastePreview": "test expect render props export it await function if await component expect let props Promise Promise expect function map resolve reduce class reduce it filter useEffect component reduce Promise await filter resolve filter const handler handler import await useEffect function console.log it map props import import"
+    },
+    {
+      "time": "2026-02-03T21:15:11.621Z",
+      "flightTime": "22000",
+      "eventType": "paste",
+      "pastedLength": 76,
+      "pastePreview": "useEffect let function test variable if handler handler return class props reduce props handler let variable return class if export state import handler expect class"
+    },
+    {
+      "time": "2026-02-03T21:15:40.621Z",
+      "flightTime": "29000",
+      "eventType": "delete",
+      "deletedChars": 38
+    },
+    {
+      "time": "2026-02-03T21:16:02.621Z",
+      "flightTime": "22000",
+      "eventType": "delete",
+      "deletedChars": 12
+    },
+    {
+      "time": "2026-02-03T21:16:11.621Z",
+      "flightTime": "9000",
+      "eventType": "delete",
+      "deletedChars": 18
+    },
+    {
+      "time": "2026-02-03T21:16:16.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "handler resolve filter reduce reduce Promise component reduce Promise describe"
+    },
+    {
+      "time": "2026-02-03T21:16:33.621Z",
+      "flightTime": "17000",
+      "eventType": "delete",
+      "deletedChars": 20
+    },
+    {
+      "time": "2026-02-03T21:16:43.621Z",
+      "flightTime": "10000",
+      "eventType": "keystroke",
+      "keys": 2,
+      "textFragment": "state hook if"
+    },
+    {
+      "time": "2026-02-03T21:16:52.621Z",
+      "flightTime": "9000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "it it render let"
+    },
+    {
+      "time": "2026-02-03T21:17:09.621Z",
+      "flightTime": "17000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "component else it else"
+    },
+    {
+      "time": "2026-02-03T21:17:21.621Z",
+      "flightTime": "12000",
+      "eventType": "paste",
+      "pastedLength": 154,
+      "pastePreview": "it props props reject export variable reject else console.log ref await handler console.log export Promise render await ref export hook resolve ref hook await let describe state it render props await function map map it expect useEffect import it handler expect return variable else import hook component handler filter component"
+    },
+    {
+      "time": "2026-02-03T21:17:45.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "export variable let state async reduce hook resolve"
+    },
+    {
+      "time": "2026-02-03T21:18:08.621Z",
+      "flightTime": "23000",
+      "eventType": "fileView",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T21:18:22.621Z",
+      "flightTime": "14000",
+      "eventType": "delete",
+      "deletedChars": 26
+    },
+    {
+      "time": "2026-02-03T21:18:35.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "async class function let"
+    },
+    {
+      "time": "2026-02-03T21:18:42.621Z",
+      "flightTime": "7000",
+      "eventType": "save",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T21:18:56.621Z",
+      "flightTime": "14000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "variable if state reduce let test test filter return if describe reduce function useEffect export ref console.log props props",
+      "generatedSummary": "render console.log expect handler async it return props const await resolve component reduce import class else async reject props let component props return it"
+    },
+    {
+      "time": "2026-02-03T21:19:21.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "return component return useEffect test Promise test reject await expect"
+    },
+    {
+      "time": "2026-02-03T21:19:50.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "reduce reject props Promise map"
+    },
+    {
+      "time": "2026-02-03T21:19:55.621Z",
+      "flightTime": "5000",
+      "eventType": "delete",
+      "deletedChars": 12
+    },
+    {
+      "time": "2026-02-03T21:20:25.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "expect variable import class else expect ref ref"
+    },
+    {
+      "time": "2026-02-03T21:20:46.621Z",
+      "flightTime": "21000",
+      "eventType": "save",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T21:21:13.621Z",
+      "flightTime": "27000",
+      "eventType": "paste",
+      "pastedLength": 21,
+      "pastePreview": "test if map filter useEffect async filter"
+    },
+    {
+      "time": "2026-02-03T21:21:21.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "import function state let component Promise render props"
+    },
+    {
+      "time": "2026-02-03T21:21:31.621Z",
+      "flightTime": "10000",
+      "eventType": "fileView",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T21:21:36.621Z",
+      "flightTime": "5000",
+      "eventType": "paste",
+      "pastedLength": 113,
+      "pastePreview": "component if ref reduce class it hook resolve ref handler export ref hook return ref handler state useEffect props component resolve filter reduce component map expect const const useEffect console.log filter map it import console.log return else"
+    },
+    {
+      "time": "2026-02-03T21:21:49.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "filter reject state reject it if else variable"
+    },
+    {
+      "time": "2026-02-03T21:22:14.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "map resolve Promise else variable handler class export else handler"
+    },
+    {
+      "time": "2026-02-03T21:22:38.621Z",
+      "flightTime": "24000",
+      "eventType": "delete",
+      "deletedChars": 13
+    },
+    {
+      "time": "2026-02-03T21:23:07.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "hook reduce reject class props await"
+    },
+    {
+      "time": "2026-02-03T21:23:13.621Z",
+      "flightTime": "6000",
+      "eventType": "fileView",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T21:23:18.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "test render return console.log expect else test props useEffect props"
+    },
+    {
+      "time": "2026-02-03T21:23:42.621Z",
+      "flightTime": "24000",
+      "eventType": "delete",
+      "deletedChars": 18
+    },
+    {
+      "time": "2026-02-03T21:23:53.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "filter ref describe console.log expect"
+    },
+    {
+      "time": "2026-02-03T21:24:08.621Z",
+      "flightTime": "15000",
+      "eventType": "paste",
+      "pastedLength": 101,
+      "pastePreview": "describe class Promise state class import if filter reduce hook console.log else await filter render filter component return Promise let console.log Promise describe resolve function import handler it hook else state handler filter"
+    },
+    {
+      "time": "2026-02-03T21:24:28.621Z",
+      "flightTime": "20000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "function useEffect class await let props class"
+    },
+    {
+      "time": "2026-02-03T21:24:53.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "test test export function"
+    },
+    {
+      "time": "2026-02-03T21:25:17.621Z",
+      "flightTime": "24000",
+      "eventType": "delete",
+      "deletedChars": 20
+    },
+    {
+      "time": "2026-02-03T21:25:46.621Z",
+      "flightTime": "29000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "render else props hook import export it describe resolve",
+      "generatedSummary": "component await reduce console.log export test await render expect filter component reject export async handler ref filter props if resolve props async hook const if Promise return expect import reject filter if resolve function export if ref"
+    },
+    {
+      "time": "2026-02-03T21:26:16.621Z",
+      "flightTime": "30000",
+      "eventType": "fileView",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T21:26:40.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "if export export filter it const filter const"
+    },
+    {
+      "time": "2026-02-03T21:27:01.621Z",
+      "flightTime": "21000",
+      "eventType": "paste",
+      "pastedLength": 122,
+      "pastePreview": "props resolve console.log Promise async it const useEffect reject const describe if export map Promise variable const function class reduce reduce ref useEffect state ref map resolve await describe reject function render return Promise render export import variable reject hook"
+    },
+    {
+      "time": "2026-02-03T21:27:09.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "hook async state else it expect"
+    },
+    {
+      "time": "2026-02-03T21:27:24.621Z",
+      "flightTime": "15000",
+      "eventType": "paste",
+      "pastedLength": 187,
+      "pastePreview": "reduce import console.log variable async it map else const props export render export ref return import Promise class reduce component reject await console.log let map test state filter ref resolve console.log render hook if hook let import function import hook reject component reject map ref test hook map component filter"
+    },
+    {
+      "time": "2026-02-03T21:27:45.621Z",
+      "flightTime": "21000",
+      "eventType": "keystroke",
+      "keys": 14,
+      "textFragment": "props Promise resolve resolve"
+    },
+    {
+      "time": "2026-02-03T21:28:03.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "console.log export export variable handler reject variable if await"
+    },
+    {
+      "time": "2026-02-03T21:28:14.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "reject state await useEffect expect"
+    },
+    {
+      "time": "2026-02-03T21:28:36.621Z",
+      "flightTime": "22000",
+      "eventType": "paste",
+      "pastedLength": 70,
+      "pastePreview": "ref export return let const ref else reject return variable import reject else describe async hook else it map export async await function"
+    },
+    {
+      "time": "2026-02-03T21:28:59.621Z",
+      "flightTime": "23000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "if const filter const const export describe ref return"
+    },
+    {
+      "time": "2026-02-03T21:29:13.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "render reduce if reject"
+    },
+    {
+      "time": "2026-02-03T21:29:27.621Z",
+      "flightTime": "14000",
+      "eventType": "paste",
+      "pastedLength": 31,
+      "pastePreview": "resolve const await state useEffect describe if useEffect import expect"
+    },
+    {
+      "time": "2026-02-03T21:29:49.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 2,
+      "textFragment": "const resolve render else test const filter let console.log useEffect"
+    },
+    {
+      "time": "2026-02-03T21:30:10.621Z",
+      "flightTime": "21000",
+      "eventType": "paste",
+      "pastedLength": 40,
+      "pastePreview": "resolve if describe handler import state Promise useEffect expect handler function await ref"
+    },
+    {
+      "time": "2026-02-03T21:30:25.621Z",
+      "flightTime": "15000",
+      "eventType": "paste",
+      "pastedLength": 53,
+      "pastePreview": "map state resolve describe class async console.log map async handler else reduce handler hook reject function resolve"
+    },
+    {
+      "time": "2026-02-03T21:30:44.621Z",
+      "flightTime": "19000",
+      "eventType": "keystroke",
+      "keys": 12,
+      "textFragment": "render await useEffect import variable if"
+    },
+    {
+      "time": "2026-02-03T21:31:06.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "render import let"
+    },
+    {
+      "time": "2026-02-03T21:31:21.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "ref props resolve describe"
+    },
+    {
+      "time": "2026-02-03T21:31:43.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "class resolve reject expect const"
+    },
+    {
+      "time": "2026-02-03T21:32:07.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "resolve expect render Promise"
+    },
+    {
+      "time": "2026-02-03T21:32:15.621Z",
+      "flightTime": "8000",
+      "eventType": "delete",
+      "deletedChars": 19
+    },
+    {
+      "time": "2026-02-03T21:32:43.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "ref return filter useEffect"
+    },
+    {
+      "time": "2026-02-03T21:32:58.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 14,
+      "textFragment": "describe it describe filter filter await const await"
+    },
+    {
+      "time": "2026-02-03T21:33:24.621Z",
+      "flightTime": "26000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "if await state"
+    },
+    {
+      "time": "2026-02-03T21:33:51.621Z",
+      "flightTime": "27000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "await resolve console.log variable let return useEffect ref handler console.log"
+    },
+    {
+      "time": "2026-02-03T21:34:05.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "function let Promise render test import component hook"
+    },
+    {
+      "time": "2026-02-03T21:34:27.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "import component it"
+    },
+    {
+      "time": "2026-02-03T21:34:40.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "else Promise describe props hook"
+    },
+    {
+      "time": "2026-02-03T21:34:48.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "const class function"
+    },
+    {
+      "time": "2026-02-03T21:35:00.621Z",
+      "flightTime": "12000",
+      "eventType": "fileView",
+      "file": "/workspace/src/utils.ts"
+    },
+    {
+      "time": "2026-02-03T21:35:13.621Z",
+      "flightTime": "13000",
+      "eventType": "paste",
+      "pastedLength": 108,
+      "pastePreview": "export render let component export await else return const function else variable reject ref await return state resolve component function export filter map props reduce const let export return variable let if console.log async reduce ref"
+    },
+    {
+      "time": "2026-02-03T21:35:33.621Z",
+      "flightTime": "20000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "const const reduce handler reject hook async it const variable class render let component",
+      "generatedSummary": "if ref else variable variable else expect if describe reject state render import reject expect const handler state export describe if if handler map let component filter"
+    },
+    {
+      "time": "2026-02-03T21:36:00.621Z",
+      "flightTime": "27000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "reduce function import async export await Promise ref component"
+    },
+    {
+      "time": "2026-02-03T21:36:15.621Z",
+      "flightTime": "15000",
+      "eventType": "delete",
+      "deletedChars": 40
+    },
+    {
+      "time": "2026-02-03T21:36:42.621Z",
+      "flightTime": "27000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "map useEffect let await"
+    },
+    {
+      "time": "2026-02-03T21:36:47.621Z",
+      "flightTime": "5000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "if reduce describe filter reduce export console.log ref it class async describe variable export render it render console.log",
+      "generatedSummary": "await handler map return describe expect useEffect return useEffect export console.log"
+    },
+    {
+      "time": "2026-02-03T21:37:01.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "reject await await"
+    },
+    {
+      "time": "2026-02-03T21:37:31.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 12,
+      "textFragment": "describe render it map"
+    },
+    {
+      "time": "2026-02-03T21:37:49.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "it return render"
+    },
+    {
+      "time": "2026-02-03T21:38:08.621Z",
+      "flightTime": "19000",
+      "eventType": "paste",
+      "pastedLength": 145,
+      "pastePreview": "render return return props render render hook Promise const Promise expect export it state handler import function variable it useEffect console.log render useEffect state component import props props class props filter filter import return variable component useEffect hook await if props const render ref export function resolve await"
+    },
+    {
+      "time": "2026-02-03T21:38:18.621Z",
+      "flightTime": "10000",
+      "eventType": "paste",
+      "pastedLength": 37,
+      "pastePreview": "hook import filter describe reduce expect test test filter import handler useEffect"
+    },
+    {
+      "time": "2026-02-03T21:38:24.621Z",
+      "flightTime": "6000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "return import variable it render let map if"
+    },
+    {
+      "time": "2026-02-03T21:38:32.621Z",
+      "flightTime": "8000",
+      "eventType": "paste",
+      "pastedLength": 146,
+      "pastePreview": "function async expect Promise useEffect reduce map Promise test async describe hook export export reduce reject reduce useEffect import variable console.log it const state let let const reduce function return else useEffect import await filter export await import return state class useEffect const Promise if const import expect"
+    },
+    {
+      "time": "2026-02-03T21:38:54.621Z",
+      "flightTime": "22000",
+      "eventType": "delete",
+      "deletedChars": 11
+    },
+    {
+      "time": "2026-02-03T21:39:08.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "if test render if state return"
+    },
+    {
+      "time": "2026-02-03T21:39:25.621Z",
+      "flightTime": "17000",
+      "eventType": "save",
+      "file": "/workspace/src/utils.ts"
+    },
+    {
+      "time": "2026-02-03T21:39:42.621Z",
+      "flightTime": "17000",
+      "eventType": "paste",
+      "pastedLength": 12,
+      "pastePreview": "Promise reject variable useEffect"
+    },
+    {
+      "time": "2026-02-03T21:40:00.621Z",
+      "flightTime": "18000",
+      "eventType": "fileView",
+      "file": "/workspace/src/utils.ts"
+    },
+    {
+      "time": "2026-02-03T21:40:10.621Z",
+      "flightTime": "10000",
+      "eventType": "delete",
+      "deletedChars": 27
+    },
+    {
+      "time": "2026-02-03T21:40:32.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "function map handler handler function await"
+    },
+    {
+      "time": "2026-02-03T21:41:01.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 3,
+      "textFragment": "let function Promise describe expect test async describe it"
+    },
+    {
+      "time": "2026-02-03T21:41:10.621Z",
+      "flightTime": "9000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "reduce resolve return handler reduce import await"
+    },
+    {
+      "time": "2026-02-03T21:41:39.621Z",
+      "flightTime": "29000",
+      "eventType": "paste",
+      "pastedLength": 175,
+      "pastePreview": "console.log state test map it props export filter const await props map props return variable async ref return reduce class class import Promise resolve render map filter export it class ref if class else ref await handler const state if reduce Promise it const props describe await function useEffect const"
+    },
+    {
+      "time": "2026-02-03T21:42:03.621Z",
+      "flightTime": "24000",
+      "eventType": "paste",
+      "pastedLength": 47,
+      "pastePreview": "render state import describe filter resolve filter test reduce ref expect state test expect class"
+    },
+    {
+      "time": "2026-02-03T21:42:22.621Z",
+      "flightTime": "19000",
+      "eventType": "delete",
+      "deletedChars": 36
+    },
+    {
+      "time": "2026-02-03T21:42:45.621Z",
+      "flightTime": "23000",
+      "eventType": "paste",
+      "pastedLength": 137,
+      "pastePreview": "import resolve import const it class props variable map variable else resolve Promise test class if expect const handler filter async reduce ref state variable import return expect handler resolve map let filter ref render component class else expect console.log return async filter render render"
+    },
+    {
+      "time": "2026-02-03T21:42:50.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "async reduce console.log component class component map"
+    },
+    {
+      "time": "2026-02-03T21:43:14.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "component export useEffect handler function class"
+    },
+    {
+      "time": "2026-02-03T21:43:26.621Z",
+      "flightTime": "12000",
+      "eventType": "delete",
+      "deletedChars": 27
+    },
+    {
+      "time": "2026-02-03T21:43:42.621Z",
+      "flightTime": "16000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "test hook it else component let export hook expect export",
+      "generatedSummary": "class render ref const reject await render it describe hook async if expect map import useEffect let test function state test async const await variable useEffect reduce export"
+    },
+    {
+      "time": "2026-02-03T21:44:02.621Z",
+      "flightTime": "20000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "Promise handler const"
+    },
+    {
+      "time": "2026-02-03T21:44:27.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "it component render class test Promise test let reduce"
+    },
+    {
+      "time": "2026-02-03T21:44:40.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "test map hook reduce ref"
+    },
+    {
+      "time": "2026-02-03T21:45:08.621Z",
+      "flightTime": "28000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "reject if expect reduce props handler useEffect expect",
+      "generatedSummary": "function reduce it Promise render test const ref map describe let render if"
+    },
+    {
+      "time": "2026-02-03T21:45:30.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 10,
+      "textFragment": "variable async state export if"
+    },
+    {
+      "time": "2026-02-03T21:45:58.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "hook let expect const"
+    },
+    {
+      "time": "2026-02-03T21:46:27.621Z",
+      "flightTime": "29000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "const if reject return handler reject component let import reduce else test Promise import render handler const function test",
+      "generatedSummary": "it render let component let export describe describe reject variable const resolve component Promise map reject function let class ref import else"
+    },
+    {
+      "time": "2026-02-03T21:46:57.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 14,
+      "textFragment": "const if handler class let"
+    },
+    {
+      "time": "2026-02-03T21:47:13.621Z",
+      "flightTime": "16000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "else filter ref reduce reject map if console.log test"
+    },
+    {
+      "time": "2026-02-03T21:47:33.621Z",
+      "flightTime": "20000",
+      "eventType": "paste",
+      "pastedLength": 163,
+      "pastePreview": "useEffect reject test state state await let import ref map expect variable state test state component if render ref component resolve reject class function resolve let render function filter filter ref else async function console.log component reduce component reduce component props async export reject class ref variable props async filter"
+    },
+    {
+      "time": "2026-02-03T21:47:44.621Z",
+      "flightTime": "11000",
+      "eventType": "delete",
+      "deletedChars": 30
+    },
+    {
+      "time": "2026-02-03T21:48:07.621Z",
+      "flightTime": "23000",
+      "eventType": "fileView",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T21:48:20.621Z",
+      "flightTime": "13000",
+      "eventType": "paste",
+      "pastedLength": 150,
+      "pastePreview": "console.log handler let function it props return reduce describe filter expect else props console.log let useEffect Promise reduce expect map let import class let const describe test render props async import test return await await useEffect render render console.log hook useEffect describe filter Promise async Promise class function if test"
+    },
+    {
+      "time": "2026-02-03T21:48:48.621Z",
+      "flightTime": "28000",
+      "eventType": "paste",
+      "pastedLength": 76,
+      "pastePreview": "handler filter let import useEffect else import import hook test resolve describe resolve hook expect reduce map component function state describe export reduce hook let"
+    },
+    {
+      "time": "2026-02-03T21:49:14.621Z",
+      "flightTime": "26000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "test class console.log filter console.log await return expect filter variable"
+    },
+    {
+      "time": "2026-02-03T21:49:34.621Z",
+      "flightTime": "20000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "reject map describe resolve Promise console.log resolve"
+    },
+    {
+      "time": "2026-02-03T21:50:00.621Z",
+      "flightTime": "26000",
+      "eventType": "paste",
+      "pastedLength": 23,
+      "pastePreview": "let return import ref map import filter"
+    },
+    {
+      "time": "2026-02-03T21:50:24.621Z",
+      "flightTime": "24000",
+      "eventType": "paste",
+      "pastedLength": 26,
+      "pastePreview": "props else ref return state import else state"
+    },
+    {
+      "time": "2026-02-03T21:50:33.621Z",
+      "flightTime": "9000",
+      "eventType": "delete",
+      "deletedChars": 7
+    },
+    {
+      "time": "2026-02-03T21:50:40.621Z",
+      "flightTime": "7000",
+      "eventType": "delete",
+      "deletedChars": 26
+    },
+    {
+      "time": "2026-02-03T21:50:45.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "if async return hook"
+    },
+    {
+      "time": "2026-02-03T21:50:53.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "async handler import await resolve else"
+    },
+    {
+      "time": "2026-02-03T21:51:03.621Z",
+      "flightTime": "10000",
+      "eventType": "paste",
+      "pastedLength": 69,
+      "pastePreview": "filter if component class if await import filter ref map async filter variable import describe component handler console.log map it if props useEffect"
+    },
+    {
+      "time": "2026-02-03T21:51:24.621Z",
+      "flightTime": "21000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "render let variable map ref resolve let"
+    },
+    {
+      "time": "2026-02-03T21:51:49.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "return variable map"
+    },
+    {
+      "time": "2026-02-03T21:52:09.621Z",
+      "flightTime": "20000",
+      "eventType": "paste",
+      "pastedLength": 167,
+      "pastePreview": "import reject state filter test const it const if test async component class hook function return render state describe return if let variable reject Promise async function variable class component ref filter props props it reduce function class test component render expect props export hook resolve variable describe let handler"
+    },
+    {
+      "time": "2026-02-03T21:52:31.621Z",
+      "flightTime": "22000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "useEffect if map hook if render if it let else async else",
+      "generatedSummary": "resolve it import ref props render let resolve handler if props resolve"
+    },
+    {
+      "time": "2026-02-03T21:52:57.621Z",
+      "flightTime": "26000",
+      "eventType": "keystroke",
+      "keys": 12,
+      "textFragment": "Promise const let variable test map"
+    },
+    {
+      "time": "2026-02-03T21:53:17.621Z",
+      "flightTime": "20000",
+      "eventType": "paste",
+      "pastedLength": 14,
+      "pastePreview": "if resolve describe else"
+    },
+    {
+      "time": "2026-02-03T21:53:31.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "variable map resolve"
+    },
+    {
+      "time": "2026-02-03T21:53:42.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "else let return if"
+    },
+    {
+      "time": "2026-02-03T21:54:05.621Z",
+      "flightTime": "23000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "let map describe"
+    },
+    {
+      "time": "2026-02-03T21:54:10.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 3,
+      "textFragment": "export Promise await test if test"
+    },
+    {
+      "time": "2026-02-03T21:54:37.621Z",
+      "flightTime": "27000",
+      "eventType": "paste",
+      "pastedLength": 37,
+      "pastePreview": "reduce export describe else async test it function handler console.log render it"
+    },
+    {
+      "time": "2026-02-03T21:54:55.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "component Promise console.log ref console.log test map render ref console.log"
+    },
+    {
+      "time": "2026-02-03T21:55:00.621Z",
+      "flightTime": "5000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "const reduce else test handler Promise"
+    },
+    {
+      "time": "2026-02-03T21:55:20.621Z",
+      "flightTime": "20000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "handler props class state import"
+    },
+    {
+      "time": "2026-02-03T21:55:46.621Z",
+      "flightTime": "26000",
+      "eventType": "fileView",
+      "file": "/workspace/src/utils.ts"
+    },
+    {
+      "time": "2026-02-03T21:55:57.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "reject test component await"
+    },
+    {
+      "time": "2026-02-03T21:56:20.621Z",
+      "flightTime": "23000",
+      "eventType": "delete",
+      "deletedChars": 19
+    },
+    {
+      "time": "2026-02-03T21:56:48.621Z",
+      "flightTime": "28000",
+      "eventType": "fileView",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T21:57:07.621Z",
+      "flightTime": "19000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "map expect filter"
+    },
+    {
+      "time": "2026-02-03T21:57:17.621Z",
+      "flightTime": "10000",
+      "eventType": "fileView",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T21:57:47.621Z",
+      "flightTime": "30000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "reduce it handler map describe import async const props const hook map",
+      "generatedSummary": "reduce describe test it class function hook props handler async export async ref await if class return import filter props Promise expect else import map describe reduce describe state ref async"
+    },
+    {
+      "time": "2026-02-03T21:58:04.621Z",
+      "flightTime": "17000",
+      "eventType": "keystroke",
+      "keys": 2,
+      "textFragment": "Promise map const"
+    },
+    {
+      "time": "2026-02-03T21:58:21.621Z",
+      "flightTime": "17000",
+      "eventType": "save",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T21:58:39.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "render reject if export handler async hook resolve hook"
+    },
+    {
+      "time": "2026-02-03T21:58:55.621Z",
+      "flightTime": "16000",
+      "eventType": "delete",
+      "deletedChars": 40
+    },
+    {
+      "time": "2026-02-03T21:59:12.621Z",
+      "flightTime": "17000",
+      "eventType": "delete",
+      "deletedChars": 24
+    },
+    {
+      "time": "2026-02-03T21:59:18.621Z",
+      "flightTime": "6000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "ref handler else ref function it render let if map"
+    },
+    {
+      "time": "2026-02-03T21:59:23.621Z",
+      "flightTime": "5000",
+      "eventType": "fileView",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T21:59:38.621Z",
+      "flightTime": "15000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "handler import ref ref const export resolve expect filter"
+    },
+    {
+      "time": "2026-02-03T21:59:57.621Z",
+      "flightTime": "19000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "export class resolve let resolve component return console.log reduce resolve handler ref handler test hook await const else function",
+      "generatedSummary": "hook return variable reject import reduce export it reduce describe"
+    },
+    {
+      "time": "2026-02-03T22:00:19.621Z",
+      "flightTime": "22000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "function else state handler export function reject resolve expect let"
+    },
+    {
+      "time": "2026-02-03T22:00:33.621Z",
+      "flightTime": "14000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "variable filter export if reject else export expect component ref handler test component variable else useEffect",
+      "generatedSummary": "resolve import return reject filter export export filter resolve import props const filter return it variable else await useEffect filter describe class return import variable useEffect it function if"
+    },
+    {
+      "time": "2026-02-03T22:00:46.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "variable map export"
+    },
+    {
+      "time": "2026-02-03T22:01:14.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "await let import state"
+    },
+    {
+      "time": "2026-02-03T22:01:28.621Z",
+      "flightTime": "14000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "await else variable component expect component await function console.log render filter return class class export it describe else",
+      "generatedSummary": "return await if async component describe test expect filter component it await it const it map it export hook render resolve let reject await import await handler filter useEffect import filter console.log let expect function else let props"
+    },
+    {
+      "time": "2026-02-03T22:01:42.621Z",
+      "flightTime": "14000",
+      "eventType": "save",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T22:01:57.621Z",
+      "flightTime": "15000",
+      "eventType": "delete",
+      "deletedChars": 38
+    },
+    {
+      "time": "2026-02-03T22:02:19.621Z",
+      "flightTime": "22000",
+      "eventType": "paste",
+      "pastedLength": 23,
+      "pastePreview": "props class variable let props component describe"
+    },
+    {
+      "time": "2026-02-03T22:02:26.621Z",
+      "flightTime": "7000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "render function await describe function filter expect const resolve ref resolve",
+      "generatedSummary": "reject return if import state state props import variable it Promise class ref else handler describe useEffect reduce useEffect variable variable handler reject state hook export else await return import filter"
+    },
+    {
+      "time": "2026-02-03T22:02:44.621Z",
+      "flightTime": "18000",
+      "eventType": "paste",
+      "pastedLength": 165,
+      "pastePreview": "console.log handler hook return console.log map state resolve function component async Promise import else console.log filter function class let describe import hook Promise filter let class else if class render expect filter render describe function if reject Promise variable component return filter let ref filter reject reject render if export"
+    },
+    {
+      "time": "2026-02-03T22:03:10.621Z",
+      "flightTime": "26000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "function import const let props filter const"
+    },
+    {
+      "time": "2026-02-03T22:03:21.621Z",
+      "flightTime": "11000",
+      "eventType": "paste",
+      "pastedLength": 95,
+      "pastePreview": "const map if useEffect handler component import reduce await ref props await if else map describe map expect else props function import state Promise class await await state await it render"
+    },
+    {
+      "time": "2026-02-03T22:03:30.621Z",
+      "flightTime": "9000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "reject resolve class props resolve await if return handler variable"
+    },
+    {
+      "time": "2026-02-03T22:03:48.621Z",
+      "flightTime": "18000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "it resolve const render else describe reduce variable await expect resolve let function state Promise let",
+      "generatedSummary": "map console.log it resolve import describe async else map ref hook await component if resolve hook component return expect state const const ref"
+    },
+    {
+      "time": "2026-02-03T22:04:00.621Z",
+      "flightTime": "12000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "else const state render"
+    },
+    {
+      "time": "2026-02-03T22:04:29.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "async map expect export else useEffect await it if"
+    },
+    {
+      "time": "2026-02-03T22:04:52.621Z",
+      "flightTime": "23000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "await class reject export it handler handler ref hook export function import import state hook",
+      "generatedSummary": "else handler const describe map console.log it const console.log useEffect import variable map console.log async state component component function describe else it"
+    },
+    {
+      "time": "2026-02-03T22:05:20.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "console.log useEffect handler"
+    },
+    {
+      "time": "2026-02-03T22:05:40.621Z",
+      "flightTime": "20000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "const resolve reduce import component async const hook map useEffect"
+    },
+    {
+      "time": "2026-02-03T22:06:04.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "variable variable variable if component reject useEffect reject return function"
+    },
+    {
+      "time": "2026-02-03T22:06:13.621Z",
+      "flightTime": "9000",
+      "eventType": "fileView",
+      "file": "/workspace/src/app.ts"
+    },
+    {
+      "time": "2026-02-03T22:06:40.621Z",
+      "flightTime": "27000",
+      "eventType": "paste",
+      "pastedLength": 172,
+      "pastePreview": "expect console.log async else describe class import render else resolve resolve Promise console.log props Promise useEffect Promise resolve reduce else map console.log else render it map let describe variable state state test function let test resolve Promise reject class ref const props class state Promise let it test else reduce"
+    },
+    {
+      "time": "2026-02-03T22:06:49.621Z",
+      "flightTime": "9000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "await if let async test ref import props resolve Promise",
+      "generatedSummary": "await test useEffect variable expect ref if async test render props return"
+    },
+    {
+      "time": "2026-02-03T22:07:07.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "filter expect if variable return reduce props"
+    },
+    {
+      "time": "2026-02-03T22:07:27.621Z",
+      "flightTime": "20000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "map it class describe it state resolve ref const handler",
+      "generatedSummary": "handler reject function Promise async test test describe async return render export variable filter hook if console.log await"
+    },
+    {
+      "time": "2026-02-03T22:07:46.621Z",
+      "flightTime": "19000",
+      "eventType": "save",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T22:08:15.621Z",
+      "flightTime": "29000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "reject map map state component if if return hook resolve return let async render hook",
+      "generatedSummary": "export function test import Promise expect render useEffect props useEffect component if filter state else props render import function component await it export reduce async state hook function useEffect useEffect let variable if console.log import class"
+    },
+    {
+      "time": "2026-02-03T22:08:27.621Z",
+      "flightTime": "12000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "export map filter test expect variable variable const resolve Promise await Promise useEffect it function return map state reduce Promise",
+      "generatedSummary": "handler import else describe props props Promise describe export import await let filter hook if resolve class handler handler test variable reject state async props handler component reject"
+    },
+    {
+      "time": "2026-02-03T22:08:33.621Z",
+      "flightTime": "6000",
+      "eventType": "keystroke",
+      "keys": 12,
+      "textFragment": "Promise Promise export"
+    },
+    {
+      "time": "2026-02-03T22:08:53.621Z",
+      "flightTime": "20000",
+      "eventType": "keystroke",
+      "keys": 11,
+      "textFragment": "class render handler else props await if state await"
+    },
+    {
+      "time": "2026-02-03T22:09:17.621Z",
+      "flightTime": "24000",
+      "eventType": "fileView",
+      "file": "/workspace/src/app.ts"
+    },
+    {
+      "time": "2026-02-03T22:09:38.621Z",
+      "flightTime": "21000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "class console.log handler console.log test await reduce export class props resolve map hook console.log",
+      "generatedSummary": "filter await function ref let render resolve map state reject Promise ref expect props variable it hook console.log function component reject handler else it expect state return describe state handler Promise reduce import import filter let console.log props"
+    },
+    {
+      "time": "2026-02-03T22:10:02.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "it ref const state"
+    },
+    {
+      "time": "2026-02-03T22:10:20.621Z",
+      "flightTime": "18000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "reduce hook useEffect Promise expect filter handler variable resolve ref console.log function await expect let",
+      "generatedSummary": "variable test console.log variable Promise await else variable reject handler describe async handler test variable variable let return Promise describe resolve component ref state return"
+    },
+    {
+      "time": "2026-02-03T22:10:32.621Z",
+      "flightTime": "12000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "describe Promise if props"
+    },
+    {
+      "time": "2026-02-03T22:10:51.621Z",
+      "flightTime": "19000",
+      "eventType": "paste",
+      "pastedLength": 42,
+      "pastePreview": "reject state if await ref variable export map else else render ref useEffect Promise"
+    },
+    {
+      "time": "2026-02-03T22:11:01.621Z",
+      "flightTime": "10000",
+      "eventType": "fileView",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T22:11:29.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 4,
+      "textFragment": "function props render console.log"
+    },
+    {
+      "time": "2026-02-03T22:11:43.621Z",
+      "flightTime": "14000",
+      "eventType": "save",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T22:11:54.621Z",
+      "flightTime": "11000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "map expect class if async test const let component describe import async return const else export ref describe",
+      "generatedSummary": "state let expect import props class component expect import variable Promise return resolve hook reduce class let async if await render handler props test expect"
+    },
+    {
+      "time": "2026-02-03T22:12:18.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 12,
+      "textFragment": "expect hook reduce await hook render useEffect else map"
+    },
+    {
+      "time": "2026-02-03T22:12:23.621Z",
+      "flightTime": "5000",
+      "eventType": "save",
+      "file": "/workspace/src/index.tsx"
+    },
+    {
+      "time": "2026-02-03T22:12:40.621Z",
+      "flightTime": "17000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "useEffect describe filter component ref",
+      "generatedSummary": "state handler const async function async describe Promise render expect Promise map return component it if map handler async console.log Promise handler"
+    },
+    {
+      "time": "2026-02-03T22:12:58.621Z",
+      "flightTime": "18000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "test expect Promise"
+    },
+    {
+      "time": "2026-02-03T22:13:23.621Z",
+      "flightTime": "25000",
+      "eventType": "delete",
+      "deletedChars": 25
+    },
+    {
+      "time": "2026-02-03T22:13:37.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "class handler variable return useEffect"
+    },
+    {
+      "time": "2026-02-03T22:13:56.621Z",
+      "flightTime": "19000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "expect return import handler console.log reduce hook describe resolve import"
+    },
+    {
+      "time": "2026-02-03T22:14:24.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 15,
+      "textFragment": "render if reject"
+    },
+    {
+      "time": "2026-02-03T22:14:32.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "useEffect console.log reduce it console.log state map map props"
+    },
+    {
+      "time": "2026-02-03T22:14:40.621Z",
+      "flightTime": "8000",
+      "eventType": "paste",
+      "pastedLength": 90,
+      "pastePreview": "console.log component resolve describe expect resolve else Promise reduce Promise const Promise export return await useEffect resolve import map render test test state filter function hook async class it describe"
+    },
+    {
+      "time": "2026-02-03T22:15:09.621Z",
+      "flightTime": "29000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "import render filter export map else Promise filter describe let class return function if export class test reduce",
+      "generatedSummary": "state component props hook filter let else const reject useEffect render function resolve describe test return it describe const else props describe expect return ref import map state Promise reject test console.log"
+    },
+    {
+      "time": "2026-02-03T22:15:30.621Z",
+      "flightTime": "21000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "filter reject useEffect import let await expect return state test else hook useEffect let expect console.log it",
+      "generatedSummary": "if describe const component reduce render state function it expect else state console.log function else await export handler if let useEffect hook useEffect expect import"
+    },
+    {
+      "time": "2026-02-03T22:15:37.621Z",
+      "flightTime": "7000",
+      "eventType": "keystroke",
+      "keys": 19,
+      "textFragment": "map function describe Promise"
+    },
+    {
+      "time": "2026-02-03T22:15:45.621Z",
+      "flightTime": "8000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "Promise else handler"
+    },
+    {
+      "time": "2026-02-03T22:16:09.621Z",
+      "flightTime": "24000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "test async filter useEffect const variable",
+      "generatedSummary": "test hook useEffect expect Promise map async await return export describe"
+    },
+    {
+      "time": "2026-02-03T22:16:18.621Z",
+      "flightTime": "9000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "else else handler hook map useEffect export if map",
+      "generatedSummary": "Promise export useEffect describe let ref console.log handler export handler class async filter component expect"
+    },
+    {
+      "time": "2026-02-03T22:16:43.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 17,
+      "textFragment": "if const console.log expect filter filter component export reduce"
+    },
+    {
+      "time": "2026-02-03T22:17:12.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "export await Promise variable class reject props"
+    },
+    {
+      "time": "2026-02-03T22:17:31.621Z",
+      "flightTime": "19000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "if handler render"
+    },
+    {
+      "time": "2026-02-03T22:17:45.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "resolve expect variable return props console.log reject render else console.log"
+    },
+    {
+      "time": "2026-02-03T22:17:59.621Z",
+      "flightTime": "14000",
+      "eventType": "keystroke",
+      "keys": 12,
+      "textFragment": "it let state"
+    },
+    {
+      "time": "2026-02-03T22:18:06.621Z",
+      "flightTime": "7000",
+      "eventType": "keystroke",
+      "keys": 14,
+      "textFragment": "if console.log async await props filter"
+    },
+    {
+      "time": "2026-02-03T22:18:21.621Z",
+      "flightTime": "15000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "it hook return return map import return import return if reject Promise handler component test await it reject component class",
+      "generatedSummary": "map console.log handler map resolve return map return export class export variable filter const"
+    },
+    {
+      "time": "2026-02-03T22:18:37.621Z",
+      "flightTime": "16000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "const useEffect return export test describe if component reduce it"
+    },
+    {
+      "time": "2026-02-03T22:18:50.621Z",
+      "flightTime": "13000",
+      "eventType": "ai-assist",
+      "aiProvider": "chatgpt",
+      "prompt": "if ref console.log state state expect reduce render",
+      "generatedSummary": "props reject variable console.log filter it resolve hook test variable class props props async let import Promise props reject map Promise test const expect await if export variable it export handler const reject resolve render state import props else else"
+    },
+    {
+      "time": "2026-02-03T22:19:01.621Z",
+      "flightTime": "11000",
+      "eventType": "paste",
+      "pastedLength": 36,
+      "pastePreview": "if ref return resolve import useEffect props props const await reduce await"
+    },
+    {
+      "time": "2026-02-03T22:19:23.621Z",
+      "flightTime": "22000",
+      "eventType": "fileView",
+      "file": "/workspace/src/utils.ts"
+    },
+    {
+      "time": "2026-02-03T22:19:34.621Z",
+      "flightTime": "11000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "if useEffect resolve async describe class component return function"
+    },
+    {
+      "time": "2026-02-03T22:19:50.621Z",
+      "flightTime": "16000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "props export reduce const expect map class await"
+    },
+    {
+      "time": "2026-02-03T22:20:14.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 9,
+      "textFragment": "reject props reduce useEffect filter let map test render props"
+    },
+    {
+      "time": "2026-02-03T22:20:43.621Z",
+      "flightTime": "29000",
+      "eventType": "keystroke",
+      "keys": 2,
+      "textFragment": "state expect const useEffect"
+    },
+    {
+      "time": "2026-02-03T22:21:08.621Z",
+      "flightTime": "25000",
+      "eventType": "keystroke",
+      "keys": 2,
+      "textFragment": "filter reject handler render"
+    },
+    {
+      "time": "2026-02-03T22:21:26.621Z",
+      "flightTime": "18000",
+      "eventType": "paste",
+      "pastedLength": 22,
+      "pastePreview": "else render let reject return ref component"
+    },
+    {
+      "time": "2026-02-03T22:21:37.621Z",
+      "flightTime": "11000",
+      "eventType": "ai-assist",
+      "aiProvider": "copilot",
+      "prompt": "reject handler reject let let",
+      "generatedSummary": "variable handler Promise filter console.log await filter await describe else"
+    },
+    {
+      "time": "2026-02-03T22:21:58.621Z",
+      "flightTime": "21000",
+      "eventType": "keystroke",
+      "keys": 6,
+      "textFragment": "state let ref resolve handler reduce if"
+    },
+    {
+      "time": "2026-02-03T22:22:28.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 7,
+      "textFragment": "expect handler state reject hook component"
+    },
+    {
+      "time": "2026-02-03T22:22:53.621Z",
+      "flightTime": "25000",
+      "eventType": "fileView",
+      "file": "/workspace/src/component.jsx"
+    },
+    {
+      "time": "2026-02-03T22:23:10.621Z",
+      "flightTime": "17000",
+      "eventType": "fileView",
+      "file": "/workspace/src/app.ts"
+    },
+    {
+      "time": "2026-02-03T22:23:40.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "variable reduce import render if export if map async"
+    },
+    {
+      "time": "2026-02-03T22:24:10.621Z",
+      "flightTime": "30000",
+      "eventType": "keystroke",
+      "keys": 20,
+      "textFragment": "component expect handler map describe if filter console.log export describe"
+    },
+    {
+      "time": "2026-02-03T22:24:34.621Z",
+      "flightTime": "24000",
+      "eventType": "keystroke",
+      "keys": 16,
+      "textFragment": "component expect expect map async await it test function"
+    },
+    {
+      "time": "2026-02-03T22:25:02.621Z",
+      "flightTime": "28000",
+      "eventType": "keystroke",
+      "keys": 5,
+      "textFragment": "async props class export render"
+    },
+    {
+      "time": "2026-02-03T22:25:08.621Z",
+      "flightTime": "6000",
+      "eventType": "paste",
+      "pastedLength": 118,
+      "pastePreview": "return filter describe let reduce console.log Promise component import resolve filter console.log import state class test export hook filter hook function async else console.log test const reject export Promise return else handler const test reject it class hook console.log"
+    },
+    {
+      "time": "2026-02-03T22:25:25.621Z",
+      "flightTime": "17000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "hook const state handler it state resolve handler else"
+    },
+    {
+      "time": "2026-02-03T22:25:42.621Z",
+      "flightTime": "17000",
+      "eventType": "paste",
+      "pastedLength": 62,
+      "pastePreview": "it let render else console.log props reduce ref filter if variable it class describe expect filter resolve ref await Promise"
+    },
+    {
+      "time": "2026-02-03T22:26:08.621Z",
+      "flightTime": "26000",
+      "eventType": "keystroke",
+      "keys": 8,
+      "textFragment": "props if it else import resolve ref const reduce if"
+    },
+    {
+      "time": "2026-02-03T22:26:21.621Z",
+      "flightTime": "13000",
+      "eventType": "keystroke",
+      "keys": 12,
+      "textFragment": "state await console.log expect useEffect ref"
+    },
+    {
+      "time": "2026-02-03T22:26:44.621Z",
+      "flightTime": "23000",
+      "eventType": "fileView",
+      "file": "/workspace/src/app.ts"
+    },
+    {
+      "time": "2026-02-03T22:27:01.621Z",
+      "flightTime": "17000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "state expect async it"
+    },
+    {
+      "time": "2026-02-03T22:27:18.621Z",
+      "flightTime": "17000",
+      "eventType": "keystroke",
+      "keys": 18,
+      "textFragment": "map component function component test"
+    },
+    {
+      "time": "2026-02-03T22:27:39.621Z",
+      "flightTime": "21000",
+      "eventType": "keystroke",
+      "keys": 1,
+      "textFragment": "import reject if class"
+    },
+    {
+      "time": "2026-02-03T22:28:00.621Z",
+      "flightTime": "21000",
+      "eventType": "fileView",
+      "file": "/workspace/src/app.ts"
+    },
+    {
+      "time": "2026-02-03T22:28:19.621Z",
+      "flightTime": "19000",
+      "eventType": "keystroke",
+      "keys": 13,
+      "textFragment": "ref test reject resolve useEffect import"
+    }
+  ]
+}

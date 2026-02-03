@@ -98,6 +98,33 @@ export class StorageManager {
         }
     }
 
+    // Attempt partial decryption with a supplied key (derived from teacher input)
+    private tryPartialDecryptWithKey(buffer: Uint8Array, key: Buffer): { text: string; partial: boolean } {
+        const buf = Buffer.from(buffer);
+        if (buf.length < IV_LENGTH) {
+            return { text: buf.toString('utf8'), partial: true };
+        }
+        const iv = buf.subarray(0, IV_LENGTH);
+        const content = buf.subarray(IV_LENGTH);
+
+        try {
+            const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+            const out = Buffer.concat([decipher.update(content), decipher.final()]);
+            return { text: out.toString('utf8'), partial: false };
+        } catch (e) {
+            try {
+                const fullBlocks = Math.floor(content.length / 16) * 16;
+                if (fullBlocks <= 0) return { text: '', partial: true };
+                const slice = content.subarray(0, fullBlocks);
+                const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+                const out = decipher.update(slice);
+                return { text: out.toString('utf8'), partial: true };
+            } catch (e2) {
+                return { text: buf.toString('utf8'), partial: true };
+            }
+        }
+    }
+
     // Toggle read-only attribute on a file. On success this helps prevent
     // accidental external edits; write operations in the extension will
     // temporarily clear the readonly bit before writing.
@@ -788,6 +815,23 @@ export class StorageManager {
             const res = this.tryPartialDecrypt(fileData);
             if (!res.partial) return res.text;
             return `WARNING: File appears tampered or truncated. Cannot derypt the file with missing data.\n\n${res.text}`;
+        } catch (err) {
+            throw new Error('Failed to read or decrypt file.');
+        }
+    }
+
+    // NEW: Attempt to decrypt a specific file using a supplied password.
+    // This does NOT validate against the internally configured
+    // SECRET_PASSPHRASE; instead it derives a key from the provided
+    // password and attempts decryption. Returns an object with the
+    // decrypted text and a `partial` flag indicating whether the
+    // decryption was only partial (truncated/tampered) or full.
+    async retrieveLogContentWithPassword(passwordAttempt: string, fileUri: vscode.Uri): Promise<{ text: string; partial: boolean }> {
+        try {
+            const fileData = await vscode.workspace.fs.readFile(fileUri);
+            const key = crypto.scryptSync(passwordAttempt, SALT, 32);
+            const res = this.tryPartialDecryptWithKey(fileData, key);
+            return res;
         } catch (err) {
             throw new Error('Failed to read or decrypt file.');
         }

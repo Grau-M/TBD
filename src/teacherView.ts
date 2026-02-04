@@ -2,12 +2,27 @@ import * as vscode from 'vscode';
 import { storageManager } from './state';
 
 let panel: vscode.WebviewPanel | undefined;
+let sessionPassword: string | undefined;
 
-export function openTeacherView(context: vscode.ExtensionContext) {
+export async function openTeacherView(context: vscode.ExtensionContext) {
     if (panel) {
         panel.reveal(vscode.ViewColumn.One);
         return;
     }
+
+    // Prompt for session password when opening the teacher view
+    const initialPassword = await vscode.window.showInputBox({
+        prompt: `Enter Administrator Password to open Teacher Dashboard`,
+        password: true,
+        ignoreFocusOut: true
+    });
+
+    if (!initialPassword) {
+        // user cancelled; do not open the view
+        return;
+    }
+
+    sessionPassword = initialPassword;
 
     panel = vscode.window.createWebviewPanel(
         'tbdTeacherView',
@@ -23,6 +38,7 @@ export function openTeacherView(context: vscode.ExtensionContext) {
 
     panel.onDidDispose(() => {
         panel = undefined;
+        sessionPassword = undefined; // clear session password when panel closed
     }, null, context.subscriptions);
 
     panel.webview.onDidReceiveMessage(async message => {
@@ -43,15 +59,20 @@ export function openTeacherView(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                const password = await vscode.window.showInputBox({ 
-                    prompt: `Enter Administrator Password to view ${filename}`, 
-                    password: true, 
-                    ignoreFocusOut: true 
-                });
-
+                let password = sessionPassword;
                 if (!password) {
-                    panel?.webview.postMessage({ command: 'error', message: 'Password required' });
-                    return;
+                    password = await vscode.window.showInputBox({ 
+                        prompt: `Enter Administrator Password to view ${filename}`, 
+                        password: true, 
+                        ignoreFocusOut: true 
+                    });
+
+                    if (!password) {
+                        panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                        return;
+                    }
+                    // store for session
+                    sessionPassword = password;
                 }
 
                 try {
@@ -84,6 +105,112 @@ export function openTeacherView(context: vscode.ExtensionContext) {
                 } catch (err: any) {
                     panel?.webview.postMessage({ command: 'error', message: String(err) });
                 }
+            }
+
+            // --- DASHBOARD ANALYSIS (decrypt & aggregate all logs) ---
+            if (message.command === 'analyzeLogs') {
+                const files = await storageManager.listLogFiles();
+                if (!files || files.length === 0) {
+                    panel?.webview.postMessage({ command: 'dashboardData', data: { totalLogs: 0, totalEvents: 0 } });
+                    return;
+                }
+
+                let password = sessionPassword;
+                if (!password) {
+                    password = await vscode.window.showInputBox({
+                        prompt: `Enter Administrator Password to analyze all logs`,
+                        password: true,
+                        ignoreFocusOut: true
+                    });
+
+                    if (!password) {
+                        panel?.webview.postMessage({ command: 'error', message: 'Password required for analysis' });
+                        return;
+                    }
+                    sessionPassword = password;
+                }
+
+                const aggregate: any = {
+                    totalLogs: files.length,
+                    totalEvents: 0,
+                    pasteCount: 0,
+                    deleteCount: 0,
+                    keystrokeCount: 0,
+                    pasteLengths: [],
+                    partialCount: 0,
+                    perFile: []
+                };
+
+                for (const f of files) {
+                    try {
+                        const res = await storageManager.retrieveLogContentWithPassword(password, f.uri);
+                        const content = res.text;
+                        if (res.partial) aggregate.partialCount++;
+
+                        let parsed: any = null;
+                        try { parsed = JSON.parse(content); } catch {
+                            try {
+                                const s = content.indexOf('{');
+                                const e = content.lastIndexOf('}');
+                                if (s !== -1 && e > s) parsed = JSON.parse(content.slice(s, e + 1));
+                            } catch (_) { parsed = null; }
+                        }
+
+                        const fileStats: any = { name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, avgPasteLength: 0 };
+
+                        if (parsed && Array.isArray(parsed.events)) {
+                            fileStats.events = parsed.events.length;
+                            for (const e of parsed.events) {
+                                const t = (e.eventType || '').toString().toLowerCase();
+                                // paste
+                                if (t === 'paste' || t === 'clipboard' || t === 'pasteevent') {
+                                    fileStats.paste++;
+                                    const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : (typeof e.text === 'string' ? e.text.length : 0));
+                                    if (len && len > 0) aggregate.pasteLengths.push(len);
+                                }
+                                // deletes/backspace
+                                if (t === 'delete' || t === 'deletion' || t === 'backspace') {
+                                    fileStats.delete++;
+                                }
+                                // treat key/keystroke events (best-effort)
+                                if (t === 'key' || t === 'keystroke' || t === 'keypress' || t === 'input') {
+                                    fileStats.keystrokes++;
+                                }
+                            }
+
+                            aggregate.totalEvents += fileStats.events;
+                            aggregate.pasteCount += fileStats.paste;
+                            aggregate.deleteCount += fileStats.delete;
+                            aggregate.keystrokeCount += fileStats.keystrokes;
+                        }
+
+                        aggregate.perFile.push(fileStats);
+                    } catch (err: any) {
+                        // skip file but record partial/failed
+                        aggregate.perFile.push({ name: f.label, error: String(err) });
+                    }
+                }
+
+                // compute derived metrics
+                const total = aggregate.totalEvents || 1;
+                const pasteRatio = Math.min(1, aggregate.pasteCount / total);
+                const deleteRatio = Math.min(1, aggregate.deleteCount / total);
+                const avgPasteLength = aggregate.pasteLengths.length ? (aggregate.pasteLengths.reduce((a: number, b: number) => a + b, 0) / aggregate.pasteLengths.length) : 0;
+
+                // Simple heuristic for AI probability (0-100)
+                // More/larger pastes increase probability. This is a heuristic, not a verdict.
+                const normalizedPasteLen = Math.min(1, avgPasteLength / 1000); // 1000 chars -> 1.0
+                let score = (pasteRatio * 0.6 + normalizedPasteLen * 0.35 + deleteRatio * 0.05) * 100;
+                score = Math.max(0, Math.min(100, Math.round(score)));
+
+                aggregate.metrics = {
+                    pasteRatio: Math.round(pasteRatio * 1000) / 10,
+                    deleteRatio: Math.round(deleteRatio * 1000) / 10,
+                    avgPasteLength: Math.round(avgPasteLength),
+                    aiProbability: score
+                };
+
+                panel?.webview.postMessage({ command: 'dashboardData', data: aggregate });
             }
 
             // --- SETTINGS HANDLING ---
@@ -131,7 +258,7 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
 
     body { background: var(--bg); color: var(--fg); height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
     
-    .app-container { display: flex; height: 100%; max-width: 1400px; margin: 0 auto; width: 100%; }
+    .app-container { display: flex; height: 100%; max-width: none; margin: 0; width: 100%; box-sizing: border-box; }
     
     .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 8px; }
     .tab-btn { 
@@ -147,6 +274,10 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     .tab-pane { display: none; animation: fadeIn 0.2s ease-out; }
     .tab-pane.active { display: block; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* simple spinner */
+    .spinner { width: 36px; height: 36px; border-radius: 50%; border: 4px solid rgba(0,0,0,0.08); border-top-color: var(--accent); animation: spin 1s linear infinite; margin: 12px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px var(--card-shadow); }
     .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -201,7 +332,7 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     .btn-secondary { background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
     .btn-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
 
-    .theme-toggle { position: absolute; top: 20px; right: 20px; background: var(--surface); border: 1px solid var(--border); padding: 8px; border-radius: 50%; cursor: pointer; }
+    /* theme toggle is placed in the top bar; no absolute positioning to avoid overlap */
     
     /* View Containers */
     #logs-view { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px; }
@@ -233,8 +364,11 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
       </div>
     </aside>
 
-    <main class="main-content">
-      <button id="themeToggle" class="theme-toggle">🌓</button>
+        <main class="main-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div></div>
+                <button id="themeToggle" class="btn btn-secondary" style="min-width:40px; height:36px; padding:6px 8px; border-radius:8px;">🌓</button>
+            </div>
 
       <div id="dashboard-tab" class="tab-pane active">
         <div class="header-row">
@@ -356,7 +490,7 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     }
     
     document.getElementById('nav-dashboard').addEventListener('click', () => switchTab('dashboard'));
-    document.getElementById('nav-logs').addEventListener('click', () => switchTab('logs'));
+    document.getElementById('nav-logs').addEventListener('click', () => { switchTab('logs'); vscode.postMessage({ command: 'listLogs' }); });
     document.getElementById('nav-settings').addEventListener('click', () => switchTab('settings'));
     document.getElementById('btn-goto-logs').addEventListener('click', () => switchTab('logs'));
 
@@ -368,11 +502,17 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     });
 
     const themeToggle = document.getElementById('themeToggle');
-    let isDark = document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches;
+    // restore persisted theme from webview state if present
+    const _state = vscode.getState ? vscode.getState() : {};
+    let isDark = (_state && _state.theme === 'dark') || document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches;
     if (isDark) document.documentElement.classList.add('dark');
-    themeToggle.addEventListener('click', () => {
+    // set initial icon
+    if (themeToggle) themeToggle.textContent = isDark ? '🌙' : '☀️';
+    if (themeToggle) themeToggle.addEventListener('click', () => {
         document.documentElement.classList.toggle('dark');
         isDark = !isDark;
+        themeToggle.textContent = isDark ? '🌙' : '☀️';
+        if (vscode.setState) vscode.setState({ theme: isDark ? 'dark' : 'light' });
     });
 
     function renderDropdown(items) {
@@ -559,6 +699,157 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     }
 
     // --- Messages ---
+    function renderDashboard(data) {
+        const container = document.getElementById('dashboard-container');
+        container.innerHTML = '';
+        if (!data || !data.metrics) {
+            container.innerHTML = '<div class="meta">No data available.</div>';
+            return;
+        }
+
+        const m = data.metrics;
+
+        const top = document.createElement('div');
+        top.style.display = 'grid';
+        top.style.gridTemplateColumns = '1fr 1fr 1fr';
+        top.style.gap = '12px';
+
+        const makeCard = (title, value, subtitle) => {
+            const c = document.createElement('div');
+            c.className = 'card';
+            c.style.padding = '12px';
+            c.innerHTML = '<div style="font-weight:700; font-size:1.1rem;">' + value + '</div><div class="meta">' + title + (subtitle ? ' • ' + subtitle : '') + '</div>';
+            return c;
+        };
+
+        top.appendChild(makeCard('AI Probability', m.aiProbability + '%'));
+        top.appendChild(makeCard('Paste %', m.pasteRatio + '%', 'of all events'));
+        top.appendChild(makeCard('Delete %', m.deleteRatio + '%', 'of all events'));
+
+        const statsRow = document.createElement('div');
+        statsRow.style.display = 'flex';
+        statsRow.style.gap = '12px';
+        statsRow.style.marginTop = '12px';
+
+        const avgPaste = makeCard('Avg Paste Length', m.avgPasteLength + ' chars');
+        const totals = makeCard('Totals', data.totalLogs + ' logs • ' + data.totalEvents + ' events');
+        statsRow.appendChild(avgPaste);
+        statsRow.appendChild(totals);
+
+        // AI progress bar
+        const barCard = document.createElement('div');
+        barCard.className = 'card';
+        barCard.style.padding = '12px';
+        barCard.innerHTML = '<div style="font-weight:700; margin-bottom:8px;">AI Probability</div>';
+        const barOuter = document.createElement('div');
+        barOuter.style.background = 'var(--bg)';
+        barOuter.style.border = '1px solid var(--border)';
+        barOuter.style.borderRadius = '8px';
+        barOuter.style.height = '18px';
+        const barInner = document.createElement('div');
+        barInner.style.height = '100%';
+        barInner.style.width = m.aiProbability + '%';
+        barInner.style.background = 'linear-gradient(90deg, var(--accent), var(--accent-2))';
+        barInner.style.borderRadius = '8px';
+        barOuter.appendChild(barInner);
+        barCard.appendChild(barOuter);
+
+        container.appendChild(top);
+        container.appendChild(statsRow);
+        container.appendChild(barCard);
+
+        // Per-file breakdown
+        const filesCard = document.createElement('div');
+        filesCard.className = 'card';
+        filesCard.style.marginTop = '12px';
+        filesCard.innerHTML = '<h2>Per-file breakdown</h2>';
+        const table = document.createElement('div');
+        table.style.display = 'grid';
+        table.style.gridTemplateColumns = '2fr 1fr 1fr 1fr';
+        table.style.gap = '8px';
+        table.style.marginTop = '8px';
+        table.innerHTML = '<div style="font-weight:700">File</div><div style="font-weight:700">Events</div><div style="font-weight:700">Paste</div><div style="font-weight:700">Delete</div>';
+
+        (data.perFile || []).forEach(f => {
+            const name = document.createElement('div');
+            name.textContent = f.name || (f.error ? '(failed)' : 'unknown');
+            const ev = document.createElement('div'); ev.textContent = f.events ? String(f.events) : '-';
+            const p = document.createElement('div'); p.textContent = f.events ? (Math.round((f.paste||0) / Math.max(1,f.events) * 1000)/10) + '%' : (f.error ? 'err' : '-');
+            const d = document.createElement('div'); d.textContent = f.events ? (Math.round((f.delete||0) / Math.max(1,f.events) * 1000)/10) + '%' : (f.error ? 'err' : '-');
+            table.appendChild(name); table.appendChild(ev); table.appendChild(p); table.appendChild(d);
+        });
+
+        filesCard.appendChild(table);
+        container.appendChild(filesCard);
+    }
+
+    function showDashboardLoading() {
+        const container = document.getElementById('dashboard-container');
+        if (!container) return;
+        container.innerHTML = '';
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.textAlign = 'center';
+        card.innerHTML = '<div style="font-weight:700; margin-bottom:8px;">Loading dashboard</div>';
+        const spinner = document.createElement('div');
+        spinner.className = 'spinner';
+        card.appendChild(spinner);
+        container.appendChild(card);
+    }
+
+    function renderOptions(filter = '') {
+        select.innerHTML = '';
+        const f = filter.toLowerCase();
+        const filtered = logNamesCache.filter(n => n.toLowerCase().includes(f));
+        if (filtered.length === 0) {
+            select.innerHTML = '<option>No matching logs found</option>';
+            return;
+        }
+        filtered.forEach(name => {
+            const o = document.createElement('option');
+            o.value = name;
+            o.textContent = name;
+            select.appendChild(o);
+        });
+    }
+
+    // --- Action Listeners ---
+    document.getElementById('refresh').addEventListener('click', () => {
+        status.textContent = 'Refreshing...';
+        vscode.postMessage({ command: 'listLogs' });
+    });
+    document.getElementById('refreshDashboard').addEventListener('click', () => {
+        status.textContent = 'Analyzing logs...';
+        showDashboardLoading();
+        vscode.postMessage({ command: 'analyzeLogs' });
+    });
+    
+    document.getElementById('open').addEventListener('click', () => {
+        const filename = select.value;
+        if (!filename || filename === 'Loading...') return;
+        status.textContent = 'Decrypting ' + filename + '...';
+        vscode.postMessage({ command: 'openLog', filename });
+    });
+
+    search.addEventListener('input', (e) => renderOptions(e.target.value));
+
+    document.getElementById('saveSettings').addEventListener('click', () => {
+        const settings = {
+            inactivityThreshold: parseInt(inactivityInput.value),
+            flightTimeThreshold: parseInt(flightInput.value),
+            pasteLengthThreshold: parseInt(pasteLengthInput.value)
+        };
+        vscode.postMessage({ command: 'saveSettings', settings });
+    });
+
+    document.getElementById('resetSettings').addEventListener('click', () => {
+        inactivityInput.value = defaults.inactivity;
+        flightInput.value = defaults.flight;
+        pasteLengthInput.value = defaults.pasteLength;
+        vscode.postMessage({ command: 'saveSettings', settings: defaults });
+    });
+
+    // --- Message Handling ---
     window.addEventListener('message', event => {
         const msg = event.data;
 
@@ -582,6 +873,10 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
             case 'logData':
                 renderParsed(msg.data, msg.filename);
                 status.textContent = 'Loaded ' + msg.filename;
+                break;
+            case 'dashboardData':
+                renderDashboard(msg.data);
+                status.textContent = 'Dashboard updated';
                 break;
             case 'rawData':
                 // For raw data, we just dump it in logs view
@@ -632,6 +927,13 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     });
 
     vscode.postMessage({ command: 'listLogs' });
+    // --- Init ---
+    // Ensure UI shows dashboard only and clear unexpected persisted state
+    try { switchTab('dashboard'); } catch (e) { /* ignore */ }
+    if (vscode.setState) try { vscode.setState({ theme: isDark ? 'dark' : 'light' }); } catch (e) { /* ignore */ }
+    // Load dashboard with a loading indicator; do not load logs until Logs tab is selected
+    showDashboardLoading();
+    vscode.postMessage({ command: 'analyzeLogs' });
     vscode.postMessage({ command: 'getSettings' });
 
   </script>

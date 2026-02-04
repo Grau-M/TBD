@@ -37,6 +37,42 @@
 
     const themeToggle = $("themeToggle");
 
+    // create a small clear button next to the search input if one doesn't exist
+    let clearSearchBtn = $("clear-search");
+    if (!clearSearchBtn && searchInput) {
+      try {
+        clearSearchBtn = document.createElement("button");
+        clearSearchBtn.id = "clear-search";
+        clearSearchBtn.type = "button";
+        clearSearchBtn.className = "btn clear-btn";
+        clearSearchBtn.title = "Clear search";
+        clearSearchBtn.textContent = "✖";
+        // insert after the input
+        if (searchInput.parentNode)
+          searchInput.parentNode.insertBefore(
+            clearSearchBtn,
+            searchInput.nextSibling,
+          );
+        else searchInput.insertAdjacentElement("afterend", clearSearchBtn);
+      } catch (e) {
+        clearSearchBtn = null;
+      }
+    }
+    if (clearSearchBtn) {
+      clearSearchBtn.addEventListener("click", () => {
+        try {
+          if (searchInput) searchInput.value = "";
+          if (dropdown) {
+            renderDropdown(logNamesCache);
+            dropdown.classList.remove("show");
+          }
+          if (searchInput) searchInput.focus();
+        } catch (err) {
+          /* noop */
+        }
+      });
+    }
+
     function switchTab(tabName) {
       document
         .querySelectorAll(".tab-pane")

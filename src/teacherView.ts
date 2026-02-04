@@ -153,17 +153,46 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     h1 { font-size: 1.5rem; font-weight: 700; color: var(--fg); margin: 0; }
     h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--fg); }
     
-    .form-group { margin-bottom: 16px; }
+    .form-group { margin-bottom: 16px; position: relative; }
     label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9rem; color: var(--muted); }
+    
     input[type="text"], input[type="number"], select { 
         width: 100%; padding: 10px; border-radius: 8px; 
         background: var(--bg); border: 1px solid var(--border); 
         color: var(--fg); font-size: 0.95rem; 
     }
-    input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    input:focus { outline: 2px solid var(--accent); border-color: transparent; }
     
+    /* Dropdown Styling */
+    .search-container { position: relative; }
+    .dropdown-list {
+        position: absolute;
+        top: 100%; left: 0; right: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        max-height: 250px;
+        overflow-y: auto;
+        z-index: 50;
+        display: none; 
+        margin-top: 4px;
+    }
+    .dropdown-list.show { display: block; }
+    .dropdown-item {
+        padding: 10px 14px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.9rem;
+        color: var(--fg);
+    }
+    .dropdown-item:last-child { border-bottom: none; }
+    .dropdown-item:hover { background: rgba(125,125,125,0.05); color: var(--accent); }
+    
+    /* Event Styling */
     .event { background: rgba(125,125,125,0.03); padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid var(--border); }
     .event.paste { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.05); } 
+    .event.fast { border-left-color: #8b5cf6; background: rgba(139, 92, 246, 0.05); } 
     .meta { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
     
     .btn { padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; transition: transform 0.1s; }
@@ -174,8 +203,9 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
 
     .theme-toggle { position: absolute; top: 20px; right: 20px; background: var(--surface); border: 1px solid var(--border); padding: 8px; border-radius: 50%; cursor: pointer; }
     
-    /* Scrollable Log View */
-    #view { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px; }
+    /* View Containers */
+    #logs-view { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px; }
+    #dashboard-view { margin-top: 20px; }
   </style>
 </head>
 <body>
@@ -188,10 +218,10 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
         <div class="meta">Capstone Integrity Tool</div>
       </div>
       
-      <button id="nav-dashboard" class="tab-btn">
+      <button id="nav-dashboard" class="tab-btn active">
         <span>📊</span> Dashboard
       </button>
-      <button id="nav-logs" class="tab-btn active">
+      <button id="nav-logs" class="tab-btn">
         <span>📂</span> Logs
       </button>
       <button id="nav-settings" class="tab-btn">
@@ -206,42 +236,44 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     <main class="main-content">
       <button id="themeToggle" class="theme-toggle">🌓</button>
 
-      <div id="dashboard-tab" class="tab-pane">
+      <div id="dashboard-tab" class="tab-pane active">
         <div class="header-row">
-          <h1>Global Analytics</h1>
+          <h1>Analysis Dashboard</h1>
+          <div class="meta" id="dashboard-log-name">No log loaded</div>
         </div>
-        <div class="card" style="text-align:center; padding: 60px;">
-          <h2 style="color:var(--muted)">Class Overview</h2>
-          <p class="meta">Aggregate statistics for all students will be displayed here.</p>
-          <div style="margin-top:20px; font-size:0.9rem; color:var(--muted); opacity:0.7;">(Feature Coming Soon)</div>
+
+        <div id="dashboard-empty" class="card" style="text-align:center; padding: 40px;">
+          <h2 style="color:var(--muted)">No Session Data Loaded</h2>
+          <p class="meta">Select a student log from the <strong>Logs</strong> tab to view integrity analysis.</p>
+          <button id="btn-goto-logs" class="btn btn-primary" style="margin-top:16px;">Find Student Log</button>
         </div>
+
+        <div id="dashboard-view"></div>
       </div>
 
-      <div id="logs-tab" class="tab-pane active">
+      <div id="logs-tab" class="tab-pane">
         <div class="header-row">
           <h1>Session Logs</h1>
         </div>
 
         <div class="card">
-          <div class="form-group">
-            <label>Available Files</label>
-            <div style="display:flex; gap:10px; margin-bottom:10px;">
-               <input id="search" type="text" placeholder="Search..." style="flex:1;" />
-               <button id="refresh" class="btn btn-secondary">Refresh</button>
+          <div class="form-group search-container">
+            <label>Search Student Logs</label>
+            <input id="log-search-input" type="text" placeholder="Start typing a name (e.g. 'diask')..." autocomplete="off" />
+            <div id="log-dropdown" class="dropdown-list"></div>
+            <div class="meta" style="margin-top:8px;">
+               <span id="log-count">Loading logs...</span>
+               <button id="refresh-logs" style="background:none; border:none; color:var(--accent); cursor:pointer; margin-left:10px; font-size:0.85rem;">Refresh List</button>
             </div>
-            <select id="logSelect" size="5" style="height: 120px; overflow-y:auto; font-family:monospace;">
-              <option>Loading...</option>
-            </select>
           </div>
-          <button id="open" class="btn btn-primary" style="width:100%;">Decrypt & View Log</button>
         </div>
 
-        <div id="log-viewer-container" style="display:none;">
+        <div id="logs-viewer-container" style="display:none;">
             <div class="header-row" style="margin-bottom:10px;">
-                <h2 id="current-log-name" style="margin:0;">Viewing Log</h2>
+                <h2 id="logs-log-name" style="margin:0;">Event Log</h2>
                 <button id="close-log" class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px;">Close</button>
             </div>
-            <div id="view"></div>
+            <div id="logs-view"></div>
         </div>
 
       </div>
@@ -257,7 +289,7 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
           <div class="form-group">
             <label>Inactivity Threshold (minutes)</label>
             <input type="number" id="inactivityInput" value="5" min="1" max="60" />
-            <div class="meta">Time before a student is considered "Away" (stops tracking focus time).</div>
+            <div class="meta">Time before a student is considered "Away".</div>
           </div>
           
           <div class="form-group">
@@ -269,7 +301,7 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
           <div class="form-group">
             <label>Paste Length Flag (chars)</label>
             <input type="number" id="pasteLengthInput" value="50" min="1" max="10000" />
-            <div class="meta">Pastes longer than this will be visually flagged with an orange warning.</div>
+            <div class="meta">Pastes longer than this will be visually flagged.</div>
           </div>
 
           <div style="display:flex; gap:10px; margin-top:24px; border-top:1px solid var(--border); padding-top:20px;">
@@ -285,24 +317,35 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     
-    // --- State & DOM ---
+    // --- State ---
     let logNamesCache = [];
     const defaults = { inactivity: 5, flight: 50, pasteLength: 50 };
     let currentSettings = { ...defaults };
+    let isInitialLoad = true;
 
-    const select = document.getElementById('logSelect');
-    const search = document.getElementById('search');
-    const view = document.getElementById('view');
-    const status = document.getElementById('status');
-    const currentLogName = document.getElementById('current-log-name');
-    const viewerContainer = document.getElementById('log-viewer-container');
+    // --- DOM Elements ---
+    const searchInput = document.getElementById('log-search-input');
+    const dropdown = document.getElementById('log-dropdown');
+    const logCountLabel = document.getElementById('log-count');
+    const refreshBtn = document.getElementById('refresh-logs');
     
+    // Dashboard Elements
+    const dashboardView = document.getElementById('dashboard-view');
+    const dashboardEmpty = document.getElementById('dashboard-empty');
+    const dashboardLogName = document.getElementById('dashboard-log-name');
+
+    // Logs Elements
+    const logsView = document.getElementById('logs-view');
+    const logsViewerContainer = document.getElementById('logs-viewer-container');
+    const logsLogName = document.getElementById('logs-log-name');
+    
+    // Settings Elements
     const inactivityInput = document.getElementById('inactivityInput');
     const flightInput = document.getElementById('flightInput');
     const pasteLengthInput = document.getElementById('pasteLengthInput');
     const settingsMsg = document.getElementById('settings-msg');
 
-    // --- Tab Switching Logic ---
+    // --- Tab Logic ---
     function switchTab(tabName) {
         document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -311,20 +354,19 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
         const btn = document.getElementById('nav-' + tabName);
         if (btn) btn.classList.add('active');
     }
-
+    
     document.getElementById('nav-dashboard').addEventListener('click', () => switchTab('dashboard'));
     document.getElementById('nav-logs').addEventListener('click', () => switchTab('logs'));
     document.getElementById('nav-settings').addEventListener('click', () => switchTab('settings'));
+    document.getElementById('btn-goto-logs').addEventListener('click', () => switchTab('logs'));
 
-    // --- Close Log Action ---
     document.getElementById('close-log').addEventListener('click', () => {
-        viewerContainer.style.display = 'none';
-        view.innerHTML = '';
-        currentLogName.textContent = '';
-        status.textContent = 'Log closed';
+        logsViewerContainer.style.display = 'none';
+        logsView.innerHTML = '';
+        logsLogName.textContent = '';
+        searchInput.value = ''; 
     });
 
-    // --- Theme Logic ---
     const themeToggle = document.getElementById('themeToggle');
     let isDark = document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches;
     if (isDark) document.documentElement.classList.add('dark');
@@ -333,12 +375,121 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
         isDark = !isDark;
     });
 
-    // --- Render Logic ---
-    function renderParsed(parsed, filename) {
-        view.innerHTML = ''; 
-        viewerContainer.style.display = 'block'; // Show the view container
-        currentLogName.textContent = 'Viewing: ' + filename;
+    function renderDropdown(items) {
+        dropdown.innerHTML = '';
+        if (items.length === 0) {
+            dropdown.innerHTML = '<div class="dropdown-item" style="cursor:default; color:var(--muted);">No logs found</div>';
+            return;
+        }
         
+        items.forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'dropdown-item';
+            div.textContent = name;
+            div.addEventListener('mousedown', (e) => {
+                 e.preventDefault(); 
+                 openLogFile(name);
+            });
+            dropdown.appendChild(div);
+        });
+    }
+
+    function openLogFile(filename) {
+        searchInput.value = filename;
+        dropdown.classList.remove('show');
+        status.textContent = 'Decrypting ' + filename + '...';
+        vscode.postMessage({ command: 'openLog', filename });
+    }
+
+    searchInput.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = logNamesCache.filter(n => n.toLowerCase().includes(term));
+        renderDropdown(filtered);
+        dropdown.classList.add('show');
+    });
+
+    searchInput.addEventListener('focus', () => {
+        const term = searchInput.value.toLowerCase();
+        const filtered = logNamesCache.filter(n => n.toLowerCase().includes(term));
+        renderDropdown(filtered);
+        dropdown.classList.add('show');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.remove('show');
+        }
+    });
+
+    refreshBtn.addEventListener('click', () => {
+        status.textContent = 'Refreshing list...';
+        vscode.postMessage({ command: 'listLogs' });
+    });
+
+    // --- MAIN RENDER LOGIC ---
+    function renderParsed(parsed, filename) {
+        // 1. CLEAR & SETUP
+        dashboardView.innerHTML = ''; 
+        logsView.innerHTML = '';
+        
+        dashboardEmpty.style.display = 'none'; 
+        logsViewerContainer.style.display = 'block';
+
+        dashboardLogName.textContent = 'Viewing: ' + filename;
+        logsLogName.textContent = 'Event Log: ' + filename;
+        
+        // 2. CALCULATE SCORE
+        let totalEvents = 0;
+        let flaggedEvents = 0;
+        let integrityScore = 100;
+
+        if (Array.isArray(parsed.events)) {
+            totalEvents = parsed.events.length;
+            parsed.events.forEach(e => {
+                let flagged = false;
+                if (e.eventType === 'paste') {
+                    const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : null);
+                    if (len !== null && len > currentSettings.pasteLength) flagged = true;
+                    else if (len === null) flagged = true; 
+                }
+                if (e.eventType === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) {
+                    flagged = true;
+                }
+                if(flagged) flaggedEvents++;
+            });
+
+            if (totalEvents > 0) {
+                const ratio = flaggedEvents / totalEvents;
+                integrityScore = Math.max(0, Math.round((1 - ratio) * 100));
+            }
+        }
+
+        let scoreColor = '#10b981'; // Green
+        if (integrityScore < 85) scoreColor = '#f59e0b'; // Yellow
+        if (integrityScore < 50) scoreColor = '#ef4444'; // Red
+
+        // 3. RENDER DASHBOARD (Score + Summary ONLY)
+        const scoreDiv = document.createElement('div');
+        scoreDiv.className = 'card';
+        scoreDiv.style.borderLeft = '6px solid ' + scoreColor;
+        scoreDiv.innerHTML = \`
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2 style="margin:0; font-size:2rem; color:\${scoreColor}">\${integrityScore}%</h2>
+                    <div class="meta" style="font-size:1rem;">Integrity Score</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-weight:600; font-size:1.2rem;">\${flaggedEvents} <span style="font-weight:400; color:var(--muted)">/ \${totalEvents}</span></div>
+                    <div class="meta">Flagged Events</div>
+                </div>
+            </div>
+            <div class="meta" style="margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
+                Score affected by <strong style="color:#f59e0b">Suspicious Pastes (> \${currentSettings.pasteLength} chars)</strong> and <strong style="color:#8b5cf6">Fast Typing (< \${currentSettings.flight}ms)</strong>.
+            </div>
+        \`;
+        dashboardView.appendChild(scoreDiv);
+
+        // Render Session Header (Shared Info) in Dashboard
         if (parsed.sessionHeader) {
             const h = parsed.sessionHeader;
             const headerDiv = document.createElement('div');
@@ -356,30 +507,40 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
                     </div>
                 </div>
             \`;
-            view.appendChild(headerDiv);
+            dashboardView.appendChild(headerDiv);
         }
 
+        // 4. RENDER LOGS (Detailed List ONLY)
         if (Array.isArray(parsed.events)) {
             const container = document.createElement('div');
             parsed.events.slice().reverse().forEach(e => {
                 const row = document.createElement('div');
-                
-                let isFlaggedPaste = false;
+                let className = 'event';
+                let flagReason = '';
+
+                // Paste Flag
                 if (e.eventType === 'paste') {
-                    if (e.length && typeof e.length === 'number') {
-                        isFlaggedPaste = e.length > currentSettings.pasteLength;
-                    } else if (e.pasteLength && typeof e.pasteLength === 'number') {
-                        isFlaggedPaste = e.pasteLength > currentSettings.pasteLength;
-                    } else {
-                        isFlaggedPaste = true; 
+                    const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : null);
+                    if (len !== null && len > currentSettings.pasteLength) {
+                        className += ' paste';
+                        flagReason = '(Large Paste)';
+                    } else if (len === null) {
+                        className += ' paste'; 
                     }
                 }
-
-                row.className = isFlaggedPaste ? 'event paste' : 'event';
+                // Flight Flag
+                if (e.eventType === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) {
+                    className += ' fast';
+                    flagReason = '(Fast Input)';
+                }
+                
+                row.className = className;
                 
                 let html = \`
                     <div style="display:flex; justify-content:space-between;">
-                        <strong>\${e.eventType || 'Unknown'}</strong>
+                        <div>
+                            <strong>\${e.eventType || 'Unknown'}</strong> \${flagReason}
+                        </div>
                         <span class="meta">\${e.time || ''}</span>
                     </div>
                 \`;
@@ -393,76 +554,40 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
                 row.innerHTML = html;
                 container.appendChild(row);
             });
-            view.appendChild(container);
+            logsView.appendChild(container);
         }
     }
 
-    function renderOptions(filter = '') {
-        select.innerHTML = '';
-        const f = filter.toLowerCase();
-        const filtered = logNamesCache.filter(n => n.toLowerCase().includes(f));
-        if (filtered.length === 0) {
-            select.innerHTML = '<option>No matching logs found</option>';
-            return;
-        }
-        filtered.forEach(name => {
-            const o = document.createElement('option');
-            o.value = name;
-            o.textContent = name;
-            select.appendChild(o);
-        });
-    }
-
-    // --- Action Listeners ---
-    document.getElementById('refresh').addEventListener('click', () => {
-        status.textContent = 'Refreshing...';
-        vscode.postMessage({ command: 'listLogs' });
-    });
-    
-    document.getElementById('open').addEventListener('click', () => {
-        const filename = select.value;
-        if (!filename || filename === 'Loading...') return;
-        status.textContent = 'Decrypting ' + filename + '...';
-        vscode.postMessage({ command: 'openLog', filename });
-    });
-
-    search.addEventListener('input', (e) => renderOptions(e.target.value));
-
-    document.getElementById('saveSettings').addEventListener('click', () => {
-        const settings = {
-            inactivityThreshold: parseInt(inactivityInput.value),
-            flightTimeThreshold: parseInt(flightInput.value),
-            pasteLengthThreshold: parseInt(pasteLengthInput.value)
-        };
-        vscode.postMessage({ command: 'saveSettings', settings });
-    });
-
-    document.getElementById('resetSettings').addEventListener('click', () => {
-        inactivityInput.value = defaults.inactivity;
-        flightInput.value = defaults.flight;
-        pasteLengthInput.value = defaults.pasteLength;
-        vscode.postMessage({ command: 'saveSettings', settings: defaults });
-    });
-
-    // --- Message Handling ---
+    // --- Messages ---
     window.addEventListener('message', event => {
         const msg = event.data;
 
         switch (msg.command) {
             case 'logList':
-                logNamesCache = msg.data;
-                renderOptions();
-                status.textContent = 'Ready (' + msg.data.length + ' logs)';
+                logNamesCache = msg.data.sort().reverse(); 
+                logCountLabel.textContent = logNamesCache.length + ' logs found';
+                if (isInitialLoad && logNamesCache.length > 0) {
+                    isInitialLoad = false;
+                    const latest = logNamesCache[0];
+                    searchInput.value = latest; 
+                    status.textContent = 'Auto-loading latest log...';
+                    vscode.postMessage({ command: 'openLog', filename: latest });
+                    // On initial load, default to dashboard
+                    switchTab('dashboard');
+                } else if (isInitialLoad) {
+                    isInitialLoad = false;
+                    switchTab('dashboard');
+                }
                 break;
             case 'logData':
                 renderParsed(msg.data, msg.filename);
-                // No switchTab call here - user stays on logs tab
                 status.textContent = 'Loaded ' + msg.filename;
                 break;
             case 'rawData':
-                viewerContainer.style.display = 'block';
-                view.innerHTML = '<pre>' + msg.data + '</pre>';
-                currentLogName.textContent = msg.filename + ' (Raw)';
+                // For raw data, we just dump it in logs view
+                logsViewerContainer.style.display = 'block';
+                logsView.innerHTML = '<pre>' + msg.data + '</pre>';
+                dashboardView.innerHTML = '<div class="card"><h2>Raw Data Only</h2><p class="meta">Score unavailable.</p></div>';
                 status.textContent = 'Loaded ' + msg.filename;
                 break;
             case 'loadSettings':
@@ -481,9 +606,7 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
                 currentSettings.inactivity = parseInt(inactivityInput.value);
                 currentSettings.flight = parseInt(flightInput.value);
                 currentSettings.pasteLength = parseInt(pasteLengthInput.value);
-                
                 settingsMsg.textContent = 'Settings saved successfully!';
-                settingsMsg.style.color = 'var(--accent)';
                 setTimeout(() => settingsMsg.textContent = '', 3000);
                 break;
             case 'error':
@@ -492,7 +615,22 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
         }
     });
 
-    // --- Init ---
+    document.getElementById('saveSettings').addEventListener('click', () => {
+        const settings = {
+            inactivityThreshold: parseInt(inactivityInput.value),
+            flightTimeThreshold: parseInt(flightInput.value),
+            pasteLengthThreshold: parseInt(pasteLengthInput.value)
+        };
+        vscode.postMessage({ command: 'saveSettings', settings });
+    });
+
+    document.getElementById('resetSettings').addEventListener('click', () => {
+        inactivityInput.value = defaults.inactivity;
+        flightInput.value = defaults.flight;
+        pasteLengthInput.value = defaults.pasteLength;
+        vscode.postMessage({ command: 'saveSettings', settings: defaults });
+    });
+
     vscode.postMessage({ command: 'listLogs' });
     vscode.postMessage({ command: 'getSettings' });
 

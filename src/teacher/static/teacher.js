@@ -37,6 +37,31 @@
 
     const themeToggle = $('themeToggle');
 
+    // create a small clear button next to the search input if one doesn't exist
+    let clearSearchBtn = $('clear-search');
+    if (!clearSearchBtn && searchInput) {
+      try {
+        clearSearchBtn = document.createElement('button');
+        clearSearchBtn.id = 'clear-search';
+        clearSearchBtn.type = 'button';
+        clearSearchBtn.className = 'btn clear-btn';
+        clearSearchBtn.title = 'Clear search';
+        clearSearchBtn.textContent = '✖';
+        // insert after the input
+        if (searchInput.parentNode) searchInput.parentNode.insertBefore(clearSearchBtn, searchInput.nextSibling);
+        else searchInput.insertAdjacentElement('afterend', clearSearchBtn);
+      } catch (e) { clearSearchBtn = null; }
+    }
+    if (clearSearchBtn) {
+      clearSearchBtn.addEventListener('click', () => {
+        try {
+          if (searchInput) searchInput.value = '';
+          if (dropdown) { renderDropdown(logNamesCache); dropdown.classList.remove('show'); }
+          if (searchInput) searchInput.focus();
+        } catch (err) { /* noop */ }
+      });
+    }
+
     function switchTab(tabName) {
       document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -229,7 +254,38 @@
           if (e.eventType === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) { className += ' fast'; flagReason = '(Fast Input)'; }
           row.className = className;
           let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || 'Unknown'}</strong> ${flagReason}</div><span class="meta">${e.time || ''}</span></div>`;
-          Object.keys(e).forEach(k => { if (!['eventType','time'].includes(k)) html += `<div class="meta">${k}: ${JSON.stringify(e[k])}</div>`; });
+          // Helper to format file paths relative to the session workspace if possible
+          const formatFilePath = (p) => {
+            if (!p || typeof p !== 'string') return p;
+            // try to use sessionHeader.project as workspace root
+            const project = (parsed && parsed.sessionHeader && parsed.sessionHeader.project) || null;
+            if (project) {
+              const idx = p.indexOf(project);
+              if (idx !== -1) {
+                let rel = p.substring(idx + project.length);
+                // strip leading path separators
+                rel = rel.replace(/^\\+|^\/+/, '');
+                // if empty, return project
+                return rel || project;
+              }
+            }
+            // fallback to basename
+            const parts = p.split(/\\|\//);
+            return parts[parts.length - 1] || p;
+          };
+
+          Object.keys(e).forEach(k => {
+            if (['eventType','time'].includes(k)) return;
+            let val = e[k];
+            if (k === 'fileEdit' || k === 'fileView' || k === 'file' || k === 'filePath') {
+              val = formatFilePath(val);
+            }
+            try {
+              // stringify other complex values
+              if (typeof val === 'object') val = JSON.stringify(val);
+            } catch (err) {}
+            html += `<div class="meta">${k}: ${val}</div>`;
+          });
           row.innerHTML = html;
           container.appendChild(row);
         });

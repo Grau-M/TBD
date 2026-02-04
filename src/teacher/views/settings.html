@@ -1,0 +1,33 @@
+<div id="settings-tab" class="tab-pane">
+  <div class="header-row">
+    <h1>Configuration</h1>
+  </div>
+  <div class="card">
+    <h2>Analysis Thresholds</h2>
+    <p class="meta" style="margin-bottom:16px;">Adjust how the system flags suspicious behavior.</p>
+    
+    <div class="form-group">
+      <label>Inactivity Threshold (minutes)</label>
+      <input type="number" id="inactivityInput" value="5" min="1" max="60" />
+      <div class="meta">Time before a student is considered "Away".</div>
+    </div>
+    
+    <div class="form-group">
+      <label>Flight Time Filter (ms)</label>
+      <input type="number" id="flightInput" value="50" min="0" max="500" />
+      <div class="meta">Keystrokes faster than this are flagged as potential copy/pastes.</div>
+    </div>
+
+    <div class="form-group">
+      <label>Paste Length Flag (chars)</label>
+      <input type="number" id="pasteLengthInput" value="50" min="1" max="10000" />
+      <div class="meta">Pastes longer than this will be visually flagged.</div>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:24px; border-top:1px solid var(--border); padding-top:20px;">
+      <button id="saveSettings" class="btn btn-primary">Save Changes</button>
+      <button id="resetSettings" class="btn btn-danger">Reset to Defaults</button>
+    </div>
+    <div id="settings-msg" class="meta" style="margin-top:10px; height:20px;"></div>
+  </div>
+</div>

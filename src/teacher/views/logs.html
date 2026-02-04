@@ -1,0 +1,25 @@
+<div id="logs-tab" class="tab-pane">
+  <div class="header-row">
+    <h1>Session Logs</h1>
+  </div>
+
+  <div class="card">
+    <div class="form-group search-container">
+      <label>Search Student Logs</label>
+      <input id="log-search-input" type="text" placeholder="Start typing a name (e.g. 'john')..." autocomplete="off" />
+      <div id="log-dropdown" class="dropdown-list"></div>
+      <div class="meta" style="margin-top:8px;">
+         <span id="log-count">Loading logs...</span>
+         <button id="refresh-logs" style="background:none; border:none; color:var(--accent); cursor:pointer; margin-left:10px; font-size:0.85rem;">Refresh List</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="logs-viewer-container" style="display:none;">
+      <div class="header-row" style="margin-bottom:10px;">
+          <h2 id="logs-log-name" style="margin:0;">Event Log</h2>
+          <button id="close-log" class="btn btn-secondary" style="font-size:0.8rem; padding:4px 10px;">Close</button>
+      </div>
+      <div id="logs-view"></div>
+  </div>
+</div>

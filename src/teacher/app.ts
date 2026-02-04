@@ -37,11 +37,9 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     panel.webview.onDidReceiveMessage(async message => {
         try {
             if (message.command === 'clientReady') {
-                // debug: confirm webview script executed
                 console.log('[teacher] webview clientReady received');
-                // optionally respond or request a fresh list
-                // panel?.webview.postMessage({ command: 'listLogs', data: [] });
             }
+
             if (message.command === 'listLogs') {
                 const files = await storageManager.listLogFiles();
                 panel?.webview.postMessage({ command: 'logList', data: files.map(f => f.label) });
@@ -87,6 +85,96 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     panel?.webview.postMessage({ command: 'error', message: String(err) });
                 }
             }
+
+            // --- NEW: EXPORT LOG FEATURE ---
+            if (message.command === 'exportLog') {
+                const filename: string = message.filename;
+                const format: 'csv' | 'json' = message.format;
+                
+                // 1. Authentication Check
+                let password = sessionPassword;
+                if (!password) {
+                    password = await vscode.window.showInputBox({ 
+                        prompt: `Enter Admin Password to Export ${filename}`, 
+                        password: true 
+                    });
+                    if (!password) {
+                        panel?.webview.postMessage({ command: 'error', message: 'Export cancelled: Password required.' });
+                        return;
+                    }
+                    sessionPassword = password;
+                }
+
+                try {
+                    // 2. Retrieve & Decrypt Data
+                    const files = await storageManager.listLogFiles();
+                    const chosen = files.find(f => f.label === filename);
+                    if(!chosen) throw new Error("File not found on disk");
+
+                    const res = await storageManager.retrieveLogContentWithPassword(password, chosen.uri);
+                    const logData = JSON.parse(res.text);
+
+                    // 3. Format Data
+                    let fileContent = '';
+                    let fileExtension = '';
+
+                    if (format === 'json') {
+                        fileContent = JSON.stringify(logData, null, 2);
+                        fileExtension = 'json';
+                    } else {
+                        // CSV Generation
+                        fileExtension = 'csv';
+                        const header = "Timestamp,EventType,FlightTime(ms),File,PasteLength,Details\n";
+                        const rows = (logData.events || []).map((e: any) => {
+                            // Sanitize fields for CSV (escape commas)
+                            const escape = (s: any) => `"${String(s || '').replace(/"/g, '""')}"`;
+                            
+                            return [
+                                escape(e.time),
+                                escape(e.eventType),
+                                escape(e.flightTime),
+                                escape(e.fileView || e.fileEdit),
+                                escape(e.pasteLength || e.length),
+                                escape(e.text ? e.text.substring(0, 50) + "..." : "") // Truncate code snippets
+                            ].join(',');
+                        });
+                        fileContent = header + rows.join('\n');
+                    }
+
+                    // 4. Show Save Dialog
+                    const saveUri = await vscode.window.showSaveDialog({
+                        defaultUri: vscode.Uri.file(`export-${filename.replace('.log','')}.${fileExtension}`),
+                        filters: format === 'json' ? {'JSON': ['json']} : {'CSV': ['csv']}
+                    });
+
+                    if (saveUri) {
+                        // 5. Write File
+                        await vscode.workspace.fs.writeFile(saveUri, Buffer.from(fileContent, 'utf8'));
+                        
+                        // 6. Audit Logging (Write to a separate audit file)
+                        const auditEntry = `[${new Date().toISOString()}] EXPORT: Instructor exported ${filename} as ${format.toUpperCase()}.\n`;
+                        const workspaceFolders = vscode.workspace.workspaceFolders;
+                        if (workspaceFolders) {
+                            const auditUri = vscode.Uri.joinPath(workspaceFolders[0].uri, '.vscode', 'audit_log.txt');
+                            let currentAudit = '';
+                            try {
+                                const existing = await vscode.workspace.fs.readFile(auditUri);
+                                currentAudit = existing.toString();
+                            } catch {} // File might not exist yet
+                            
+                            await vscode.workspace.fs.writeFile(auditUri, Buffer.from(currentAudit + auditEntry, 'utf8'));
+                        }
+
+                        vscode.window.showInformationMessage(`Successfully exported ${filename} to ${format.toUpperCase()}`);
+                        panel?.webview.postMessage({ command: 'success', message: 'Export complete.' });
+                    }
+
+                } catch (err: any) {
+                    vscode.window.showErrorMessage(`Export Failed: ${err.message}`);
+                    panel?.webview.postMessage({ command: 'error', message: `Export failed: ${err.message}` });
+                }
+            }
+            // -------------------------------
 
             if (message.command === 'analyzeLogs') {
                 const files = await storageManager.listLogFiles();

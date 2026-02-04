@@ -393,7 +393,7 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
         <div class="card">
           <div class="form-group search-container">
             <label>Search Student Logs</label>
-            <input id="log-search-input" type="text" placeholder="Start typing a name (e.g. 'diask')..." autocomplete="off" />
+            <input id="log-search-input" type="text" placeholder="Start typing a name (e.g. 'john')..." autocomplete="off" />
             <div id="log-dropdown" class="dropdown-list"></div>
             <div class="meta" style="margin-top:8px;">
                <span id="log-count">Loading logs...</span>
@@ -455,13 +455,13 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     let logNamesCache = [];
     const defaults = { inactivity: 5, flight: 50, pasteLength: 50 };
     let currentSettings = { ...defaults };
-    let isInitialLoad = true;
 
     // --- DOM Elements ---
     const searchInput = document.getElementById('log-search-input');
     const dropdown = document.getElementById('log-dropdown');
     const logCountLabel = document.getElementById('log-count');
     const refreshBtn = document.getElementById('refresh-logs');
+    const status = document.getElementById('status');
     
     // Dashboard Elements
     const dashboardView = document.getElementById('dashboard-view');
@@ -489,7 +489,12 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
         if (btn) btn.classList.add('active');
     }
     
-    document.getElementById('nav-dashboard').addEventListener('click', () => switchTab('dashboard'));
+    document.getElementById('nav-dashboard').addEventListener('click', () => {
+        switchTab('dashboard');
+        try { dashboardLogName.textContent = 'Analyzing logs...'; } catch (e) {}
+        try { showDashboardLoading(); } catch (e) { /* ignore */ }
+        vscode.postMessage({ command: 'analyzeLogs' });
+    });
     document.getElementById('nav-logs').addEventListener('click', () => { switchTab('logs'); vscode.postMessage({ command: 'listLogs' }); });
     document.getElementById('nav-settings').addEventListener('click', () => switchTab('settings'));
     document.getElementById('btn-goto-logs').addEventListener('click', () => switchTab('logs'));
@@ -699,7 +704,17 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     }
 
     function renderDashboard(data) {
-        const container = document.getElementById('dashboard-container');
+        const container = document.getElementById('dashboard-view');
+        // hide the empty placeholder when rendering dashboard content
+        if (dashboardEmpty) dashboardEmpty.style.display = 'none';
+        // update header to reflect aggregated results
+        try {
+            if (data && typeof data.totalLogs === 'number') {
+                dashboardLogName.textContent = \`Analyzed: \${data.totalLogs} logs\`;
+            } else {
+                dashboardLogName.textContent = 'No log loaded';
+            }
+        } catch (e) {}
         container.innerHTML = '';
         if (!data || !data.metrics) {
             container.innerHTML = '<div class="meta">No data available.</div>';
@@ -783,7 +798,9 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     }
 
     function showDashboardLoading() {
-        const container = document.getElementById('dashboard-container');
+        const container = document.getElementById('dashboard-view');
+        // hide the empty placeholder while loading
+        if (dashboardEmpty) dashboardEmpty.style.display = 'none';
         if (!container) return;
         container.innerHTML = '';
         const card = document.createElement('div');
@@ -796,41 +813,15 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
         container.appendChild(card);
     }
 
-    function renderOptions(filter = '') {
-        select.innerHTML = '';
-        const f = filter.toLowerCase();
-        const filtered = logNamesCache.filter(n => n.toLowerCase().includes(f));
-        if (filtered.length === 0) {
-            select.innerHTML = '<option>No matching logs found</option>';
-            return;
-        }
-        filtered.forEach(name => {
-            const o = document.createElement('option');
-            o.value = name;
-            o.textContent = name;
-            select.appendChild(o);
-        });
-    }
+    // renderOptions removed — dropdown approach is used via renderDropdown
 
     // --- Action Listeners ---
-    document.getElementById('refresh').addEventListener('click', () => {
-        status.textContent = 'Refreshing...';
-        vscode.postMessage({ command: 'listLogs' });
-    });
-    document.getElementById('refreshDashboard').addEventListener('click', () => {
-        status.textContent = 'Analyzing logs...';
+    const refreshDashboardBtn = document.getElementById('refreshDashboard');
+    if (refreshDashboardBtn) refreshDashboardBtn.addEventListener('click', () => {
+        if (status) status.textContent = 'Analyzing logs...';
         showDashboardLoading();
         vscode.postMessage({ command: 'analyzeLogs' });
     });
-    
-    document.getElementById('open').addEventListener('click', () => {
-        const filename = select.value;
-        if (!filename || filename === 'Loading...') return;
-        status.textContent = 'Decrypting ' + filename + '...';
-        vscode.postMessage({ command: 'openLog', filename });
-    });
-
-    search.addEventListener('input', (e) => renderOptions(e.target.value));
 
     document.getElementById('saveSettings').addEventListener('click', () => {
         const settings = {
@@ -855,20 +846,10 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
 
         switch (msg.command) {
             case 'logList':
-                logNamesCache = msg.data.sort().reverse(); 
+                logNamesCache = msg.data.sort().reverse();
                 logCountLabel.textContent = logNamesCache.length + ' logs found';
-                if (isInitialLoad && logNamesCache.length > 0) {
-                    isInitialLoad = false;
-                    const latest = logNamesCache[0];
-                    searchInput.value = latest; 
-                    status.textContent = 'Auto-loading latest log...';
-                    vscode.postMessage({ command: 'openLog', filename: latest });
-                    // On initial load, default to dashboard
-                    switchTab('dashboard');
-                } else if (isInitialLoad) {
-                    isInitialLoad = false;
-                    switchTab('dashboard');
-                }
+                // populate dropdown with the latest list (do not change the user's current tab)
+                renderDropdown(logNamesCache);
                 break;
             case 'logData':
                 renderParsed(msg.data, msg.filename);
@@ -913,27 +894,12 @@ function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): str
     // --- Init ---
     // Ensure UI shows dashboard only and clear unexpected persisted state
     try { switchTab('dashboard'); } catch (e) { /* ignore */ }
+    // hide the default empty placeholder on init so it doesn't overlap loading UI
+    try { if (dashboardEmpty) dashboardEmpty.style.display = 'none'; } catch (e) {}
     if (vscode.setState) try { vscode.setState({ theme: isDark ? 'dark' : 'light' }); } catch (e) { /* ignore */ }
     // Load dashboard with a loading indicator; do not load logs until Logs tab is selected
     showDashboardLoading();
     vscode.postMessage({ command: 'analyzeLogs' });
-    document.getElementById('saveSettings').addEventListener('click', () => {
-        const settings = {
-            inactivityThreshold: parseInt(inactivityInput.value),
-            flightTimeThreshold: parseInt(flightInput.value),
-            pasteLengthThreshold: parseInt(pasteLengthInput.value)
-        };
-        vscode.postMessage({ command: 'saveSettings', settings });
-    });
-
-    document.getElementById('resetSettings').addEventListener('click', () => {
-        inactivityInput.value = defaults.inactivity;
-        flightInput.value = defaults.flight;
-        pasteLengthInput.value = defaults.pasteLength;
-        vscode.postMessage({ command: 'saveSettings', settings: defaults });
-    });
-
-    vscode.postMessage({ command: 'listLogs' });
     vscode.postMessage({ command: 'getSettings' });
 
   </script>

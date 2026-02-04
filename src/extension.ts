@@ -16,7 +16,7 @@ import { flushBuffer } from './flush';
 import { storageManager, state, CONSTANTS } from './state';
 import { isIgnoredPath, formatTimestamp } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
-import { openTeacherView } from './teacherView';
+import { openTeacherView } from './teacher';
 
 import * as path from 'path';
 // define api for testing purposes

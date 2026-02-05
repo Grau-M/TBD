@@ -5,12 +5,17 @@
 
   <div class="card">
     <div class="form-group search-container">
-      <label>Search Student Logs</label>
-      <input id="log-search-input" type="text" placeholder="Start typing a name (e.g. 'john')..." autocomplete="off" />
-      <div id="log-dropdown" class="dropdown-list"></div>
-      <div class="meta" style="margin-top:8px;">
-         <span id="log-count">Loading logs...</span>
-         <button id="refresh-logs" style="background:none; border:none; color:var(--accent); cursor:pointer; margin-left:10px; font-size:0.85rem;">Refresh List</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <label style="margin:0;">Search Student Logs</label>
+        <div class="search-meta">
+          <span id="log-count">Loading logs...</span>
+          <button id="refresh-logs" style="background:none; border:none; color:var(--accent); cursor:pointer; font-size:0.9rem;">Refresh List</button>
+        </div>
+      </div>
+      <div class="input-wrap" style="position:relative;">
+        <input id="log-search-input" class="mt-2" type="text" placeholder="Start typing a name (e.g. 'John')..." autocomplete="off" />
+        <button id="clear-search" class="btn clear-btn" type="button" title="Clear search">✖</button>
+        <div id="log-dropdown" class="dropdown-list"></div>
       </div>
     </div>
   </div>

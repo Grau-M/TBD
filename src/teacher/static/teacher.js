@@ -15,7 +15,7 @@
     // element helpers
     const $ = (id) => document.getElementById(id);
 
-    // DOM refs (may be null if fragment missing)
+    // DOM refs
     const searchInput = $("log-search-input");
     const dropdown = $("log-dropdown");
     const logCountLabel = $("log-count");
@@ -36,42 +36,6 @@
     const settingsMsg = $("settings-msg");
 
     const themeToggle = $("themeToggle");
-
-    // create a small clear button next to the search input if one doesn't exist
-    let clearSearchBtn = $("clear-search");
-    if (!clearSearchBtn && searchInput) {
-      try {
-        clearSearchBtn = document.createElement("button");
-        clearSearchBtn.id = "clear-search";
-        clearSearchBtn.type = "button";
-        clearSearchBtn.className = "btn clear-btn";
-        clearSearchBtn.title = "Clear search";
-        clearSearchBtn.textContent = "✖";
-        // insert after the input
-        if (searchInput.parentNode)
-          searchInput.parentNode.insertBefore(
-            clearSearchBtn,
-            searchInput.nextSibling,
-          );
-        else searchInput.insertAdjacentElement("afterend", clearSearchBtn);
-      } catch (e) {
-        clearSearchBtn = null;
-      }
-    }
-    if (clearSearchBtn) {
-      clearSearchBtn.addEventListener("click", () => {
-        try {
-          if (searchInput) searchInput.value = "";
-          if (dropdown) {
-            renderDropdown(logNamesCache);
-            dropdown.classList.remove("show");
-          }
-          if (searchInput) searchInput.focus();
-        } catch (err) {
-          /* noop */
-        }
-      });
-    }
 
     function switchTab(tabName) {
       document
@@ -95,7 +59,7 @@
       }
     }
 
-    // attach nav buttons defensively
+    // attach nav buttons
     const navDashboard = $("nav-dashboard");
     if (navDashboard)
       navDashboard.addEventListener("click", () => {
@@ -126,8 +90,7 @@
         if (searchInput) searchInput.value = "";
       });
 
-    // theme
-    // Safely try to read persisted state (getState is a function)
+    // theme logic
     let isDark = false;
     try {
       const st =
@@ -190,7 +153,6 @@
     function filterLogs(term) {
       return logNamesCache.filter((n) => {
         const name = n.toLowerCase();
-        // Check for search term AND .log extension
         return name.includes(term) && name.endsWith(".log");
       });
     }
@@ -218,7 +180,7 @@
         !dropdown.contains(e.target)
       )
         dropdown.classList.remove("show");
-      // close any expanded per-file dropdown when clicking outside the per-file section
+
       const filesSection = document.getElementById("per-file-section");
       if (filesSection) {
         const targetIsRow =
@@ -226,7 +188,6 @@
         const targetIsDropdown =
           e.target && e.target.closest && e.target.closest(".file-dropdown");
         if (!targetIsRow && !targetIsDropdown) {
-          // remove open dropdown
           if (expandedFile) {
             const prev = document.querySelector(
               `[data-file-row="${expandedFile}"]`,
@@ -250,7 +211,7 @@
         post("listLogs");
       });
 
-    // render logic
+    // --- RENDER LOGIC ---
     function renderParsedInLogs(parsed, filename) {
       if (logsView) logsView.innerHTML = "";
       if (dashboardEmpty) dashboardEmpty.style.display = "none";
@@ -260,6 +221,7 @@
       let totalEvents = 0,
         flaggedEvents = 0,
         integrityScore = 100;
+
       if (parsed && Array.isArray(parsed.events)) {
         totalEvents = parsed.events.length;
         parsed.events.forEach((e) => {
@@ -270,7 +232,12 @@
                 ? e.length
                 : typeof e.pasteLength === "number"
                   ? e.pasteLength
-                  : null;
+                  : typeof e.pasteCharCount === "number"
+                    ? e.pasteCharCount
+                    : typeof e.text === "string"
+                      ? e.text.length
+                      : null;
+
             if (len !== null && len > currentSettings.pasteLength)
               flagged = true;
             else if (len === null) flagged = true;
@@ -318,7 +285,6 @@
           const h = parsed.sessionHeader;
           const headerDiv = document.createElement("div");
           headerDiv.className = "card";
-
           headerDiv.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
               <div>
@@ -336,7 +302,7 @@
               </div>
             </div>
           `;
-          if (logsView) logsView.appendChild(headerDiv);
+          logsView.appendChild(headerDiv);
 
           const btnCsv = headerDiv.querySelector("#btn-export-csv");
           const btnJson = headerDiv.querySelector("#btn-export-json");
@@ -353,8 +319,28 @@
         }
       }
 
+      // --- RESOLVED CONFLICT AREA ---
       if (logsView && parsed && Array.isArray(parsed.events)) {
         const container = document.createElement("div");
+
+        // Helper to format file paths (From Incoming Branch)
+        const formatFilePath = (p) => {
+          if (!p || typeof p !== "string") return p;
+          const project =
+            (parsed && parsed.sessionHeader && parsed.sessionHeader.project) ||
+            null;
+          if (project) {
+            const idx = p.indexOf(project);
+            if (idx !== -1) {
+              let rel = p.substring(idx + project.length);
+              rel = rel.replace(/^\\+|^\/+/, "");
+              return rel || project;
+            }
+          }
+          const parts = p.split(/\\|\//);
+          return parts[parts.length - 1] || p;
+        };
+
         parsed.events
           .slice()
           .reverse()
@@ -362,13 +348,20 @@
             const row = document.createElement("div");
             let className = "event";
             let flagReason = "";
+
+            // 1. Paste Check (From Your Branch - with pasteCharCount fix)
             if (e.eventType === "paste") {
               const len =
                 typeof e.length === "number"
                   ? e.length
                   : typeof e.pasteLength === "number"
                     ? e.pasteLength
-                    : null;
+                    : typeof e.pasteCharCount === "number"
+                      ? e.pasteCharCount
+                      : typeof e.text === "string"
+                        ? e.text.length
+                        : null;
+
               if (len !== null && len > currentSettings.pasteLength) {
                 className += " paste";
                 flagReason = "(Large Paste)";
@@ -376,6 +369,8 @@
                 className += " paste";
               }
             }
+
+            // 2. Flight Check
             if (
               e.eventType === "input" &&
               e.flightTime &&
@@ -384,17 +379,34 @@
               className += " fast";
               flagReason = "(Fast Input)";
             }
+
             row.className = className;
             let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || "Unknown"}</strong> ${flagReason}</div><span class="meta">${e.time || ""}</span></div>`;
+
+            // 3. Metadata Rendering (From Incoming Branch - using formatFilePath)
             Object.keys(e).forEach((k) => {
-              if (!["eventType", "time"].includes(k))
-                html += `<div class="meta">${k}: ${JSON.stringify(e[k])}</div>`;
+              if (["eventType", "time"].includes(k)) return;
+              let val = e[k];
+              if (
+                k === "fileEdit" ||
+                k === "fileView" ||
+                k === "file" ||
+                k === "filePath"
+              ) {
+                val = formatFilePath(val);
+              }
+              try {
+                if (typeof val === "object") val = JSON.stringify(val);
+              } catch (err) {}
+              html += `<div class="meta">${k}: ${val}</div>`;
             });
+
             row.innerHTML = html;
             container.appendChild(row);
           });
         if (logsView) logsView.appendChild(container);
       }
+      // --- END RESOLVED CONFLICT AREA ---
     }
 
     function renderDashboardFileDropdown(parsed, filename) {
@@ -439,7 +451,11 @@
                 ? e.length
                 : typeof e.pasteLength === "number"
                   ? e.pasteLength
-                  : null;
+                  : typeof e.pasteCharCount === "number"
+                    ? e.pasteCharCount
+                    : typeof e.text === "string"
+                      ? e.text.length
+                      : null;
             if (len === null || len > currentSettings.pasteLength) flagged++;
           }
           if (
@@ -656,7 +672,6 @@
           logNamesCache = (msg.data || []).slice().sort().reverse();
           if (logCountLabel)
             logCountLabel.textContent = logNamesCache.length + " logs found";
-          // Fix: Respect current search term on refresh
           if (searchInput) {
             const term = (searchInput.value || "").toLowerCase();
             renderDropdown(filterLogs(term));

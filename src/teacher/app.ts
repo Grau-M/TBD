@@ -5,6 +5,16 @@ import { getHtml } from './getHtml';
 let panel: vscode.WebviewPanel | undefined;
 let sessionPassword: string | undefined;
 
+// Helper to parse "MM-DD-YYYY hh:mm:ss:SSS" into milliseconds
+function parseLogTime(s: string): number {
+    if (!s) return 0;
+    const [datePart, timePart] = s.split(' ');
+    if (!datePart || !timePart) return 0;
+    const [month, day, year] = datePart.split('-').map(Number);
+    const [hr, min, sec, ms] = timePart.split(':').map(Number);
+    return new Date(year, month - 1, day, hr, min, sec, ms || 0).getTime();
+}
+
 export async function openTeacherView(context: vscode.ExtensionContext) {
     if (panel) {
         panel.reveal(vscode.ViewColumn.One);
@@ -17,7 +27,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         ignoreFocusOut: true
     });
 
-    if (!initialPassword) return; // user cancelled
+    if (!initialPassword) return; 
     sessionPassword = initialPassword;
 
     panel = vscode.window.createWebviewPanel(
@@ -86,27 +96,18 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 }
             }
 
-            // --- NEW: EXPORT LOG FEATURE ---
             if (message.command === 'exportLog') {
                 const filename: string = message.filename;
                 const format: 'csv' | 'json' = message.format;
                 
-                // 1. Authentication Check
                 let password = sessionPassword;
                 if (!password) {
-                    password = await vscode.window.showInputBox({ 
-                        prompt: `Enter Admin Password to Export ${filename}`, 
-                        password: true 
-                    });
-                    if (!password) {
-                        panel?.webview.postMessage({ command: 'error', message: 'Export cancelled: Password required.' });
-                        return;
-                    }
+                    password = await vscode.window.showInputBox({ prompt: `Enter Admin Password to Export ${filename}`, password: true });
+                    if (!password) { panel?.webview.postMessage({ command: 'error', message: 'Export cancelled: Password required.' }); return; }
                     sessionPassword = password;
                 }
 
                 try {
-                    // 2. Retrieve & Decrypt Data
                     const files = await storageManager.listLogFiles();
                     const chosen = files.find(f => f.label === filename);
                     if(!chosen) throw new Error("File not found on disk");
@@ -114,7 +115,6 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     const res = await storageManager.retrieveLogContentWithPassword(password, chosen.uri);
                     const logData = JSON.parse(res.text);
 
-                    // 3. Format Data
                     let fileContent = '';
                     let fileExtension = '';
 
@@ -122,36 +122,30 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                         fileContent = JSON.stringify(logData, null, 2);
                         fileExtension = 'json';
                     } else {
-                        // CSV Generation
                         fileExtension = 'csv';
                         const header = "Timestamp,EventType,FlightTime(ms),File,PasteLength,Details\n";
                         const rows = (logData.events || []).map((e: any) => {
-                            // Sanitize fields for CSV (escape commas)
                             const escape = (s: any) => `"${String(s || '').replace(/"/g, '""')}"`;
-                            
                             return [
                                 escape(e.time),
                                 escape(e.eventType),
                                 escape(e.flightTime),
                                 escape(e.fileView || e.fileEdit),
                                 escape(e.pasteLength || e.length),
-                                escape(e.text ? e.text.substring(0, 50) + "..." : "") // Truncate code snippets
+                                escape(e.text ? e.text.substring(0, 50) + "..." : "")
                             ].join(',');
                         });
                         fileContent = header + rows.join('\n');
                     }
 
-                    // 4. Show Save Dialog
                     const saveUri = await vscode.window.showSaveDialog({
                         defaultUri: vscode.Uri.file(`export-${filename.replace('.log','')}.${fileExtension}`),
                         filters: format === 'json' ? {'JSON': ['json']} : {'CSV': ['csv']}
                     });
 
                     if (saveUri) {
-                        // 5. Write File
                         await vscode.workspace.fs.writeFile(saveUri, Buffer.from(fileContent, 'utf8'));
                         
-                        // 6. Audit Logging (Write to a separate audit file)
                         const auditEntry = `[${new Date().toISOString()}] EXPORT: Instructor exported ${filename} as ${format.toUpperCase()}.\n`;
                         const workspaceFolders = vscode.workspace.workspaceFolders;
                         if (workspaceFolders) {
@@ -160,8 +154,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                             try {
                                 const existing = await vscode.workspace.fs.readFile(auditUri);
                                 currentAudit = existing.toString();
-                            } catch {} // File might not exist yet
-                            
+                            } catch {} 
                             await vscode.workspace.fs.writeFile(auditUri, Buffer.from(currentAudit + auditEntry, 'utf8'));
                         }
 
@@ -174,8 +167,8 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     panel?.webview.postMessage({ command: 'error', message: `Export failed: ${err.message}` });
                 }
             }
-            // -------------------------------
 
+            // --- ANALYZE LOGS (UPDATED FOR TIME CALCULATIONS) ---
             if (message.command === 'analyzeLogs') {
                 const files = await storageManager.listLogFiles();
                 if (!files || files.length === 0) {
@@ -190,7 +183,22 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     sessionPassword = password;
                 }
 
-                const aggregate: any = { totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, pasteLengths: [], partialCount: 0, perFile: [] };
+                // Get current inactivity threshold (default 5 mins)
+                const settings = context.globalState.get('tbdSettings', { inactivityThreshold: 5 });
+                const inactivityMs = (settings.inactivityThreshold || 5) * 60 * 1000;
+
+                const aggregate: any = { 
+                    totalLogs: files.length, 
+                    totalEvents: 0, 
+                    pasteCount: 0, 
+                    deleteCount: 0, 
+                    keystrokeCount: 0, 
+                    pasteLengths: [], 
+                    partialCount: 0, 
+                    totalWallTime: 0,
+                    totalActiveTime: 0,
+                    perFile: [] 
+                };
 
                 for (const f of files) {
                     try {
@@ -207,12 +215,32 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                             } catch (_) { parsed = null; }
                         }
 
-                        const fileStats: any = { name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, avgPasteLength: 0 };
+                        const fileStats: any = { 
+                            name: f.label, 
+                            events: 0, 
+                            paste: 0, 
+                            delete: 0, 
+                            keystrokes: 0, 
+                            avgPasteLength: 0,
+                            activeTime: 0,
+                            wallTime: 0
+                        };
 
-                        if (parsed && Array.isArray(parsed.events)) {
-                            fileStats.events = parsed.events.length;
-                            for (const e of parsed.events) {
+                        if (parsed && Array.isArray(parsed.events) && parsed.events.length > 0) {
+                            const events = parsed.events;
+                            fileStats.events = events.length;
+                            
+                            // Wall Time: End - Start
+                            const firstTime = parseLogTime(events[0].time);
+                            const lastTime = parseLogTime(events[events.length - 1].time);
+                            if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) {
+                                fileStats.wallTime = lastTime - firstTime;
+                            }
+
+                            for (const e of events) {
                                 const t = (e.eventType || '').toString().toLowerCase();
+                                
+                                // Event Counts
                                 if (t === 'paste' || t === 'clipboard' || t === 'pasteevent') {
                                     fileStats.paste++;
                                     const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : (typeof e.text === 'string' ? e.text.length : 0));
@@ -220,12 +248,21 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                                 }
                                 if (t === 'delete' || t === 'deletion' || t === 'backspace') fileStats.delete++;
                                 if (t === 'key' || t === 'keystroke' || t === 'keypress' || t === 'input') fileStats.keystrokes++;
+
+                                // Active Time Calculation
+                                // We sum flightTime (time since last event) ONLY if it's less than threshold
+                                const flight = parseInt(e.flightTime || '0');
+                                if (flight > 0 && flight < inactivityMs) {
+                                    fileStats.activeTime += flight;
+                                }
                             }
 
                             aggregate.totalEvents += fileStats.events;
                             aggregate.pasteCount += fileStats.paste;
                             aggregate.deleteCount += fileStats.delete;
                             aggregate.keystrokeCount += fileStats.keystrokes;
+                            aggregate.totalWallTime += fileStats.wallTime;
+                            aggregate.totalActiveTime += fileStats.activeTime;
                         }
 
                         aggregate.perFile.push(fileStats);
@@ -243,7 +280,12 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 let score = (pasteRatio * 0.6 + normalizedPasteLen * 0.35 + deleteRatio * 0.05) * 100;
                 score = Math.max(0, Math.min(100, Math.round(score)));
 
-                aggregate.metrics = { pasteRatio: Math.round(pasteRatio * 1000) / 10, deleteRatio: Math.round(deleteRatio * 1000) / 10, avgPasteLength: Math.round(avgPasteLength), aiProbability: score };
+                aggregate.metrics = { 
+                    pasteRatio: Math.round(pasteRatio * 1000) / 10, 
+                    deleteRatio: Math.round(deleteRatio * 1000) / 10, 
+                    avgPasteLength: Math.round(avgPasteLength), 
+                    aiProbability: score 
+                };
 
                 panel?.webview.postMessage({ command: 'dashboardData', data: aggregate });
             }

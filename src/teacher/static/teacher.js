@@ -327,7 +327,66 @@
         if (e.eventType === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) flagged++;
       });
       const score = total>0? Math.max(0, Math.round((1 - (flagged/total)) * 100)) : 100;
-      dropdown.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><strong>${filename}</strong><div class='meta'>${total} events</div></div><div style='text-align:right'><div style='font-weight:700'>${score}%</div><div class='meta'>${flagged} flagged</div></div></div>`;
+      // color based on score thresholds
+      let scoreColor = '#10b981';
+      if (score < 85) scoreColor = '#f59e0b';
+      if (score < 50) scoreColor = '#ef4444';
+
+      dropdown.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:6px; height:72px; background:${scoreColor}; border-radius:6px 0 0 6px;"></div>
+            <div style="padding:8px 12px;">
+              <div style="font-size:2rem; font-weight:700; color:${scoreColor};">${score}%</div>
+              <div class="meta">Integrity Score</div>
+            </div>
+          </div>
+          <div style="text-align:right; min-width:140px;">
+            <div style="font-weight:700; font-size:1.2rem;">${flagged} / ${total}</div>
+            <div class="meta">Flagged Events</div>
+          </div>
+        </div>
+        <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
+      `;
+
+      // compute specific affected factors for this file
+      try {
+        const affected = new Set();
+        const getPasteLen = (ev) => {
+          if (!ev) return null;
+          if (typeof ev.pasteCharCount === 'number') return ev.pasteCharCount;
+          if (typeof ev.pasteLength === 'number') return ev.pasteLength;
+          if (typeof ev.length === 'number') return ev.length;
+          return null;
+        };
+        if (parsed && Array.isArray(parsed.events)) {
+          parsed.events.forEach(ev => {
+            if (!ev || !ev.eventType) return;
+            const et = ev.eventType;
+            if (et === 'input' && ev.flightTime && parseInt(ev.flightTime) < currentSettings.flight) affected.add(`Fast Typing (< ${currentSettings.flight}ms)`);
+            if (et === 'paste' || et === 'ai-paste' || et === 'replace' || et === 'ai-replace') {
+              const plen = getPasteLen(ev);
+              if (plen === null || plen > currentSettings.pasteLength) affected.add(`Suspicious Pastes (> ${currentSettings.pasteLength} chars)`);
+            }
+            if (et.startsWith('ai-') || et === 'ai-paste' || et === 'ai-replace' || et === 'ai-delete') affected.add('AI-assisted edits');
+          });
+        }
+
+        let affectedHtml = '';
+        if (affected.size === 0) affectedHtml = '<div class="meta">No notable factors detected.</div>';
+        else {
+          const items = Array.from(affected).map(item => {
+            if (item.startsWith('Suspicious')) return `<strong style='color:#f59e0b'>${item}</strong>`;
+            if (item.startsWith('Fast Typing')) return `<strong style='color:#8b5cf6'>${item}</strong>`;
+            if (item.includes('AI')) return `<strong style='color:#60a5fa'>${item}</strong>`;
+            return `<strong>${item}</strong>`;
+          });
+          affectedHtml = `<div class="meta">Score affected by ${items.join(' and ')}.</div>`;
+        }
+        dropdown.innerHTML += affectedHtml;
+      } catch (err) {
+        dropdown.innerHTML += `<div class="meta">Score factors unavailable.</div>`;
+      }
       row.parentNode.insertBefore(dropdown, row.nextSibling);
     }
     function renderDashboard(data) {

@@ -55,6 +55,10 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     input[type="text"], input[type="number"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; }
     input:focus { outline: 2px solid var(--accent); border-color: transparent; }
     .search-container { position: relative; }
+    .search-container input[type="text"] { padding-right: 40px; }
+    .search-container .clear-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 0.95rem; padding: 4px; }
+    .search-meta { display:flex; gap:8px; align-items:center; font-size:0.95rem; color:var(--muted); }
+    .search-meta #log-count { color: var(--muted); font-weight:600; }
     .dropdown-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 8px 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-height: 250px; overflow-y: auto; z-index: 50; display: none; margin-top: 4px; }
     .dropdown-list.show { display: block; }
     .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 0.9rem; color: var(--fg); }

@@ -102,7 +102,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     sessionPassword = password;
                 }
 
-                const aggregate: any = { totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, pasteLengths: [], partialCount: 0, perFile: [] };
+                            const aggregate: any = { totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, pasteLengths: [], partialCount: 0, perFile: [], aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0 };
 
                 for (const f of files) {
                     try {
@@ -119,7 +119,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                             } catch (_) { parsed = null; }
                         }
 
-                        const fileStats: any = { name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, avgPasteLength: 0 };
+                        const fileStats: any = { name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, avgPasteLength: 0, aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0 };
 
                         if (parsed && Array.isArray(parsed.events)) {
                             fileStats.events = parsed.events.length;
@@ -129,6 +129,19 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                                     fileStats.paste++;
                                     const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : (typeof e.text === 'string' ? e.text.length : 0));
                                     if (len && len > 0) aggregate.pasteLengths.push(len);
+                                }
+                                // AI-specific events (aggregate + per-file)
+                                if (t.startsWith('ai-') || t === 'ai' || t === 'ai-assist') {
+                                    aggregate.aiCount = (aggregate.aiCount || 0) + 1;
+                                    fileStats.aiCount = (fileStats.aiCount || 0) + 1;
+                                    // treat ai-paste/replace as paste-like
+                                    if (t === 'ai-paste' || t === 'ai-replace') {
+                                        aggregate.aiPasteCount = (aggregate.aiPasteCount || 0) + 1;
+                                        fileStats.aiPasteCount = (fileStats.aiPasteCount || 0) + 1;
+                                        const alen = (typeof e.pasteCharCount === 'number') ? e.pasteCharCount : ((typeof e.pasteLength === 'number') ? e.pasteLength : ((typeof e.length === 'number') ? e.length : (typeof e.text === 'string' ? e.text.length : 0)));
+                                        if (alen && alen > 0) { aggregate.aiPasteLengths.push(alen); fileStats.aiPasteLengths.push(alen); }
+                                    }
+                                    if (e.possibleAiDetection) { aggregate.aiFlagCount = (aggregate.aiFlagCount || 0) + 1; fileStats.aiFlagCount = (fileStats.aiFlagCount || 0) + 1; }
                                 }
                                 if (t === 'delete' || t === 'deletion' || t === 'backspace') fileStats.delete++;
                                 if (t === 'key' || t === 'keystroke' || t === 'keypress' || t === 'input') fileStats.keystrokes++;
@@ -151,17 +164,67 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 const deleteRatio = Math.min(1, aggregate.deleteCount / total);
                 const avgPasteLength = aggregate.pasteLengths.length ? (aggregate.pasteLengths.reduce((a: number, b: number) => a + b, 0) / aggregate.pasteLengths.length) : 0;
 
-                const normalizedPasteLen = Math.min(1, avgPasteLength / 1000);
-                let score = (pasteRatio * 0.6 + normalizedPasteLen * 0.35 + deleteRatio * 0.05) * 100;
-                score = Math.max(0, Math.min(100, Math.round(score)));
+                // New AI probability algorithm
+                // Signals:
+                // - aiEventRatio: fraction of events that are AI-labeled
+                // - aiPasteRatio: fraction of AI events that are paste-like (ai-paste / ai events)
+                // - avgAIPasteLen: average length of AI-generated pastes (normalized)
+                // - aiFlagRate: fraction of AI events containing a possibleAiDetection flag
+                const aiEventRatio = Math.min(1, (aggregate.aiCount || 0) / total);
+                const aiPasteRatio = Math.min(1, (aggregate.aiPasteCount || 0) / Math.max(1, (aggregate.aiCount || 0)));
+                const avgAIPasteLen = aggregate.aiPasteLengths.length ? (aggregate.aiPasteLengths.reduce((a: number, b: number) => a + b, 0) / aggregate.aiPasteLengths.length) : 0;
+                const avgAIPasteLenNorm = Math.min(1, avgAIPasteLen / Math.max(100, avgPasteLength || 100));
+                const aiFlagRate = Math.min(1, (aggregate.aiFlagCount || 0) / Math.max(1, (aggregate.aiCount || 0)));
 
-                aggregate.metrics = { pasteRatio: Math.round(pasteRatio * 1000) / 10, deleteRatio: Math.round(deleteRatio * 1000) / 10, avgPasteLength: Math.round(avgPasteLength), aiProbability: score };
+                // Weighted combination (tunable): prioritize aiEventRatio, then aiPasteRatio, then avgAIPasteLen, then flags
+                const aiScoreRaw = (aiEventRatio * 0.6) + (aiPasteRatio * 0.2) + (avgAIPasteLenNorm * 0.15) + (aiFlagRate * 0.05);
+                let aiProbability = Math.max(0, Math.min(100, Math.round(aiScoreRaw * 100)));
+
+                // Keep previous heuristics available as other metrics
+                aggregate.metrics = {
+                    pasteRatio: Math.round(pasteRatio * 1000) / 10,
+                    deleteRatio: Math.round(deleteRatio * 1000) / 10,
+                    avgPasteLength: Math.round(avgPasteLength),
+                    aiProbability,
+                    _debug: {
+                        aiEventRatio: +(aiEventRatio.toFixed(4)),
+                        aiPasteRatio: +(aiPasteRatio.toFixed(4)),
+                        avgAIPasteLen: Math.round(avgAIPasteLen),
+                        aiFlagRate: +(aiFlagRate.toFixed(4))
+                    }
+                };
+
+                // Compute per-file AI probability using same heuristics as aggregate
+                try {
+                    for (const fs of aggregate.perFile) {
+                        if (!fs || fs.error) continue;
+                        const totalF = fs.events || 1;
+                        const aiEventRatioF = Math.min(1, (fs.aiCount || 0) / totalF);
+                        const aiPasteRatioF = Math.min(1, (fs.aiPasteCount || 0) / Math.max(1, (fs.aiCount || 0)));
+                        const avgAIPasteLenF = (fs.aiPasteLengths && fs.aiPasteLengths.length) ? (fs.aiPasteLengths.reduce((a: number, b: number) => a + b, 0) / fs.aiPasteLengths.length) : 0;
+                        const avgAIPasteLenNormF = Math.min(1, avgAIPasteLenF / Math.max(100, avgPasteLength || 100));
+                        const aiFlagRateF = Math.min(1, (fs.aiFlagCount || 0) / Math.max(1, (fs.aiCount || 0)));
+                        const aiScoreRawF = (aiEventRatioF * 0.6) + (aiPasteRatioF * 0.2) + (avgAIPasteLenNormF * 0.15) + (aiFlagRateF * 0.05);
+                        const aiProbF = Math.max(0, Math.min(100, Math.round(aiScoreRawF * 100)));
+                        fs.aiProbability = aiProbF;
+                        fs.metrics = fs.metrics || {};
+                        fs.metrics.aiProbability = aiProbF;
+                        fs.metrics._debug = {
+                            aiEventRatio: +(aiEventRatioF.toFixed(4)),
+                            aiPasteRatio: +(aiPasteRatioF.toFixed(4)),
+                            avgAIPasteLen: Math.round(avgAIPasteLenF),
+                            aiFlagRate: +(aiFlagRateF.toFixed(4))
+                        };
+                    }
+                } catch (e) {
+                    // ignore per-file metric failures
+                }
 
                 panel?.webview.postMessage({ command: 'dashboardData', data: aggregate });
             }
 
             if (message.command === 'getSettings') {
-                const current = context.globalState.get('tbdSettings', { inactivityThreshold: 5, flightTimeThreshold: 50, pasteLengthThreshold: 50 });
+                const current = context.globalState.get('tbdSettings', { inactivityThreshold: 5, flightTimeThreshold: 50, pasteLengthThreshold: 50, flagAiEvents: true });
                 panel?.webview.postMessage({ command: 'loadSettings', settings: current });
             }
 

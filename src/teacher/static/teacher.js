@@ -33,6 +33,7 @@
     const inactivityInput = $('inactivityInput');
     const flightInput = $('flightInput');
     const pasteLengthInput = $('pasteLengthInput');
+    const flagAiCheckbox = $('flagAiEvents');
     const settingsMsg = $('settings-msg');
 
     const themeToggle = $('themeToggle');
@@ -176,16 +177,21 @@
       if (logsLogName) logsLogName.textContent = 'Event Log: ' + filename;
 
       let totalEvents = 0, flaggedEvents = 0, integrityScore = 100;
-      if (parsed && Array.isArray(parsed.events)) {
+          if (parsed && Array.isArray(parsed.events)) {
         totalEvents = parsed.events.length;
         parsed.events.forEach(e => {
           let flagged = false;
-          if (e.eventType === 'paste') {
-            const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : null);
-            if (len !== null && len > currentSettings.pasteLength) flagged = true;
-            else if (len === null) flagged = true;
+          const et = (e.eventType || '').toString().toLowerCase();
+          // prefer pasteCharCount when available
+          const len = (typeof e.pasteCharCount === 'number') ? e.pasteCharCount : ((typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : null));
+          if (et === 'paste' || et === 'clipboard' || et === 'pasteevent') {
+            if (len === null || len > currentSettings.pasteLength) flagged = true;
           }
-          if (e.eventType === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) flagged = true;
+          if (et === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) flagged = true;
+          // flag AI-detected events if the setting is enabled
+          try {
+            if (currentSettings.flagAiEvents && (et.startsWith('ai-') || e.possibleAiDetection)) flagged = true;
+          } catch (err) {}
           if (flagged) flaggedEvents++;
         });
         if (totalEvents > 0) {
@@ -246,12 +252,14 @@
           const row = document.createElement('div');
           let className = 'event';
           let flagReason = '';
-          if (e.eventType === 'paste') {
-            const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : null);
-            if (len !== null && len > currentSettings.pasteLength) { className += ' paste'; flagReason = '(Large Paste)'; }
-            else if (len === null) { className += ' paste'; }
+          const et = (e.eventType || '').toString().toLowerCase();
+          const len2 = (typeof e.pasteCharCount === 'number') ? e.pasteCharCount : ((typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : null));
+          if (et === 'paste' || et === 'clipboard' || et === 'pasteevent') {
+            if (len2 !== null && len2 > currentSettings.pasteLength) { className += ' paste'; flagReason = '(Large Paste)'; }
+            else if (len2 === null) { className += ' paste'; }
           }
-          if (e.eventType === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) { className += ' fast'; flagReason = '(Fast Input)'; }
+          if (et === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) { className += ' fast'; flagReason = '(Fast Input)'; }
+          try { if (currentSettings.flagAiEvents && (et.startsWith('ai-') || e.possibleAiDetection)) { className += ' ai'; flagReason = '(AI-detected)'; } } catch (err) {}
           row.className = className;
           let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || 'Unknown'}</strong> ${flagReason}</div><span class="meta">${e.time || ''}</span></div>`;
           // Helper to format file paths relative to the session workspace if possible
@@ -320,11 +328,16 @@
       let total = (parsed.events && parsed.events.length) || 0;
       let flagged = 0;
       if (parsed.events) parsed.events.forEach(e => {
-        if (e.eventType === 'paste') {
-          const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : null);
+        const et = (e.eventType || '').toString().toLowerCase();
+        const len = (typeof e.pasteCharCount === 'number') ? e.pasteCharCount : ((typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : null));
+        if (et === 'paste' || et === 'clipboard' || et === 'pasteevent') {
           if (len === null || len > currentSettings.pasteLength) flagged++;
         }
-        if (e.eventType === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) flagged++;
+        if (et === 'input' && e.flightTime && parseInt(e.flightTime) < currentSettings.flight) flagged++;
+        // flag AI-detected events when the setting is enabled
+        try {
+          if (currentSettings.flagAiEvents && (et.startsWith('ai-') || e.possibleAiDetection)) flagged++;
+        } catch (err) {}
       });
       const score = total>0? Math.max(0, Math.round((1 - (flagged/total)) * 100)) : 100;
       // color based on score thresholds
@@ -359,16 +372,17 @@
           if (typeof ev.length === 'number') return ev.length;
           return null;
         };
-        if (parsed && Array.isArray(parsed.events)) {
+            if (parsed && Array.isArray(parsed.events)) {
           parsed.events.forEach(ev => {
             if (!ev || !ev.eventType) return;
-            const et = ev.eventType;
+            const et = (ev.eventType || '').toString().toLowerCase();
             if (et === 'input' && ev.flightTime && parseInt(ev.flightTime) < currentSettings.flight) affected.add(`Fast Typing (< ${currentSettings.flight}ms)`);
             if (et === 'paste' || et === 'ai-paste' || et === 'replace' || et === 'ai-replace') {
               const plen = getPasteLen(ev);
               if (plen === null || plen > currentSettings.pasteLength) affected.add(`Suspicious Pastes (> ${currentSettings.pasteLength} chars)`);
             }
-            if (et.startsWith('ai-') || et === 'ai-paste' || et === 'ai-replace' || et === 'ai-delete') affected.add('AI-assisted edits');
+            // Only list AI-assisted edits as affecting factors if flagging of AI events is enabled
+            if (currentSettings.flagAiEvents && (et.startsWith('ai-') || et === 'ai-paste' || et === 'ai-replace' || et === 'ai-delete' || ev.possibleAiDetection)) affected.add('AI-assisted edits');
           });
         }
 
@@ -414,16 +428,27 @@
         const filesCard = document.createElement('div'); filesCard.className='card'; filesCard.style.marginTop='12px'; filesCard.innerHTML = '<h2>Per-file breakdown</h2>';
         const filesSection = document.createElement('div'); filesSection.id = 'per-file-section'; filesSection.style.marginTop = '8px';
         // header row
-        const header = document.createElement('div'); header.style.display='grid'; header.style.gridTemplateColumns='2fr 1fr 1fr 1fr'; header.style.fontWeight='700'; header.style.gap='8px'; header.innerHTML = '<div>File</div><div>Events</div><div>Paste</div><div>Delete</div>';
+        const header = document.createElement('div'); header.style.display='grid'; header.style.gridTemplateColumns='2fr 1fr 1fr 1fr 1fr'; header.style.fontWeight='700'; header.style.gap='8px'; header.innerHTML = '<div>File</div><div>Events</div><div>Paste</div><div>AI Probability</div><div>Delete</div>';
         filesSection.appendChild(header);
         (data.perFile || []).forEach(f => {
-          const row = document.createElement('div'); row.style.display='grid'; row.style.gridTemplateColumns='2fr 1fr 1fr 1fr'; row.style.gap='8px'; row.style.padding='8px 4px'; row.setAttribute('data-file-row', f.name || '');
+          const row = document.createElement('div'); row.style.display='grid'; row.style.gridTemplateColumns='2fr 1fr 1fr 1fr 1fr'; row.style.gap='8px'; row.style.padding='8px 4px'; row.setAttribute('data-file-row', f.name || '');
           row.style.cursor = 'pointer';
           const name = document.createElement('div'); name.textContent = f.name || (f.error ? '(failed)' : 'unknown');
           const ev = document.createElement('div'); ev.textContent = f.events ? String(f.events) : '-';
           const p = document.createElement('div'); p.textContent = f.events ? (Math.round((f.paste||0)/Math.max(1,f.events)*1000)/10) + '%' : (f.error ? 'err' : '-');
+          // AI probability value (provided by host as f.aiProbability or f.metrics.aiProbability)
+          const aiVal = (typeof f.aiProbability === 'number') ? f.aiProbability : (f.metrics && typeof f.metrics.aiProbability === 'number' ? f.metrics.aiProbability : null);
+          const ai = document.createElement('div'); ai.textContent = (aiVal === null || aiVal === undefined) ? (f.error ? 'err' : '-') : (String(aiVal) + '%');
+          // color tiers: low=green, medium=amber, high=red
+          try {
+            if (aiVal !== null && aiVal !== undefined) {
+              if (aiVal >= 75) ai.style.color = '#ef4444';
+              else if (aiVal >= 40) ai.style.color = '#f59e0b';
+              else ai.style.color = '#10b981';
+            }
+          } catch (err) {}
           const d = document.createElement('div'); d.textContent = f.events ? (Math.round((f.delete||0)/Math.max(1,f.events)*1000)/10) + '%' : (f.error ? 'err' : '-');
-          row.appendChild(name); row.appendChild(ev); row.appendChild(p); row.appendChild(d);
+          row.appendChild(name); row.appendChild(ev); row.appendChild(p); row.appendChild(ai); row.appendChild(d);
           // click to expand per-file dropdown in dashboard
           row.addEventListener('click', (evClick) => {
             evClick.stopPropagation();
@@ -454,8 +479,16 @@
 
     // actions
     const refreshDashboardBtn = $('refreshDashboard'); if (refreshDashboardBtn) refreshDashboardBtn.addEventListener('click', () => { if (status) status.textContent='Analyzing logs...'; showDashboardLoading(); post('analyzeLogs'); });
-    const saveSettingsBtn = $('saveSettings'); if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', () => { const settings = { inactivityThreshold: parseInt(inactivityInput?.value||defaults.inactivity), flightTimeThreshold: parseInt(flightInput?.value||defaults.flight), pasteLengthThreshold: parseInt(pasteLengthInput?.value||defaults.pasteLength) }; post('saveSettings', { settings }); });
-    const resetSettingsBtn = $('resetSettings'); if (resetSettingsBtn) resetSettingsBtn.addEventListener('click', () => { if (inactivityInput) inactivityInput.value = defaults.inactivity; if (flightInput) flightInput.value = defaults.flight; if (pasteLengthInput) pasteLengthInput.value = defaults.pasteLength; post('saveSettings', { settings: defaults }); });
+    const saveSettingsBtn = $('saveSettings'); if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', () => {
+      const settings = {
+        inactivityThreshold: parseInt(inactivityInput?.value||defaults.inactivity),
+        flightTimeThreshold: parseInt(flightInput?.value||defaults.flight),
+        pasteLengthThreshold: parseInt(pasteLengthInput?.value||defaults.pasteLength),
+        flagAiEvents: !!(flagAiCheckbox && flagAiCheckbox.checked)
+      };
+      post('saveSettings', { settings });
+    });
+    const resetSettingsBtn = $('resetSettings'); if (resetSettingsBtn) resetSettingsBtn.addEventListener('click', () => { if (inactivityInput) inactivityInput.value = defaults.inactivity; if (flightInput) flightInput.value = defaults.flight; if (pasteLengthInput) pasteLengthInput.value = defaults.pasteLength; if (flagAiCheckbox) flagAiCheckbox.checked = true; post('saveSettings', { settings: { inactivityThreshold: defaults.inactivity, flightTimeThreshold: defaults.flight, pasteLengthThreshold: defaults.pasteLength, flagAiEvents: true } }); });
 
     // messages from extension
     window.addEventListener('message', event => {
@@ -481,8 +514,25 @@
           if (status) status.textContent = 'Dashboard updated';
           break;
         case 'rawData': if (logsViewerContainer) logsViewerContainer.style.display='block'; if (logsView) logsView.innerHTML = '<pre>' + msg.data + '</pre>'; if (dashboardView) dashboardView.innerHTML = '<div class="card"><h2>Raw Data Only</h2><p class="meta">Score unavailable.</p></div>'; if (status) status.textContent = 'Loaded ' + msg.filename; break;
-        case 'loadSettings': if (msg.settings) { currentSettings = { inactivity: msg.settings.inactivityThreshold || defaults.inactivity, flight: msg.settings.flightTimeThreshold || defaults.flight, pasteLength: msg.settings.pasteLengthThreshold || defaults.pasteLength }; if (inactivityInput) inactivityInput.value = currentSettings.inactivity; if (flightInput) flightInput.value = currentSettings.flight; if (pasteLengthInput) pasteLengthInput.value = currentSettings.pasteLength; } break;
-        case 'settingsSaved': if (inactivityInput) currentSettings.inactivity = parseInt(inactivityInput.value); if (flightInput) currentSettings.flight = parseInt(flightInput.value); if (pasteLengthInput) currentSettings.pasteLength = parseInt(pasteLengthInput.value); if (settingsMsg) { settingsMsg.textContent = 'Settings saved successfully!'; setTimeout(()=>settingsMsg.textContent='',3000); } break;
+        case 'loadSettings': if (msg.settings) {
+            currentSettings = {
+              inactivity: msg.settings.inactivityThreshold || defaults.inactivity,
+              flight: msg.settings.flightTimeThreshold || defaults.flight,
+              pasteLength: msg.settings.pasteLengthThreshold || defaults.pasteLength,
+              flagAiEvents: (typeof msg.settings.flagAiEvents === 'boolean') ? msg.settings.flagAiEvents : true
+            };
+            if (inactivityInput) inactivityInput.value = currentSettings.inactivity;
+            if (flightInput) flightInput.value = currentSettings.flight;
+            if (pasteLengthInput) pasteLengthInput.value = currentSettings.pasteLength;
+            if (flagAiCheckbox) flagAiCheckbox.checked = !!currentSettings.flagAiEvents;
+          } break;
+        case 'settingsSaved':
+          if (inactivityInput) currentSettings.inactivity = parseInt(inactivityInput.value);
+          if (flightInput) currentSettings.flight = parseInt(flightInput.value);
+          if (pasteLengthInput) currentSettings.pasteLength = parseInt(pasteLengthInput.value);
+          if (flagAiCheckbox) currentSettings.flagAiEvents = !!flagAiCheckbox.checked;
+          if (settingsMsg) { settingsMsg.textContent = 'Settings saved successfully!'; setTimeout(()=>settingsMsg.textContent='',3000); }
+          break;
         case 'error': if (status) status.textContent = 'Error: ' + (msg.message || ''); break;
       }
     });

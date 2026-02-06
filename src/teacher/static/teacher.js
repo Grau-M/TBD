@@ -10,6 +10,65 @@
   let requestedDashboardFile = null; // filename requested to show in dashboard per-file dropdown
   let expandedFile = null; // filename currently expanded in dashboard
 
+  // Helper: Format milliseconds into human readable string
+  function formatDuration(ms) {
+    if (!ms || ms < 0) return "0m";
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  }
+
+  // Helper: Parse Log Timestamp "Feb-04-2026 17:51:19:284 EST" -> timestamp
+  function parseLogTime(timeStr) {
+    if (!timeStr) return null;
+    // Remove time zone suffix if present (e.g. " EST")
+    const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
+    const parts = cleanStr.split(" ");
+    if (parts.length < 2) return null;
+
+    const datePart = parts[0]; // "Feb-04-2026"
+    const timePart = parts[1]; // "17:51:19:284"
+
+    // Parse Month-Day-Year
+    const dateSub = datePart.split("-");
+    if (dateSub.length < 3) return null;
+
+    const monthStr = dateSub[0];
+    const months = {
+      Jan: 0,
+      Feb: 1,
+      Mar: 2,
+      Apr: 3,
+      May: 4,
+      Jun: 5,
+      Jul: 6,
+      Aug: 7,
+      Sep: 8,
+      Oct: 9,
+      Nov: 10,
+      Dec: 11,
+    };
+    const month =
+      months[monthStr] !== undefined
+        ? months[monthStr]
+        : parseInt(monthStr) - 1;
+    const day = parseInt(dateSub[1]);
+    const year = parseInt(dateSub[2]);
+
+    // Parse HH:MM:SS:MS
+    const timeSub = timePart.split(":");
+    const hr = parseInt(timeSub[0]);
+    const min = parseInt(timeSub[1]);
+    const sec = parseInt(timeSub[2]);
+    const ms = timeSub[3] ? parseInt(timeSub[3]) : 0;
+
+    return new Date(year, month, day, hr, min, sec, ms).getTime();
+  }
+
   // wait for DOM to be ready
   window.addEventListener("DOMContentLoaded", () => {
     // element helpers
@@ -319,11 +378,10 @@
         }
       }
 
-      // --- RESOLVED CONFLICT AREA ---
       if (logsView && parsed && Array.isArray(parsed.events)) {
         const container = document.createElement("div");
 
-        // Helper to format file paths (From Incoming Branch)
+        // Helper to format file paths
         const formatFilePath = (p) => {
           if (!p || typeof p !== "string") return p;
           const project =
@@ -341,72 +399,104 @@
           return parts[parts.length - 1] || p;
         };
 
-        parsed.events
-          .slice()
-          .reverse()
-          .forEach((e) => {
-            const row = document.createElement("div");
-            let className = "event";
-            let flagReason = "";
+        const inactivityLimitMs = (currentSettings.inactivity || 5) * 60 * 1000;
 
-            // 1. Paste Check (From Your Branch - with pasteCharCount fix)
-            if (e.eventType === "paste") {
-              const len =
-                typeof e.length === "number"
-                  ? e.length
-                  : typeof e.pasteLength === "number"
-                    ? e.pasteLength
-                    : typeof e.pasteCharCount === "number"
-                      ? e.pasteCharCount
-                      : typeof e.text === "string"
-                        ? e.text.length
-                        : null;
+        // We need to process chronologically to check gaps, but display reversed (newest first).
+        // Strategy: Process normal order, build row list, then reverse and append.
+        const events = parsed.events;
+        const rowElements = [];
 
-              if (len !== null && len > currentSettings.pasteLength) {
-                className += " paste";
-                flagReason = "(Large Paste)";
-              } else if (len === null) {
-                className += " paste";
-              }
+        let previousTime = null;
+
+        for (let i = 0; i < events.length; i++) {
+          const e = events[i];
+          const row = document.createElement("div");
+          let className = "event";
+          let flagReason = "";
+
+          // --- INACTIVITY CHECK ---
+          const currentTime = parseLogTime(e.time);
+          if (previousTime !== null && currentTime !== null) {
+            const gap = currentTime - previousTime;
+            if (gap > inactivityLimitMs) {
+              // Create a separate ALERT ROW for the inactivity gap
+              const gapRow = document.createElement("div");
+              gapRow.className = "event";
+              gapRow.style.borderLeft = "4px solid #ef4444";
+              gapRow.style.backgroundColor = "rgba(239, 68, 68, 0.1)"; // Light red bg
+              gapRow.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <strong style="color:#ef4444">⚠️ Major Focus Away Time</strong>
+                            <span class="meta" style="color:#ef4444; font-weight:bold;">${formatDuration(gap)}</span>
+                        </div>
+                        <div class="meta">Student was inactive for > ${currentSettings.inactivity} mins.</div>
+                    `;
+              rowElements.push(gapRow);
             }
+          }
+          if (currentTime) previousTime = currentTime;
+          // ------------------------
 
-            // 2. Flight Check
+          // 1. Paste Check
+          if (e.eventType === "paste") {
+            const len =
+              typeof e.length === "number"
+                ? e.length
+                : typeof e.pasteLength === "number"
+                  ? e.pasteLength
+                  : typeof e.pasteCharCount === "number"
+                    ? e.pasteCharCount
+                    : typeof e.text === "string"
+                      ? e.text.length
+                      : null;
+
+            if (len !== null && len > currentSettings.pasteLength) {
+              className += " paste";
+              flagReason = "(Large Paste)";
+            } else if (len === null) {
+              className += " paste";
+            }
+          }
+
+          // 2. Flight Check
+          if (
+            e.eventType === "input" &&
+            e.flightTime &&
+            parseInt(e.flightTime) < currentSettings.flight
+          ) {
+            className += " fast";
+            flagReason = "(Fast Input)";
+          }
+
+          row.className = className;
+          let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || "Unknown"}</strong> ${flagReason}</div><span class="meta">${e.time || ""}</span></div>`;
+
+          // 3. Metadata Rendering
+          Object.keys(e).forEach((k) => {
+            if (["eventType", "time"].includes(k)) return;
+            let val = e[k];
             if (
-              e.eventType === "input" &&
-              e.flightTime &&
-              parseInt(e.flightTime) < currentSettings.flight
+              k === "fileEdit" ||
+              k === "fileView" ||
+              k === "file" ||
+              k === "filePath"
             ) {
-              className += " fast";
-              flagReason = "(Fast Input)";
+              val = formatFilePath(val);
             }
-
-            row.className = className;
-            let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || "Unknown"}</strong> ${flagReason}</div><span class="meta">${e.time || ""}</span></div>`;
-
-            // 3. Metadata Rendering (From Incoming Branch - using formatFilePath)
-            Object.keys(e).forEach((k) => {
-              if (["eventType", "time"].includes(k)) return;
-              let val = e[k];
-              if (
-                k === "fileEdit" ||
-                k === "fileView" ||
-                k === "file" ||
-                k === "filePath"
-              ) {
-                val = formatFilePath(val);
-              }
-              try {
-                if (typeof val === "object") val = JSON.stringify(val);
-              } catch (err) {}
-              html += `<div class="meta">${k}: ${val}</div>`;
-            });
-
-            row.innerHTML = html;
-            container.appendChild(row);
+            try {
+              if (typeof val === "object") val = JSON.stringify(val);
+            } catch (err) {}
+            html += `<div class="meta">${k}: ${val}</div>`;
           });
+
+          row.innerHTML = html;
+          rowElements.push(row);
+        }
+
+        // Display Newest First (Reverse the chronological list we just built)
+        rowElements.reverse().forEach((r) => container.appendChild(r));
         if (logsView) logsView.appendChild(container);
       }
-      // --- END RESOLVED CONFLICT AREA ---
     }
 
     function renderDashboardFileDropdown(parsed, filename) {
@@ -468,107 +558,6 @@
       const score =
         total > 0 ? Math.max(0, Math.round((1 - flagged / total) * 100)) : 100;
       dropdown.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><strong>${filename}</strong><div class='meta'>${total} events</div></div><div style='text-align:right'><div style='font-weight:700'>${score}%</div><div class='meta'>${flagged} flagged</div></div></div>`;
-      if (parsed.events)
-        parsed.events.forEach((e) => {
-          if (e.eventType === "paste") {
-            const len =
-              typeof e.length === "number"
-                ? e.length
-                : typeof e.pasteLength === "number"
-                  ? e.pasteLength
-                  : null;
-            if (len === null || len > currentSettings.pasteLength) flagged++;
-          }
-          if (
-            e.eventType === "input" &&
-            e.flightTime &&
-            parseInt(e.flightTime) < currentSettings.flight
-          )
-            flagged++;
-        });
-      // color based on score thresholds
-      let scoreColor = "#10b981";
-      if (score < 85) scoreColor = "#f59e0b";
-      if (score < 50) scoreColor = "#ef4444";
-
-      dropdown.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <div style="width:6px; height:72px; background:${scoreColor}; border-radius:6px 0 0 6px;"></div>
-            <div style="padding:8px 12px;">
-              <div style="font-size:2rem; font-weight:700; color:${scoreColor};">${score}%</div>
-              <div class="meta">Integrity Score</div>
-            </div>
-          </div>
-          <div style="text-align:right; min-width:140px;">
-            <div style="font-weight:700; font-size:1.2rem;">${flagged} / ${total}</div>
-            <div class="meta">Flagged Events</div>
-          </div>
-        </div>
-        <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
-      `;
-
-      // compute specific affected factors for this file
-      try {
-        const affected = new Set();
-        const getPasteLen = (ev) => {
-          if (!ev) return null;
-          if (typeof ev.pasteCharCount === "number") return ev.pasteCharCount;
-          if (typeof ev.pasteLength === "number") return ev.pasteLength;
-          if (typeof ev.length === "number") return ev.length;
-          return null;
-        };
-        if (parsed && Array.isArray(parsed.events)) {
-          parsed.events.forEach((ev) => {
-            if (!ev || !ev.eventType) return;
-            const et = ev.eventType;
-            if (
-              et === "input" &&
-              ev.flightTime &&
-              parseInt(ev.flightTime) < currentSettings.flight
-            )
-              affected.add(`Fast Typing (< ${currentSettings.flight}ms)`);
-            if (
-              et === "paste" ||
-              et === "ai-paste" ||
-              et === "replace" ||
-              et === "ai-replace"
-            ) {
-              const plen = getPasteLen(ev);
-              if (plen === null || plen > currentSettings.pasteLength)
-                affected.add(
-                  `Suspicious Pastes (> ${currentSettings.pasteLength} chars)`,
-                );
-            }
-            if (
-              et.startsWith("ai-") ||
-              et === "ai-paste" ||
-              et === "ai-replace" ||
-              et === "ai-delete"
-            )
-              affected.add("AI-assisted edits");
-          });
-        }
-
-        let affectedHtml = "";
-        if (affected.size === 0)
-          affectedHtml = '<div class="meta">No notable factors detected.</div>';
-        else {
-          const items = Array.from(affected).map((item) => {
-            if (item.startsWith("Suspicious"))
-              return `<strong style='color:#f59e0b'>${item}</strong>`;
-            if (item.startsWith("Fast Typing"))
-              return `<strong style='color:#8b5cf6'>${item}</strong>`;
-            if (item.includes("AI"))
-              return `<strong style='color:#60a5fa'>${item}</strong>`;
-            return `<strong>${item}</strong>`;
-          });
-          affectedHtml = `<div class="meta">Score affected by ${items.join(" and ")}.</div>`;
-        }
-        dropdown.innerHTML += affectedHtml;
-      } catch (err) {
-        dropdown.innerHTML += `<div class="meta">Score factors unavailable.</div>`;
-      }
       row.parentNode.insertBefore(dropdown, row.nextSibling);
     }
 

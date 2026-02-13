@@ -102,7 +102,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     sessionPassword = password;
                 }
 
-                            const aggregate: any = { totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, pasteLengths: [], partialCount: 0, perFile: [], aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0 };
+                            const aggregate: any = { totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, pasteLengths: [], partialCount: 0, perFile: [], aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0, aiDeleteCount: 0 };
 
                 for (const f of files) {
                     try {
@@ -141,6 +141,11 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                                         const alen = (typeof e.pasteCharCount === 'number') ? e.pasteCharCount : ((typeof e.pasteLength === 'number') ? e.pasteLength : ((typeof e.length === 'number') ? e.length : (typeof e.text === 'string' ? e.text.length : 0)));
                                         if (alen && alen > 0) { aggregate.aiPasteLengths.push(alen); fileStats.aiPasteLengths.push(alen); }
                                     }
+                                    // detect ai-delete events as deletes originating from AI
+                                    if (t === 'ai-delete' || (t.includes('delete') && t.startsWith('ai-'))) {
+                                        aggregate.aiDeleteCount = (aggregate.aiDeleteCount || 0) + 1;
+                                        fileStats.aiDeleteCount = (fileStats.aiDeleteCount || 0) + 1;
+                                    }
                                     if (e.possibleAiDetection) { aggregate.aiFlagCount = (aggregate.aiFlagCount || 0) + 1; fileStats.aiFlagCount = (fileStats.aiFlagCount || 0) + 1; }
                                 }
                                 if (t === 'delete' || t === 'deletion' || t === 'backspace') fileStats.delete++;
@@ -160,9 +165,13 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 }
 
                 const total = aggregate.totalEvents || 1;
-                const pasteRatio = Math.min(1, aggregate.pasteCount / total);
-                const deleteRatio = Math.min(1, aggregate.deleteCount / total);
-                const avgPasteLength = aggregate.pasteLengths.length ? (aggregate.pasteLengths.reduce((a: number, b: number) => a + b, 0) / aggregate.pasteLengths.length) : 0;
+                // combine human and AI paste lengths/counts for dashboard metrics
+                const combinedPasteLengths = (aggregate.pasteLengths || []).concat(aggregate.aiPasteLengths || []);
+                const avgPasteLength = combinedPasteLengths.length ? (combinedPasteLengths.reduce((a: number, b: number) => a + b, 0) / combinedPasteLengths.length) : 0;
+                const totalPasteCount = (aggregate.pasteCount || 0) + (aggregate.aiPasteCount || 0);
+                const totalDeleteCount = (aggregate.deleteCount || 0) + (aggregate.aiDeleteCount || 0);
+                const pasteRatio = Math.min(1, totalPasteCount / total);
+                const deleteRatio = Math.min(1, totalDeleteCount / total);
 
                 // New AI probability algorithm
                 // Signals:
@@ -181,6 +190,8 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 let aiProbability = Math.max(0, Math.min(100, Math.round(aiScoreRaw * 100)));
 
                 // Keep previous heuristics available as other metrics
+                aggregate.totalPasteCount = totalPasteCount;
+                aggregate.totalDeleteCount = totalDeleteCount;
                 aggregate.metrics = {
                     pasteRatio: Math.round(pasteRatio * 1000) / 10,
                     deleteRatio: Math.round(deleteRatio * 1000) / 10,
@@ -231,6 +242,22 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             if (message.command === 'saveSettings') {
                 await context.globalState.update('tbdSettings', message.settings);
                 panel?.webview.postMessage({ command: 'settingsSaved', success: true });
+            }
+            if (message.command === 'getDeletions') {
+                let password = sessionPassword;
+                if (!password) {
+                    password = await vscode.window.showInputBox({ prompt: `Enter Administrator Password to view deletion activity`, password: true, ignoreFocusOut: true });
+                    if (!password) { panel?.webview.postMessage({ command: 'error', message: 'Password required' }); return; }
+                    sessionPassword = password;
+                }
+                try {
+                    const json = await storageManager.retrieveHiddenLogContent(password);
+                    let parsed: any = null;
+                    try { parsed = JSON.parse(json); } catch { parsed = { raw: json }; }
+                    panel?.webview.postMessage({ command: 'deletionData', data: parsed });
+                } catch (err: any) {
+                    panel?.webview.postMessage({ command: 'error', message: String(err) });
+                }
             }
 
         } catch (e) {

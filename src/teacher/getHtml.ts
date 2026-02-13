@@ -13,6 +13,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
   const dashboardHtml = fs.readFileSync(path.join(viewsRoot, 'dashboard.html'), 'utf8');
   const logsHtml = fs.readFileSync(path.join(viewsRoot, 'logs.html'), 'utf8');
   const settingsHtml = fs.readFileSync(path.join(viewsRoot, 'settings.html'), 'utf8');
+  const deletionsHtml = fs.readFileSync(path.join(viewsRoot, 'deletions.html'), 'utf8');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -75,6 +76,13 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     .btn-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
     #logs-view { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px; }
     #dashboard-view { margin-top: 20px; }
+    /* Deletions responsive rows */
+    .deletion-row { display:flex; flex-direction:column; gap:8px; }
+    .deletion-row .meta { margin-top:0; }
+    @media (min-width:700px) {
+      .deletion-row { flex-direction:row; justify-content:space-between; align-items:center; }
+    }
+    pre { white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
   </style>
 </head>
 <body>
@@ -90,6 +98,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
 
       ${dashboardHtml}
       ${logsHtml}
+      ${deletionsHtml}
       ${settingsHtml}
 
     </main>

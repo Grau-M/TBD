@@ -26,6 +26,8 @@
     const dashboardEmpty = $('dashboard-empty');
     const dashboardLogName = $('dashboard-log-name');
 
+    const deletionsView = $('deletions-view');
+
     const logsView = $('logs-view');
     const logsViewerContainer = $('logs-viewer-container');
     const logsLogName = $('logs-log-name');
@@ -81,6 +83,7 @@
     const navDashboard = $('nav-dashboard'); if (navDashboard) navDashboard.addEventListener('click', () => { switchTab('dashboard'); post('analyzeLogs'); });
     const navLogs = $('nav-logs'); if (navLogs) navLogs.addEventListener('click', () => { switchTab('logs'); post('listLogs'); });
     const navSettings = $('nav-settings'); if (navSettings) navSettings.addEventListener('click', () => { switchTab('settings'); });
+    const navDeletions = $('nav-deletions'); if (navDeletions) navDeletions.addEventListener('click', () => { switchTab('deletions'); post('getDeletions'); });
     const btnGotoLogs = $('btn-goto-logs'); if (btnGotoLogs) btnGotoLogs.addEventListener('click', () => switchTab('logs'));
 
     const closeLogBtn = $('close-log'); if (closeLogBtn) closeLogBtn.addEventListener('click', () => {
@@ -89,6 +92,8 @@
       if (logsLogName) logsLogName.textContent = '';
       if (searchInput) searchInput.value = '';
     });
+
+    const refreshDeletionsBtn = $('refreshDeletions'); if (refreshDeletionsBtn) refreshDeletionsBtn.addEventListener('click', () => { if (status) status.textContent = 'Fetching deletions...'; post('getDeletions'); });
 
     // theme
     // Safely try to read persisted state (getState is a function)
@@ -409,12 +414,14 @@
       if (dashboardEmpty) dashboardEmpty.style.display = 'none';
       if (!data || !data.metrics) { if (container) container.innerHTML = '<div class="meta">No data available.</div>'; return; }
       const m = data.metrics;
+      const pasteIsAI = (data.aiPasteCount && data.totalPasteCount && data.aiPasteCount === data.totalPasteCount) || false;
+      const deleteIsAI = (data.aiDeleteCount && data.totalDeleteCount && data.aiDeleteCount === data.totalDeleteCount) || false;
 
       const top = document.createElement('div'); top.style.display = 'grid'; top.style.gridTemplateColumns = '1fr 1fr 1fr'; top.style.gap = '12px';
       const makeCard = (title, value, subtitle) => { const c = document.createElement('div'); c.className='card'; c.style.padding='12px'; c.innerHTML = `<div style="font-weight:700; font-size:1.1rem;">${value}</div><div class="meta">${title}${subtitle? ' • '+subtitle: ''}</div>`; return c; };
       top.appendChild(makeCard('AI Probability', m.aiProbability + '%'));
-      top.appendChild(makeCard('Paste %', m.pasteRatio + '%', 'of all events'));
-      top.appendChild(makeCard('Delete %', m.deleteRatio + '%', 'of all events'));
+      top.appendChild(makeCard(pasteIsAI ? 'AI Paste %' : 'Paste %', m.pasteRatio + '%', pasteIsAI ? 'of AI-generated events' : 'of all events'));
+      top.appendChild(makeCard(deleteIsAI ? 'AI Delete %' : 'Delete %', m.deleteRatio + '%', deleteIsAI ? 'of AI-originated events' : 'of all events'));
       const statsRow = document.createElement('div'); statsRow.style.display='flex'; statsRow.style.gap='12px'; statsRow.style.marginTop='12px';
       statsRow.appendChild(makeCard('Avg Paste Length', m.avgPasteLength + ' chars'));
       statsRow.appendChild(makeCard('Totals', data.totalLogs + ' logs • ' + data.totalEvents + ' events'));
@@ -435,7 +442,8 @@
           row.style.cursor = 'pointer';
           const name = document.createElement('div'); name.textContent = f.name || (f.error ? '(failed)' : 'unknown');
           const ev = document.createElement('div'); ev.textContent = f.events ? String(f.events) : '-';
-          const p = document.createElement('div'); p.textContent = f.events ? (Math.round((f.paste||0)/Math.max(1,f.events)*1000)/10) + '%' : (f.error ? 'err' : '-');
+          const totalP = ((f.paste||0) + (f.aiPasteCount||0));
+          const p = document.createElement('div'); p.textContent = f.events ? (Math.round((totalP)/Math.max(1,f.events)*1000)/10) + '%' : (f.error ? 'err' : '-');
           // AI probability value (provided by host as f.aiProbability or f.metrics.aiProbability)
           const aiVal = (typeof f.aiProbability === 'number') ? f.aiProbability : (f.metrics && typeof f.metrics.aiProbability === 'number' ? f.metrics.aiProbability : null);
           const ai = document.createElement('div'); ai.textContent = (aiVal === null || aiVal === undefined) ? (f.error ? 'err' : '-') : (String(aiVal) + '%');
@@ -447,7 +455,8 @@
               else ai.style.color = '#10b981';
             }
           } catch (err) {}
-          const d = document.createElement('div'); d.textContent = f.events ? (Math.round((f.delete||0)/Math.max(1,f.events)*1000)/10) + '%' : (f.error ? 'err' : '-');
+          const totalD = ((f.delete||0) + (f.aiDeleteCount||0));
+          const d = document.createElement('div'); d.textContent = f.events ? (Math.round((totalD)/Math.max(1,f.events)*1000)/10) + '%' : (f.error ? 'err' : '-');
           row.appendChild(name); row.appendChild(ev); row.appendChild(p); row.appendChild(ai); row.appendChild(d);
           // click to expand per-file dropdown in dashboard
           row.addEventListener('click', (evClick) => {
@@ -512,6 +521,59 @@
           // Dashboard is an aggregate over all logs — show that to the user
           if (dashboardLogName) dashboardLogName.textContent = 'Viewing: All logs';
           if (status) status.textContent = 'Dashboard updated';
+          break;
+        case 'deletionData':
+          try {
+            const d = msg.data;
+            if (!deletionsView) break;
+            // If data is a simple string, show raw
+            if (typeof d === 'string') {
+              deletionsView.innerHTML = '<pre>' + d + '</pre>';
+            } else {
+              // Support structure: { header: ..., deletions: [...] }
+              const records = Array.isArray(d) ? d : (d && Array.isArray(d.deletions) ? d.deletions : null);
+              const header = (d && d.header) ? d.header : null;
+              if (header) {
+                const hdrDiv = document.createElement('div'); hdrDiv.className = 'meta'; hdrDiv.style.marginBottom = '8px'; hdrDiv.innerHTML = `<div><strong>${header.note || 'Deletion Log'}</strong></div><div class="meta">Created: ${header.createdAt || header.created || ''}</div>`;
+                deletionsView.innerHTML = ''; deletionsView.appendChild(hdrDiv);
+              } else {
+                deletionsView.innerHTML = '';
+              }
+              if (!records || records.length === 0) {
+                const empty = document.createElement('div'); empty.className = 'meta'; empty.textContent = 'No deletion records found.'; deletionsView.appendChild(empty);
+              } else {
+                const list = document.createElement('div'); list.style.display = 'grid'; list.style.gap = '10px';
+                records.forEach(item => {
+                  const row = document.createElement('div'); row.className = 'card deletion-row';
+                  const time = item.modifiedAt || item.time || item.timestamp || '';
+                  const who = item.user || item.startedBy || item.actor || 'Unknown';
+                  const file = item.modifiedFile || item.file || item.path || item.filePath || '(unknown)';
+                  // format numbers if available
+                  const prevSize = item.previousSize || item.oldSize || item.previous || '';
+                  const newSize = item.newSize || item.size || '';
+                  const note = item.note || item.reason || '';
+                  row.innerHTML = `
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <div style="font-weight:700;">${file}</div>
+                        <div class="meta">Deleted by ${who} • ${time}</div>
+                      </div>
+                      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+                        ${prevSize ? `<div class="meta">Prev: ${prevSize}</div>` : ''}
+                        ${newSize ? `<div class="meta">Now: ${newSize}</div>` : ''}
+                        ${note ? `<div class="meta">${note}</div>` : ''}
+                      </div>
+                    </div>
+                  `;
+                  list.appendChild(row);
+                });
+                deletionsView.appendChild(list);
+              }
+            }
+          } catch (err) {
+            if (deletionsView) deletionsView.textContent = 'Failed to render deletions.';
+          }
+          if (status) status.textContent = 'Deletions updated';
           break;
         case 'rawData': if (logsViewerContainer) logsViewerContainer.style.display='block'; if (logsView) logsView.innerHTML = '<pre>' + msg.data + '</pre>'; if (dashboardView) dashboardView.innerHTML = '<div class="card"><h2>Raw Data Only</h2><p class="meta">Score unavailable.</p></div>'; if (status) status.textContent = 'Loaded ' + msg.filename; break;
         case 'loadSettings': if (msg.settings) {

@@ -22,7 +22,7 @@ export function createStatusBar(context: vscode.ExtensionContext, commandId = 't
     if (hiddenCommandId) {
         const hiddenItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10001);
         hiddenItem.text = '$(lock)';
-        hiddenItem.tooltip = 'Show hidden deletion records (click)';
+        hiddenItem.tooltip = 'Show Teacher Dashboard!';
         hiddenItem.command = hiddenCommandId;
         hiddenItem.show();
         context.subscriptions.push(hiddenItem);

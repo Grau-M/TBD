@@ -102,7 +102,16 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     sessionPassword = password;
                 }
 
-                            const aggregate: any = { totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, pasteLengths: [], partialCount: 0, perFile: [], aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0, aiDeleteCount: 0 };
+                            // Load persisted thresholds/settings so analysis matches client-side flagging rules
+                            const savedSettings = context.globalState.get('tbdSettings', { inactivityThreshold: 5, flightTimeThreshold: 50, pasteLengthThreshold: 50, flagAiEvents: true });
+                            const thresholds = {
+                                inactivity: savedSettings.inactivityThreshold || 5,
+                                flight: savedSettings.flightTimeThreshold || 50,
+                                pasteLength: savedSettings.pasteLengthThreshold || 50,
+                                flagAiEvents: (typeof savedSettings.flagAiEvents === 'boolean') ? savedSettings.flagAiEvents : true
+                            };
+
+                            const aggregate: any = { totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, pasteLengths: [], partialCount: 0, perFile: [], aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0, aiDeleteCount: 0, flaggedCount: 0 };
 
                 for (const f of files) {
                     try {
@@ -119,7 +128,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                             } catch (_) { parsed = null; }
                         }
 
-                        const fileStats: any = { name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, avgPasteLength: 0, aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0 };
+                        const fileStats: any = { name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, avgPasteLength: 0, aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0, flagged: 0 };
 
                         if (parsed && Array.isArray(parsed.events)) {
                             fileStats.events = parsed.events.length;
@@ -129,6 +138,8 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                                     fileStats.paste++;
                                     const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : (typeof e.text === 'string' ? e.text.length : 0));
                                     if (len && len > 0) aggregate.pasteLengths.push(len);
+                                    // flag suspicious pastes based on pasteLength threshold
+                                    if (!len || len === 0 || len > thresholds.pasteLength) { fileStats.flagged = (fileStats.flagged || 0) + 1; aggregate.flaggedCount = (aggregate.flaggedCount || 0) + 1; }
                                 }
                                 // AI-specific events (aggregate + per-file)
                                 if (t.startsWith('ai-') || t === 'ai' || t === 'ai-assist') {
@@ -146,10 +157,16 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                                         aggregate.aiDeleteCount = (aggregate.aiDeleteCount || 0) + 1;
                                         fileStats.aiDeleteCount = (fileStats.aiDeleteCount || 0) + 1;
                                     }
-                                    if (e.possibleAiDetection) { aggregate.aiFlagCount = (aggregate.aiFlagCount || 0) + 1; fileStats.aiFlagCount = (fileStats.aiFlagCount || 0) + 1; }
+                                        if (e.possibleAiDetection) { aggregate.aiFlagCount = (aggregate.aiFlagCount || 0) + 1; fileStats.aiFlagCount = (fileStats.aiFlagCount || 0) + 1; if (thresholds.flagAiEvents) { fileStats.flagged = (fileStats.flagged || 0) + 1; aggregate.flaggedCount = (aggregate.flaggedCount || 0) + 1; } }
                                 }
                                 if (t === 'delete' || t === 'deletion' || t === 'backspace') fileStats.delete++;
-                                if (t === 'key' || t === 'keystroke' || t === 'keypress' || t === 'input') fileStats.keystrokes++;
+                                if (t === 'key' || t === 'keystroke' || t === 'keypress' || t === 'input') {
+                                    fileStats.keystrokes++;
+                                    // flag fast typing (input/keystroke with flightTime below threshold)
+                                    try {
+                                        if (e.flightTime && parseInt(e.flightTime) < thresholds.flight) { fileStats.flagged = (fileStats.flagged || 0) + 1; aggregate.flaggedCount = (aggregate.flaggedCount || 0) + 1; }
+                                    } catch (err) {}
+                                }
                             }
 
                             aggregate.totalEvents += fileStats.events;
@@ -192,6 +209,9 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 // Keep previous heuristics available as other metrics
                 aggregate.totalPasteCount = totalPasteCount;
                 aggregate.totalDeleteCount = totalDeleteCount;
+                // compute overall integrity score based on flagged events vs total events
+                aggregate.flaggedCount = aggregate.flaggedCount || 0;
+                aggregate.integrityScore = Math.max(0, Math.round((1 - (aggregate.flaggedCount / Math.max(1, aggregate.totalEvents))) * 100));
                 aggregate.metrics = {
                     pasteRatio: Math.round(pasteRatio * 1000) / 10,
                     deleteRatio: Math.round(deleteRatio * 1000) / 10,

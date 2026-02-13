@@ -214,18 +214,22 @@
         scoreDiv.className = 'card';
         scoreDiv.style.borderLeft = '6px solid ' + scoreColor;
         scoreDiv.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <h2 style="margin:0; font-size:2rem; color:${scoreColor}">${integrityScore}%</h2>
-              <div class="meta" style="font-size:1rem;">Integrity Score</div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+            <div style="text-align: left;">
+              <h2 style="margin: 0; font-size: 2rem; color: ${scoreColor}; line-height: 1;">${integrityScore}%</h2>
+              <div class="meta" style="font-size: 1rem; margin-top: 4px;">Integrity Score</div>
             </div>
-            <div style="text-align:right;">
-              <div style="font-weight:600; font-size:1.2rem;">${flaggedEvents} <span style="font-weight:400; color:var(--muted)">/ ${totalEvents}</span></div>
+
+            <div style="text-align: right;">
+              <div style="font-weight: 600; font-size: 1.2rem;">
+                ${flaggedEvents} <span style="font-weight: 400; color: var(--muted)">/ ${totalEvents}</span>
+              </div>
               <div class="meta">Flagged Events</div>
             </div>
           </div>
-          <div class="meta" style="margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
-            Score affected by <strong style="color:#f59e0b">Suspicious Pastes (&gt; ${currentSettings.pasteLength} chars)</strong> and <strong style="color:#8b5cf6">Fast Typing (&lt; ${currentSettings.flight}ms)</strong>.
+
+          <div class="meta" style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px;">
+            Score affected by <strong style="color: #f59e0b">Suspicious Pastes (> ${currentSettings.pasteLength} chars)</strong> and <strong style="color: #8b5cf6">Fast Typing (< ${currentSettings.flight}ms)</strong>.
           </div>
         `;
         dashboardView.appendChild(scoreDiv);
@@ -417,22 +421,89 @@
       const pasteIsAI = (data.aiPasteCount && data.totalPasteCount && data.aiPasteCount === data.totalPasteCount) || false;
       const deleteIsAI = (data.aiDeleteCount && data.totalDeleteCount && data.aiDeleteCount === data.totalDeleteCount) || false;
 
-      const top = document.createElement('div'); top.style.display = 'grid'; top.style.gridTemplateColumns = '1fr 1fr 1fr'; top.style.gap = '12px';
-      const makeCard = (title, value, subtitle) => { const c = document.createElement('div'); c.className='card'; c.style.padding='12px'; c.innerHTML = `<div style="font-weight:700; font-size:1.1rem;">${value}</div><div class="meta">${title}${subtitle? ' • '+subtitle: ''}</div>`; return c; };
-      top.appendChild(makeCard('AI Probability', m.aiProbability + '%'));
+      const top = document.createElement('div'); top.style.display = 'grid'; top.style.gridTemplateColumns = '1fr 1fr'; top.style.gap = '12px'; top.style.marginBottom = '4px';
+      const makeCard = (title, value, subtitle) => { const c = document.createElement('div'); c.className='card'; c.style.padding='12px'; c.style.display='flex'; c.style.flexDirection='column'; c.style.justifyContent='center'; c.style.boxSizing='border-box'; c.style.height='96px'; c.style.minWidth='140px'; c.innerHTML = `<div style="font-weight:700; font-size:1.1rem;">${value}</div><div class="meta">${title}${subtitle? ' • '+subtitle: ''}</div>`; return c; };
+      // Removed the small AI Probability top card (we show a detailed AI bar below). Keep Paste % and Delete % in the header.
       top.appendChild(makeCard(pasteIsAI ? 'AI Paste %' : 'Paste %', m.pasteRatio + '%', pasteIsAI ? 'of AI-generated events' : 'of all events'));
       top.appendChild(makeCard(deleteIsAI ? 'AI Delete %' : 'Delete %', m.deleteRatio + '%', deleteIsAI ? 'of AI-originated events' : 'of all events'));
-      const statsRow = document.createElement('div'); statsRow.style.display='flex'; statsRow.style.gap='12px'; statsRow.style.marginTop='12px';
-      statsRow.appendChild(makeCard('Avg Paste Length', m.avgPasteLength + ' chars'));
-      statsRow.appendChild(makeCard('Totals', data.totalLogs + ' logs • ' + data.totalEvents + ' events'));
-      const barCard = document.createElement('div'); barCard.className='card'; barCard.style.padding='12px'; barCard.innerHTML = '<div style="font-weight:700; margin-bottom:8px;">AI Probability</div>';
-      const barOuter = document.createElement('div'); barOuter.style.background='var(--bg)'; barOuter.style.border='1px solid var(--border)'; barOuter.style.borderRadius='8px'; barOuter.style.height='18px';
-      const barInner = document.createElement('div'); barInner.style.height='100%'; barInner.style.width = m.aiProbability + '%'; barInner.style.background='linear-gradient(90deg, var(--accent), var(--accent-2))'; barInner.style.borderRadius='8px'; barOuter.appendChild(barInner); barCard.appendChild(barOuter);
-      if (container) { container.appendChild(top); container.appendChild(statsRow); container.appendChild(barCard); }
+      // overall integrity score card (project-wide) prepared here and appended to statsRow later
+      let integrityDiv = null;
+      try {
+        const integrity = (typeof data.integrityScore === 'number') ? data.integrityScore : null;
+        const flagged = (typeof data.flaggedCount === 'number') ? data.flaggedCount : null;
+        const totals = data.totalEvents || 0;
+        let scoreColor = '#10b981';
+        const intVal = (integrity !== null) ? integrity : null;
+        if (intVal !== null) {
+          if (intVal < 50) scoreColor = '#ef4444';
+          else if (intVal < 85) scoreColor = '#f59e0b';
+          else scoreColor = '#10b981';
+        }
+        
+        integrityDiv = document.createElement('div'); 
+        integrityDiv.className = 'card'; 
+        integrityDiv.style.borderLeft = '6px solid ' + scoreColor; 
+        integrityDiv.style.padding = '12px';
+        integrityDiv.style.display = 'flex';
+        integrityDiv.style.alignItems = 'center';
+        // CHANGE: Ensure container takes full width
+        integrityDiv.style.width = '100%';
+        integrityDiv.style.boxSizing = 'border-box';
+
+        integrityDiv.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+            <div style="text-align:left;">
+              <div style="font-size:2rem; font-weight:700; color:${scoreColor}; line-height:1;">${intVal !== null ? String(intVal) + '%' : 'N/A'}</div>
+              <div class="meta" style="margin-top:4px;">Integrity Score</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-weight:700; font-size:1.2rem;">
+                ${flagged !== null ? flagged : '-'} <span style="font-weight:400; color:var(--muted)">/ ${totals}</span>
+              </div>
+              <div class="meta">Flagged Events</div>
+            </div>
+          </div>
+        `;
+      } catch (err) { integrityDiv = null; }
+      const statsRow = document.createElement('div');
+      statsRow.style.display = 'grid';
+      statsRow.style.gridTemplateColumns = '1fr 1fr';
+      statsRow.style.gap = '12px';
+      statsRow.style.marginTop = '4px';
+      // append the integrity card and avg paste length on the next row (each fills its column)
+      if (integrityDiv) {
+        integrityDiv.style.width = '100%';
+        statsRow.appendChild(integrityDiv);
+      }
+      const avgCard = makeCard('Avg Paste Length', m.avgPasteLength + ' chars');
+      avgCard.style.width = '100%';
+      statsRow.appendChild(avgCard);
+      const barCard = document.createElement('div');
+      barCard.className = 'card';
+      barCard.style.padding = '12px';
+      // determine color for AI percentage
+      let aiColor = '#10b981';
+      try {
+        const aiVal = Number(m.aiProbability) || 0;
+        if (aiVal >= 75) aiColor = '#ef4444';
+        else if (aiVal >= 40) aiColor = '#f59e0b';
+        else aiColor = '#10b981';
+      } catch (err) {}
+      barCard.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><div style=\"font-weight:700; color:var(--fg)\">AI Probability</div><div style=\"font-weight:700; color:${aiColor}\">${m.aiProbability}%</div></div>`;
+      // colored left stripe like Integrity card
+      try { barCard.style.borderLeft = '6px solid ' + aiColor; } catch (err) {}
+      const barOuter = document.createElement('div'); barOuter.style.background = 'var(--bg)'; barOuter.style.border = '1px solid var(--border)'; barOuter.style.borderRadius = '8px'; barOuter.style.height = '18px';
+      const barInner = document.createElement('div'); barInner.style.height = '100%'; barInner.style.width = m.aiProbability + '%'; barInner.style.background = 'linear-gradient(90deg, var(--accent), var(--accent-2))'; barInner.style.borderRadius = '8px'; barOuter.appendChild(barInner); barCard.appendChild(barOuter);
+      // place top row, then statsRow, then the AI probability bar on its own line (previous layout)
+      if (container) {
+        container.appendChild(top);
+        container.appendChild(statsRow);
+        container.appendChild(barCard);
+      }
 
       // per-file
       if (container) {
-        const filesCard = document.createElement('div'); filesCard.className='card'; filesCard.style.marginTop='12px'; filesCard.innerHTML = '<h2>Per-file breakdown</h2>';
+        const filesCard = document.createElement('div'); filesCard.className='card'; filesCard.style.marginTop='12px'; filesCard.innerHTML = `<h2>Per-file breakdown - ${data.totalLogs || (data.totalLogs===0?0:'?')} logs</h2>`;
         const filesSection = document.createElement('div'); filesSection.id = 'per-file-section'; filesSection.style.marginTop = '8px';
         // header row
         const header = document.createElement('div'); header.style.display='grid'; header.style.gridTemplateColumns='2fr 1fr 1fr 1fr 1fr'; header.style.fontWeight='700'; header.style.gap='8px'; header.innerHTML = '<div>File</div><div>Events</div><div>Paste</div><div>AI Probability</div><div>Delete</div>';

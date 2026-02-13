@@ -9,6 +9,14 @@ import * as vscode from 'vscode';
 // Purpose: Construct and register a primary status bar item (and an
 // optional secondary locked item). The returned primary item is shown
 // immediately and pushed onto `context.subscriptions` for disposal.
+//
+// Parameters:
+// - context: VS Code extension context used to register disposables.
+// - commandId: command to invoke when the primary status item is clicked.
+// - hiddenCommandId (optional): command id for the secondary, small
+//   lock-style status item. This command is expected to open the
+//   Teacher Dashboard (the educator/administrator webview). When provided,
+//   a lock icon is shown which invokes `hiddenCommandId` when clicked.
 export function createStatusBar(context: vscode.ExtensionContext, commandId = 'tbd-logger.openLogs', hiddenCommandId?: string): vscode.StatusBarItem {
     // Create the primary StatusBarItem; command registration should be handled by the extension entrypoint
     const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
@@ -18,7 +26,8 @@ export function createStatusBar(context: vscode.ExtensionContext, commandId = 't
     item.show();
     context.subscriptions.push(item);
 
-    // Optional small secondary item to open hidden deletions (click instead of long-press)
+    // Optional small secondary item to open the Teacher Dashboard (click the lock to open teacher dashboard)
+    // The `hiddenCommandId` should point to the command that opens the Teacher view/webview.
     if (hiddenCommandId) {
         const hiddenItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10001);
         hiddenItem.text = '$(lock)';

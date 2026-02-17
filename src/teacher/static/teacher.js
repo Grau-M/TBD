@@ -457,7 +457,7 @@
       const pasteIsAI = (data.aiPasteCount && data.totalPasteCount && data.aiPasteCount === data.totalPasteCount) || false;
       const deleteIsAI = (data.aiDeleteCount && data.totalDeleteCount && data.aiDeleteCount === data.totalDeleteCount) || false;
 
-      const top = document.createElement('div'); top.style.display = 'grid'; top.style.gridTemplateColumns = '1fr 1fr'; top.style.gap = '12px'; top.style.marginBottom = '4px';
+      const top = document.createElement('div'); top.className = 'top-cards'; top.style.display = 'grid'; top.style.gridTemplateColumns = '1fr 1fr'; top.style.gap = '12px'; top.style.marginBottom = '4px';
       const makeCard = (title, value, subtitle) => { const c = document.createElement('div'); c.className='card'; c.style.padding='12px'; c.style.display='flex'; c.style.flexDirection='column'; c.style.justifyContent='center'; c.style.boxSizing='border-box'; c.style.height='96px'; c.style.minWidth='140px'; c.innerHTML = `<div style="font-weight:700; font-size:1.1rem;">${value}</div><div class="meta">${title}${subtitle? ' • '+subtitle: ''}</div>`; return c; };
       // Removed the small AI Probability top card (we show a detailed AI bar below). Keep Paste % and Delete % in the header.
       top.appendChild(makeCard(pasteIsAI ? 'AI Paste %' : 'Paste %', m.pasteRatio + '%', pasteIsAI ? 'of AI-generated events' : 'of all events'));
@@ -501,7 +501,7 @@
           </div>
         `;
       } catch (err) { integrityDiv = null; }
-      const statsRow = document.createElement('div');
+      const statsRow = document.createElement('div'); statsRow.className = 'stats-row';
       statsRow.style.display = 'grid';
       statsRow.style.gridTemplateColumns = '1fr 1fr';
       statsRow.style.gap = '12px';
@@ -542,7 +542,10 @@
         const filesCard = document.createElement('div'); filesCard.className='card'; filesCard.style.marginTop='12px'; filesCard.innerHTML = `<h2>Per-file breakdown - ${data.totalLogs || (data.totalLogs===0?0:'?')} logs</h2>`;
         const filesSection = document.createElement('div'); filesSection.id = 'per-file-section'; filesSection.style.marginTop = '8px';
         // header row
-        const header = document.createElement('div'); header.style.display='grid'; header.style.gridTemplateColumns='2fr 1fr 1fr 1fr 1fr'; header.style.fontWeight='700'; header.style.gap='8px'; header.innerHTML = '<div>File</div><div>Events</div><div>Paste</div><div>AI Probability</div><div>Delete</div>';
+        const header = document.createElement('div'); header.style.display='grid'; header.style.gridTemplateColumns='2fr 1fr 1fr 1fr 1fr'; header.style.fontWeight='700'; header.style.gap='8px';
+        // responsive label for narrow viewports: show short label 'AI' when width <= 579px
+        const aiHeaderLabel = (typeof window !== 'undefined' && window.innerWidth <= 579) ? 'AI' : 'AI Probability';
+        header.innerHTML = `<div>File</div><div>Events</div><div>Paste</div><div>${aiHeaderLabel}</div><div>Delete</div>`;
         filesSection.appendChild(header);
         (data.perFile || []).forEach(f => {
           const row = document.createElement('div'); row.style.display='grid'; row.style.gridTemplateColumns='2fr 1fr 1fr 1fr 1fr'; row.style.gap='8px'; row.style.padding='8px 4px'; row.setAttribute('data-file-row', f.name || '');
@@ -589,6 +592,23 @@
         filesCard.appendChild(filesSection);
         container.appendChild(filesCard);
       }
+
+      // update per-file AI header label on resize when dashboard is visible
+      try {
+        const updateAiHeaderLabel = () => {
+          const filesSection = document.getElementById('per-file-section');
+          if (!filesSection) return;
+          const hdr = filesSection.querySelector('div');
+          if (!hdr) return;
+          const cols = hdr.children;
+          if (!cols || cols.length < 4) return;
+          cols[3].textContent = (window.innerWidth <= 579) ? 'AI' : 'AI Probability';
+        };
+        window.addEventListener('resize', () => {
+          // only update if dashboard currently visible
+          if (document.getElementById('dashboard-view')) updateAiHeaderLabel();
+        });
+      } catch (err) {}
     }
 
     function showDashboardLoading() { const container = $('dashboard-view'); if (dashboardEmpty) dashboardEmpty.style.display='none'; if (!container) return; container.innerHTML=''; const card=document.createElement('div'); card.className='card'; card.style.textAlign='center'; card.innerHTML = '<div style="font-weight:700; margin-bottom:8px;">Loading dashboard</div>'; const spinner=document.createElement('div'); spinner.className='spinner'; card.appendChild(spinner); container.appendChild(card); }

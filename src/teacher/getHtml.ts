@@ -87,9 +87,8 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     /* Responsive: collapse sidebar into hamburger for small widths */
     @media (max-width:865px) {
       /* position sidebar below the fixed top-nav so it doesn't get covered */
-      .sidebar { display: none; position: fixed; left: 0; top: 56px; height: calc(100% - 56px); width: 240px; transform: translateX(-100%); transition: transform 220ms ease; z-index: 150; }
-      /* when opened, sidebar should sit above the fixed top-nav */
-      .sidebar.open { display: flex; transform: translateX(0); z-index: 230; }
+        .sidebar { display: none; position: fixed; left: 0; top: 0; height: 100%; width: 240px; transform: translateX(-100%); transition: transform 220ms ease; z-index: 150; }
+        .sidebar.open { display: flex; transform: translateX(0); z-index: 240; }
       #hamburger { display: inline-flex; align-items: center; justify-content: center; font-size: 18px; }
       .backdrop { display:none; }
       .backdrop.show { display:block; position:fixed; inset:0; background: rgba(0,0,0,0.45); z-index: 210; }
@@ -101,6 +100,15 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
       .main-content { padding-top: calc(16px + 56px); }
       /* keep sidebar underneath the top nav when opened */
       .sidebar { top: 0; z-index: 150; }
+    }
+    /* Extra small screens: stack dashboard cards one-per-row */
+    @media (max-width:579px) {
+      .top-cards { grid-template-columns: 1fr !important; gap: 10px !important; }
+      .stats-row { grid-template-columns: 1fr !important; gap: 10px !important; }
+      /* make cards full width and allow auto height */
+      .top-cards .card, .stats-row .card, .card { width: 100% !important; min-width: auto !important; height: auto !important; }
+      /* slightly reduce padding to fit narrow screens */
+      .card { padding: 12px !important; }
     }
     pre { white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
   </style>

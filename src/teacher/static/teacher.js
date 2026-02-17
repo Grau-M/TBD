@@ -39,6 +39,42 @@
     const settingsMsg = $('settings-msg');
 
     const themeToggle = $('themeToggle');
+    const hamburgerBtn = $('hamburger');
+    const sidebarEl = document.querySelector('.sidebar');
+    let closeSidebar = () => {};
+
+    // Small-screen sidebar toggle (hamburger)
+    try {
+      let backdrop = null;
+      if (hamburgerBtn && sidebarEl) {
+        hamburgerBtn.addEventListener('click', () => {
+          const isOpen = sidebarEl.classList.toggle('open');
+          if (isOpen) {
+            backdrop = document.createElement('div');
+            backdrop.id = 'sidebar-backdrop';
+            backdrop.className = 'backdrop show';
+            document.body.appendChild(backdrop);
+            backdrop.addEventListener('click', () => { sidebarEl.classList.remove('open'); try { backdrop.remove(); } catch (e) {} });
+          } else {
+            const existing = document.getElementById('sidebar-backdrop'); if (existing) try { existing.remove(); } catch (e) {}
+          }
+        });
+      }
+      // Helper to close sidebar and remove backdrop
+      closeSidebar = () => {
+        try {
+          if (sidebarEl) sidebarEl.classList.remove('open');
+          const existing = document.getElementById('sidebar-backdrop'); if (existing) try { existing.remove(); } catch (e) {}
+        } catch (e) {}
+      };
+      window.addEventListener('resize', () => {
+        try {
+          if (window.innerWidth > 865) {
+            closeSidebar();
+          }
+        } catch (e) {}
+      });
+    } catch (err) {}
 
     // create a small clear button next to the search input if one doesn't exist
     let clearSearchBtn = $('clear-search');
@@ -80,11 +116,11 @@
     }
 
     // attach nav buttons defensively
-    const navDashboard = $('nav-dashboard'); if (navDashboard) navDashboard.addEventListener('click', () => { switchTab('dashboard'); post('analyzeLogs'); });
-    const navLogs = $('nav-logs'); if (navLogs) navLogs.addEventListener('click', () => { switchTab('logs'); post('listLogs'); });
-    const navSettings = $('nav-settings'); if (navSettings) navSettings.addEventListener('click', () => { switchTab('settings'); });
-    const navDeletions = $('nav-deletions'); if (navDeletions) navDeletions.addEventListener('click', () => { switchTab('deletions'); post('getDeletions'); });
-    const btnGotoLogs = $('btn-goto-logs'); if (btnGotoLogs) btnGotoLogs.addEventListener('click', () => switchTab('logs'));
+    const navDashboard = $('nav-dashboard'); if (navDashboard) navDashboard.addEventListener('click', () => { switchTab('dashboard'); post('analyzeLogs'); try { closeSidebar(); } catch (e) {} });
+    const navLogs = $('nav-logs'); if (navLogs) navLogs.addEventListener('click', () => { switchTab('logs'); post('listLogs'); try { closeSidebar(); } catch (e) {} });
+    const navSettings = $('nav-settings'); if (navSettings) navSettings.addEventListener('click', () => { switchTab('settings'); try { closeSidebar(); } catch (e) {} });
+    const navDeletions = $('nav-deletions'); if (navDeletions) navDeletions.addEventListener('click', () => { switchTab('deletions'); post('getDeletions'); try { closeSidebar(); } catch (e) {} });
+    const btnGotoLogs = $('btn-goto-logs'); if (btnGotoLogs) btnGotoLogs.addEventListener('click', () => { switchTab('logs'); try { closeSidebar(); } catch (e) {} });
 
     const closeLogBtn = $('close-log'); if (closeLogBtn) closeLogBtn.addEventListener('click', () => {
       if (logsViewerContainer) logsViewerContainer.style.display = 'none';

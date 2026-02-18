@@ -1,4 +1,4 @@
-/* Webview client script for Teacher View - cleaned and defensive */
+/* Webview client script for Teacher View - cleaned and fixed */
 (function () {
   const vscode = acquireVsCodeApi();
 
@@ -25,15 +25,13 @@
   // Helper: Parse Log Timestamp "Feb-04-2026 17:51:19:284 EST" -> timestamp
   function parseLogTime(timeStr) {
     if (!timeStr) return null;
-    // Remove time zone suffix if present (e.g. " EST")
     const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
     const parts = cleanStr.split(" ");
     if (parts.length < 2) return null;
 
-    const datePart = parts[0]; // "Feb-04-2026"
-    const timePart = parts[1]; // "17:51:19:284"
+    const datePart = parts[0];
+    const timePart = parts[1];
 
-    // Parse Month-Day-Year
     const dateSub = datePart.split("-");
     if (dateSub.length < 3) return null;
 
@@ -59,7 +57,6 @@
     const day = parseInt(dateSub[1]);
     const year = parseInt(dateSub[2]);
 
-    // Parse HH:MM:SS:MS
     const timeSub = timePart.split(":");
     const hr = parseInt(timeSub[0]);
     const min = parseInt(timeSub[1]);
@@ -85,6 +82,8 @@
     const dashboardEmpty = $("dashboard-empty");
     const dashboardLogName = $("dashboard-log-name");
 
+    const deletionsView = $("deletions-view");
+
     const logsView = $("logs-view");
     const logsViewerContainer = $("logs-viewer-container");
     const logsLogName = $("logs-log-name");
@@ -92,9 +91,87 @@
     const inactivityInput = $("inactivityInput");
     const flightInput = $("flightInput");
     const pasteLengthInput = $("pasteLengthInput");
+    const flagAiCheckbox = $("flagAiEvents");
     const settingsMsg = $("settings-msg");
 
     const themeToggle = $("themeToggle");
+    const hamburgerBtn = $("hamburger");
+    const sidebarEl = document.querySelector(".sidebar");
+    let closeSidebar = () => {};
+
+    // Small-screen sidebar toggle
+    try {
+      let backdrop = null;
+      if (hamburgerBtn && sidebarEl) {
+        hamburgerBtn.addEventListener("click", () => {
+          const isOpen = sidebarEl.classList.toggle("open");
+          if (isOpen) {
+            backdrop = document.createElement("div");
+            backdrop.id = "sidebar-backdrop";
+            backdrop.className = "backdrop show";
+            document.body.appendChild(backdrop);
+            backdrop.addEventListener("click", () => {
+              sidebarEl.classList.remove("open");
+              try {
+                backdrop.remove();
+              } catch (e) {}
+            });
+          } else {
+            const existing = document.getElementById("sidebar-backdrop");
+            if (existing)
+              try {
+                existing.remove();
+              } catch (e) {}
+          }
+        });
+      }
+      closeSidebar = () => {
+        try {
+          if (sidebarEl) sidebarEl.classList.remove("open");
+          const existing = document.getElementById("sidebar-backdrop");
+          if (existing)
+            try {
+              existing.remove();
+            } catch (e) {}
+        } catch (e) {}
+      };
+      window.addEventListener("resize", () => {
+        try {
+          if (window.innerWidth > 865) closeSidebar();
+        } catch (e) {}
+      });
+    } catch (err) {}
+
+    // Clear search button
+    let clearSearchBtn = $("clear-search");
+    if (!clearSearchBtn && searchInput) {
+      try {
+        clearSearchBtn = document.createElement("button");
+        clearSearchBtn.id = "clear-search";
+        clearSearchBtn.type = "button";
+        clearSearchBtn.className = "btn clear-btn";
+        clearSearchBtn.textContent = "✖";
+        if (searchInput.parentNode)
+          searchInput.parentNode.insertBefore(
+            clearSearchBtn,
+            searchInput.nextSibling,
+          );
+      } catch (e) {
+        clearSearchBtn = null;
+      }
+    }
+    if (clearSearchBtn) {
+      clearSearchBtn.addEventListener("click", () => {
+        try {
+          if (searchInput) searchInput.value = "";
+          if (dropdown) {
+            renderDropdown(logNamesCache);
+            dropdown.classList.remove("show");
+          }
+          if (searchInput) searchInput.focus();
+        } catch (err) {}
+      });
+    }
 
     function switchTab(tabName) {
       document
@@ -113,32 +190,43 @@
     function post(command, payload = {}) {
       try {
         vscode.postMessage(Object.assign({ command }, payload));
-      } catch (e) {
-        /* noop */
-      }
+      } catch (e) {}
     }
 
-    // attach nav buttons
+    // Nav listeners
     const navDashboard = $("nav-dashboard");
     if (navDashboard)
       navDashboard.addEventListener("click", () => {
         switchTab("dashboard");
         post("analyzeLogs");
+        closeSidebar();
       });
     const navLogs = $("nav-logs");
     if (navLogs)
       navLogs.addEventListener("click", () => {
         switchTab("logs");
         post("listLogs");
+        closeSidebar();
       });
     const navSettings = $("nav-settings");
     if (navSettings)
       navSettings.addEventListener("click", () => {
         switchTab("settings");
+        closeSidebar();
+      });
+    const navDeletions = $("nav-deletions");
+    if (navDeletions)
+      navDeletions.addEventListener("click", () => {
+        switchTab("deletions");
+        post("getDeletions");
+        closeSidebar();
       });
     const btnGotoLogs = $("btn-goto-logs");
     if (btnGotoLogs)
-      btnGotoLogs.addEventListener("click", () => switchTab("logs"));
+      btnGotoLogs.addEventListener("click", () => {
+        switchTab("logs");
+        closeSidebar();
+      });
 
     const closeLogBtn = $("close-log");
     if (closeLogBtn)
@@ -149,7 +237,14 @@
         if (searchInput) searchInput.value = "";
       });
 
-    // theme logic
+    const refreshDeletionsBtn = $("refreshDeletions");
+    if (refreshDeletionsBtn)
+      refreshDeletionsBtn.addEventListener("click", () => {
+        if (status) status.textContent = "Fetching deletions...";
+        post("getDeletions");
+      });
+
+    // Theme logic
     let isDark = false;
     try {
       const st =
@@ -163,10 +258,7 @@
       )
         isDark = true;
     } catch (e) {
-      isDark =
-        document.documentElement.classList.contains("dark") ||
-        (window.matchMedia &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches);
+      isDark = document.documentElement.classList.contains("dark");
     }
     if (isDark) document.documentElement.classList.add("dark");
     if (themeToggle) themeToggle.textContent = isDark ? "🌙" : "☀️";
@@ -208,7 +300,6 @@
       post("openLog", { filename });
     }
 
-    // --- Helper: Filter Logs ---
     function filterLogs(term) {
       return logNamesCache.filter((n) => {
         const name = n.toLowerCase();
@@ -219,14 +310,12 @@
     if (searchInput) {
       searchInput.addEventListener("input", (e) => {
         const term = ((e.target && e.target.value) || "").toLowerCase();
-        const filtered = filterLogs(term);
-        renderDropdown(filtered);
+        renderDropdown(filterLogs(term));
         if (dropdown) dropdown.classList.add("show");
       });
       searchInput.addEventListener("focus", () => {
         const term = (searchInput.value || "").toLowerCase();
-        const filtered = filterLogs(term);
-        renderDropdown(filtered);
+        renderDropdown(filterLogs(term));
         if (dropdown) dropdown.classList.add("show");
       });
     }
@@ -240,6 +329,7 @@
       )
         dropdown.classList.remove("show");
 
+      // Handle dropdown close when clicking outside
       const filesSection = document.getElementById("per-file-section");
       if (filesSection) {
         const targetIsRow =
@@ -281,32 +371,37 @@
         flaggedEvents = 0,
         integrityScore = 100;
 
+      // Calculate Scores
       if (parsed && Array.isArray(parsed.events)) {
         totalEvents = parsed.events.length;
         parsed.events.forEach((e) => {
           let flagged = false;
-          if (e.eventType === "paste") {
-            const len =
-              typeof e.length === "number"
+          const et = (e.eventType || "").toString().toLowerCase();
+          const len =
+            typeof e.pasteCharCount === "number"
+              ? e.pasteCharCount
+              : typeof e.length === "number"
                 ? e.length
                 : typeof e.pasteLength === "number"
                   ? e.pasteLength
-                  : typeof e.pasteCharCount === "number"
-                    ? e.pasteCharCount
-                    : typeof e.text === "string"
-                      ? e.text.length
-                      : null;
-
-            if (len !== null && len > currentSettings.pasteLength)
+                  : null;
+          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
+            if (len === null || len > currentSettings.pasteLength)
               flagged = true;
-            else if (len === null) flagged = true;
           }
           if (
-            e.eventType === "input" &&
+            et === "input" &&
             e.flightTime &&
             parseInt(e.flightTime) < currentSettings.flight
           )
             flagged = true;
+          try {
+            if (
+              currentSettings.flagAiEvents &&
+              (et.startsWith("ai-") || e.possibleAiDetection)
+            )
+              flagged = true;
+          } catch (err) {}
           if (flagged) flaggedEvents++;
         });
         if (totalEvents > 0) {
@@ -319,23 +414,26 @@
       if (integrityScore < 85) scoreColor = "#f59e0b";
       if (integrityScore < 50) scoreColor = "#ef4444";
 
+      // Render Header and Score Card
       if (logsView) {
         const scoreDiv = document.createElement("div");
         scoreDiv.className = "card";
         scoreDiv.style.borderLeft = "6px solid " + scoreColor;
         scoreDiv.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <h2 style="margin:0; font-size:2rem; color:${scoreColor}">${integrityScore}%</h2>
-              <div class="meta" style="font-size:1rem;">Integrity Score</div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+            <div style="text-align: left;">
+              <h2 style="margin: 0; font-size: 2rem; color: ${scoreColor}; line-height: 1;">${integrityScore}%</h2>
+              <div class="meta" style="font-size: 1rem; margin-top: 4px;">Integrity Score</div>
             </div>
-            <div style="text-align:right;">
-              <div style="font-weight:600; font-size:1.2rem;">${flaggedEvents} <span style="font-weight:400; color:var(--muted)">/ ${totalEvents}</span></div>
+            <div style="text-align: right;">
+              <div style="font-weight: 600; font-size: 1.2rem;">
+                ${flaggedEvents} <span style="font-weight: 400; color: var(--muted)">/ ${totalEvents}</span>
+              </div>
               <div class="meta">Flagged Events</div>
             </div>
           </div>
-          <div class="meta" style="margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
-            Score affected by <strong style="color:#f59e0b">Suspicious Pastes (&gt; ${currentSettings.pasteLength} chars)</strong> and <strong style="color:#8b5cf6">Fast Typing (&lt; ${currentSettings.flight}ms)</strong>.
+          <div class="meta" style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px;">
+            Score affected by <strong style="color: #f59e0b">Suspicious Pastes (> ${currentSettings.pasteLength} chars)</strong> and <strong style="color: #8b5cf6">Fast Typing (< ${currentSettings.flight}ms)</strong>.
           </div>
         `;
         logsView.appendChild(scoreDiv);
@@ -378,6 +476,7 @@
         }
       }
 
+      // Render Events (Newest First + Inactivity Gaps)
       if (logsView && parsed && Array.isArray(parsed.events)) {
         const container = document.createElement("div");
 
@@ -400,12 +499,8 @@
         };
 
         const inactivityLimitMs = (currentSettings.inactivity || 5) * 60 * 1000;
-
-        // We need to process chronologically to check gaps, but display reversed (newest first).
-        // Strategy: Process normal order, build row list, then reverse and append.
         const events = parsed.events;
         const rowElements = [];
-
         let previousTime = null;
 
         for (let i = 0; i < events.length; i++) {
@@ -419,26 +514,25 @@
           if (previousTime !== null && currentTime !== null) {
             const gap = currentTime - previousTime;
             if (gap > inactivityLimitMs) {
-              // Create a separate ALERT ROW for the inactivity gap
               const gapRow = document.createElement("div");
               gapRow.className = "event";
               gapRow.style.borderLeft = "4px solid #ef4444";
-              gapRow.style.backgroundColor = "rgba(239, 68, 68, 0.1)"; // Light red bg
+              gapRow.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
               gapRow.innerHTML = `
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <strong style="color:#ef4444">⚠️ Major Focus Away Time</strong>
-                            <span class="meta" style="color:#ef4444; font-weight:bold;">${formatDuration(gap)}</span>
-                        </div>
-                        <div class="meta">Student was inactive for > ${currentSettings.inactivity} mins.</div>
-                    `;
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <strong style="color:#ef4444">⚠️ Major Focus Away Time</strong>
+                      <span class="meta" style="color:#ef4444; font-weight:bold;">${formatDuration(gap)}</span>
+                  </div>
+                  <div class="meta">Student was inactive for > ${currentSettings.inactivity} mins.</div>
+              `;
               rowElements.push(gapRow);
             }
           }
           if (currentTime) previousTime = currentTime;
-          // ------------------------
 
           // 1. Paste Check
-          if (e.eventType === "paste") {
+          const et = (e.eventType || "").toString().toLowerCase();
+          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
             const len =
               typeof e.length === "number"
                 ? e.length
@@ -449,7 +543,6 @@
                     : typeof e.text === "string"
                       ? e.text.length
                       : null;
-
             if (len !== null && len > currentSettings.pasteLength) {
               className += " paste";
               flagReason = "(Large Paste)";
@@ -460,7 +553,7 @@
 
           // 2. Flight Check
           if (
-            e.eventType === "input" &&
+            et === "input" &&
             e.flightTime &&
             parseInt(e.flightTime) < currentSettings.flight
           ) {
@@ -468,10 +561,20 @@
             flagReason = "(Fast Input)";
           }
 
+          // 3. AI Check
+          try {
+            if (
+              currentSettings.flagAiEvents &&
+              (et.startsWith("ai-") || e.possibleAiDetection)
+            ) {
+              className += " ai";
+              flagReason = "(AI-detected)";
+            }
+          } catch (err) {}
+
           row.className = className;
           let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || "Unknown"}</strong> ${flagReason}</div><span class="meta">${e.time || ""}</span></div>`;
 
-          // 3. Metadata Rendering
           Object.keys(e).forEach((k) => {
             if (["eventType", "time"].includes(k)) return;
             let val = e[k];
@@ -480,9 +583,8 @@
               k === "fileView" ||
               k === "file" ||
               k === "filePath"
-            ) {
+            )
               val = formatFilePath(val);
-            }
             try {
               if (typeof val === "object") val = JSON.stringify(val);
             } catch (err) {}
@@ -493,7 +595,7 @@
           rowElements.push(row);
         }
 
-        // Display Newest First (Reverse the chronological list we just built)
+        // Display Newest First
         rowElements.reverse().forEach((r) => container.appendChild(r));
         if (logsView) logsView.appendChild(container);
       }
@@ -528,6 +630,7 @@
         expandedFile = null;
         return;
       }
+
       const dropdown = document.createElement("div");
       dropdown.className = "file-dropdown card";
       dropdown.style.marginTop = "8px";
@@ -535,29 +638,117 @@
       let flagged = 0;
       if (parsed.events)
         parsed.events.forEach((e) => {
-          if (e.eventType === "paste") {
-            const len =
-              typeof e.length === "number"
+          const et = (e.eventType || "").toString().toLowerCase();
+          const len =
+            typeof e.pasteCharCount === "number"
+              ? e.pasteCharCount
+              : typeof e.length === "number"
                 ? e.length
                 : typeof e.pasteLength === "number"
                   ? e.pasteLength
-                  : typeof e.pasteCharCount === "number"
-                    ? e.pasteCharCount
-                    : typeof e.text === "string"
-                      ? e.text.length
-                      : null;
+                  : null;
+          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
             if (len === null || len > currentSettings.pasteLength) flagged++;
           }
           if (
-            e.eventType === "input" &&
+            et === "input" &&
             e.flightTime &&
             parseInt(e.flightTime) < currentSettings.flight
           )
             flagged++;
+          try {
+            if (
+              currentSettings.flagAiEvents &&
+              (et.startsWith("ai-") || e.possibleAiDetection)
+            )
+              flagged++;
+          } catch (err) {}
         });
       const score =
         total > 0 ? Math.max(0, Math.round((1 - flagged / total) * 100)) : 100;
-      dropdown.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><strong>${filename}</strong><div class='meta'>${total} events</div></div><div style='text-align:right'><div style='font-weight:700'>${score}%</div><div class='meta'>${flagged} flagged</div></div></div>`;
+      let scoreColor = "#10b981";
+      if (score < 85) scoreColor = "#f59e0b";
+      if (score < 50) scoreColor = "#ef4444";
+
+      dropdown.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:6px; height:72px; background:${scoreColor}; border-radius:6px 0 0 6px;"></div>
+            <div style="padding:8px 12px;">
+              <div style="font-size:2rem; font-weight:700; color:${scoreColor};">${score}%</div>
+              <div class="meta">Integrity Score</div>
+            </div>
+          </div>
+          <div style="text-align:right; min-width:140px;">
+            <div style="font-weight:700; font-size:1.2rem;">${flagged} / ${total}</div>
+            <div class="meta">Flagged Events</div>
+          </div>
+        </div>
+        <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
+      `;
+
+      try {
+        const affected = new Set();
+        const getPasteLen = (ev) => {
+          if (!ev) return null;
+          if (typeof ev.pasteCharCount === "number") return ev.pasteCharCount;
+          if (typeof ev.pasteLength === "number") return ev.pasteLength;
+          if (typeof ev.length === "number") return ev.length;
+          return null;
+        };
+        if (parsed && Array.isArray(parsed.events)) {
+          parsed.events.forEach((ev) => {
+            if (!ev || !ev.eventType) return;
+            const et = (ev.eventType || "").toString().toLowerCase();
+            if (
+              et === "input" &&
+              ev.flightTime &&
+              parseInt(ev.flightTime) < currentSettings.flight
+            )
+              affected.add(`Fast Typing (< ${currentSettings.flight}ms)`);
+            if (
+              et === "paste" ||
+              et === "ai-paste" ||
+              et === "replace" ||
+              et === "ai-replace"
+            ) {
+              const plen = getPasteLen(ev);
+              if (plen === null || plen > currentSettings.pasteLength)
+                affected.add(
+                  `Suspicious Pastes (> ${currentSettings.pasteLength} chars)`,
+                );
+            }
+            if (
+              currentSettings.flagAiEvents &&
+              (et.startsWith("ai-") ||
+                et === "ai-paste" ||
+                et === "ai-replace" ||
+                et === "ai-delete" ||
+                ev.possibleAiDetection)
+            )
+              affected.add("AI-assisted edits");
+          });
+        }
+
+        let affectedHtml = "";
+        if (affected.size === 0)
+          affectedHtml = '<div class="meta">No notable factors detected.</div>';
+        else {
+          const items = Array.from(affected).map((item) => {
+            if (item.startsWith("Suspicious"))
+              return `<strong style='color:#f59e0b'>${item}</strong>`;
+            if (item.startsWith("Fast Typing"))
+              return `<strong style='color:#8b5cf6'>${item}</strong>`;
+            if (item.includes("AI"))
+              return `<strong style='color:#60a5fa'>${item}</strong>`;
+            return `<strong>${item}</strong>`;
+          });
+          affectedHtml = `<div class="meta">Score affected by ${items.join(" and ")}.</div>`;
+        }
+        dropdown.innerHTML += affectedHtml;
+      } catch (err) {
+        dropdown.innerHTML += `<div class="meta">Score factors unavailable.</div>`;
+      }
       row.parentNode.insertBefore(dropdown, row.nextSibling);
     }
 
@@ -571,41 +762,127 @@
         return;
       }
       const m = data.metrics;
+      const pasteIsAI =
+        (data.aiPasteCount &&
+          data.totalPasteCount &&
+          data.aiPasteCount === data.totalPasteCount) ||
+        false;
+      const deleteIsAI =
+        (data.aiDeleteCount &&
+          data.totalDeleteCount &&
+          data.aiDeleteCount === data.totalDeleteCount) ||
+        false;
 
+      // 1. Top Cards
       const top = document.createElement("div");
+      top.className = "top-cards";
       top.style.display = "grid";
-      top.style.gridTemplateColumns = "1fr 1fr 1fr";
+      top.style.gridTemplateColumns = "1fr 1fr";
       top.style.gap = "12px";
+      top.style.marginBottom = "4px";
+
       const makeCard = (title, value, subtitle) => {
         const c = document.createElement("div");
         c.className = "card";
         c.style.padding = "12px";
+        c.style.display = "flex";
+        c.style.flexDirection = "column";
+        c.style.justifyContent = "center";
+        c.style.boxSizing = "border-box";
+        c.style.height = "96px";
+        c.style.minWidth = "140px";
         c.innerHTML = `<div style="font-weight:700; font-size:1.1rem;">${value}</div><div class="meta">${title}${subtitle ? " • " + subtitle : ""}</div>`;
         return c;
       };
-      top.appendChild(makeCard("AI Probability", m.aiProbability + "%"));
-      top.appendChild(makeCard("Paste %", m.pasteRatio + "%", "of all events"));
+
       top.appendChild(
-        makeCard("Delete %", m.deleteRatio + "%", "of all events"),
-      );
-      const statsRow = document.createElement("div");
-      statsRow.style.display = "flex";
-      statsRow.style.gap = "12px";
-      statsRow.style.marginTop = "12px";
-      statsRow.appendChild(
-        makeCard("Avg Paste Length", m.avgPasteLength + " chars"),
-      );
-      statsRow.appendChild(
         makeCard(
-          "Totals",
-          data.totalLogs + " logs • " + data.totalEvents + " events",
+          pasteIsAI ? "AI Paste %" : "Paste %",
+          m.pasteRatio + "%",
+          pasteIsAI ? "of AI-generated events" : "of all events",
         ),
       );
+      top.appendChild(
+        makeCard(
+          deleteIsAI ? "AI Delete %" : "Delete %",
+          m.deleteRatio + "%",
+          deleteIsAI ? "of AI-originated events" : "of all events",
+        ),
+      );
+
+      // 2. Integrity & Stats Row
+      let integrityDiv = null;
+      try {
+        const integrity =
+          typeof data.integrityScore === "number" ? data.integrityScore : null;
+        const flagged =
+          typeof data.flaggedCount === "number" ? data.flaggedCount : null;
+        const totals = data.totalEvents || 0;
+        let scoreColor = "#10b981";
+        const intVal = integrity !== null ? integrity : null;
+        if (intVal !== null) {
+          if (intVal < 50) scoreColor = "#ef4444";
+          else if (intVal < 85) scoreColor = "#f59e0b";
+          else scoreColor = "#10b981";
+        }
+
+        integrityDiv = document.createElement("div");
+        integrityDiv.className = "card";
+        integrityDiv.style.borderLeft = "6px solid " + scoreColor;
+        integrityDiv.style.padding = "12px";
+        integrityDiv.style.display = "flex";
+        integrityDiv.style.alignItems = "center";
+        integrityDiv.style.width = "100%";
+        integrityDiv.style.boxSizing = "border-box";
+        integrityDiv.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+            <div style="text-align:left;">
+              <div style="font-size:2rem; font-weight:700; color:${scoreColor}; line-height:1;">${intVal !== null ? String(intVal) + "%" : "N/A"}</div>
+              <div class="meta" style="margin-top:4px;">Integrity Score</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-weight:700; font-size:1.2rem;">
+                ${flagged !== null ? flagged : "-"} <span style="font-weight:400; color:var(--muted)">/ ${totals}</span>
+              </div>
+              <div class="meta">Flagged Events</div>
+            </div>
+          </div>
+        `;
+      } catch (err) {
+        integrityDiv = null;
+      }
+
+      const statsRow = document.createElement("div");
+      statsRow.className = "stats-row";
+      statsRow.style.display = "grid";
+      statsRow.style.gridTemplateColumns = "1fr 1fr";
+      statsRow.style.gap = "12px";
+      statsRow.style.marginTop = "4px";
+
+      if (integrityDiv) {
+        integrityDiv.style.width = "100%";
+        statsRow.appendChild(integrityDiv);
+      }
+      const avgCard = makeCard("Avg Paste Length", m.avgPasteLength + " chars");
+      avgCard.style.width = "100%";
+      statsRow.appendChild(avgCard);
+
+      // 3. AI Bar
       const barCard = document.createElement("div");
       barCard.className = "card";
       barCard.style.padding = "12px";
-      barCard.innerHTML =
-        '<div style="font-weight:700; margin-bottom:8px;">AI Probability</div>';
+      let aiColor = "#10b981";
+      try {
+        const aiVal = Number(m.aiProbability) || 0;
+        if (aiVal >= 75) aiColor = "#ef4444";
+        else if (aiVal >= 40) aiColor = "#f59e0b";
+        else aiColor = "#10b981";
+      } catch (err) {}
+      barCard.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><div style=\"font-weight:700; color:var(--fg)\">AI Probability</div><div style=\"font-weight:700; color:${aiColor}\">${m.aiProbability}%</div></div>`;
+      try {
+        barCard.style.borderLeft = "6px solid " + aiColor;
+      } catch (err) {}
+
       const barOuter = document.createElement("div");
       barOuter.style.background = "var(--bg)";
       barOuter.style.border = "1px solid var(--border)";
@@ -619,33 +896,38 @@
       barInner.style.borderRadius = "8px";
       barOuter.appendChild(barInner);
       barCard.appendChild(barOuter);
+
       if (container) {
         container.appendChild(top);
         container.appendChild(statsRow);
         container.appendChild(barCard);
       }
 
-      // per-file
+      // 4. Per File
       if (container) {
         const filesCard = document.createElement("div");
         filesCard.className = "card";
         filesCard.style.marginTop = "12px";
-        filesCard.innerHTML = "<h2>Per-file breakdown</h2>";
+        filesCard.innerHTML = `<h2>Per-file breakdown - ${data.totalLogs || (data.totalLogs === 0 ? 0 : "?")} logs</h2>`;
         const filesSection = document.createElement("div");
         filesSection.id = "per-file-section";
         filesSection.style.marginTop = "8px";
         const header = document.createElement("div");
         header.style.display = "grid";
-        header.style.gridTemplateColumns = "2fr 1fr 1fr 1fr";
+        header.style.gridTemplateColumns = "2fr 1fr 1fr 1fr 1fr";
         header.style.fontWeight = "700";
         header.style.gap = "8px";
-        header.innerHTML =
-          "<div>File</div><div>Events</div><div>Paste</div><div>Delete</div>";
+        const aiHeaderLabel =
+          typeof window !== "undefined" && window.innerWidth <= 579
+            ? "AI"
+            : "AI Probability";
+        header.innerHTML = `<div>File</div><div>Events</div><div>Paste</div><div>${aiHeaderLabel}</div><div>Delete</div>`;
         filesSection.appendChild(header);
+
         (data.perFile || []).forEach((f) => {
           const row = document.createElement("div");
           row.style.display = "grid";
-          row.style.gridTemplateColumns = "2fr 1fr 1fr 1fr";
+          row.style.gridTemplateColumns = "2fr 1fr 1fr 1fr 1fr";
           row.style.gap = "8px";
           row.style.padding = "8px 4px";
           row.setAttribute("data-file-row", f.name || "");
@@ -654,25 +936,46 @@
           name.textContent = f.name || (f.error ? "(failed)" : "unknown");
           const ev = document.createElement("div");
           ev.textContent = f.events ? String(f.events) : "-";
+          const totalP = (f.paste || 0) + (f.aiPasteCount || 0);
           const p = document.createElement("div");
           p.textContent = f.events
-            ? Math.round(((f.paste || 0) / Math.max(1, f.events)) * 1000) / 10 +
-              "%"
+            ? Math.round((totalP / Math.max(1, f.events)) * 1000) / 10 + "%"
             : f.error
               ? "err"
               : "-";
+          const aiVal =
+            typeof f.aiProbability === "number"
+              ? f.aiProbability
+              : f.metrics && typeof f.metrics.aiProbability === "number"
+                ? f.metrics.aiProbability
+                : null;
+          const ai = document.createElement("div");
+          ai.textContent =
+            aiVal === null || aiVal === undefined
+              ? f.error
+                ? "err"
+                : "-"
+              : String(aiVal) + "%";
+          try {
+            if (aiVal !== null && aiVal !== undefined) {
+              if (aiVal >= 75) ai.style.color = "#ef4444";
+              else if (aiVal >= 40) ai.style.color = "#f59e0b";
+              else ai.style.color = "#10b981";
+            }
+          } catch (err) {}
+          const totalD = (f.delete || 0) + (f.aiDeleteCount || 0);
           const d = document.createElement("div");
           d.textContent = f.events
-            ? Math.round(((f.delete || 0) / Math.max(1, f.events)) * 1000) /
-                10 +
-              "%"
+            ? Math.round((totalD / Math.max(1, f.events)) * 1000) / 10 + "%"
             : f.error
               ? "err"
               : "-";
           row.appendChild(name);
           row.appendChild(ev);
           row.appendChild(p);
+          row.appendChild(ai);
           row.appendChild(d);
+
           row.addEventListener("click", (evClick) => {
             evClick.stopPropagation();
             const fname = f.name;
@@ -705,6 +1008,22 @@
         filesCard.appendChild(filesSection);
         container.appendChild(filesCard);
       }
+
+      try {
+        const updateAiHeaderLabel = () => {
+          const filesSection = document.getElementById("per-file-section");
+          if (!filesSection) return;
+          const hdr = filesSection.querySelector("div");
+          if (!hdr) return;
+          const cols = hdr.children;
+          if (!cols || cols.length < 4) return;
+          cols[3].textContent =
+            window.innerWidth <= 579 ? "AI" : "AI Probability";
+        };
+        window.addEventListener("resize", () => {
+          if (document.getElementById("dashboard-view")) updateAiHeaderLabel();
+        });
+      } catch (err) {}
     }
 
     function showDashboardLoading() {
@@ -742,6 +1061,7 @@
           pasteLengthThreshold: parseInt(
             pasteLengthInput?.value || defaults.pasteLength,
           ),
+          flagAiEvents: !!(flagAiCheckbox && flagAiCheckbox.checked),
         };
         post("saveSettings", { settings });
       });
@@ -751,7 +1071,15 @@
         if (inactivityInput) inactivityInput.value = defaults.inactivity;
         if (flightInput) flightInput.value = defaults.flight;
         if (pasteLengthInput) pasteLengthInput.value = defaults.pasteLength;
-        post("saveSettings", { settings: defaults });
+        if (flagAiCheckbox) flagAiCheckbox.checked = true;
+        post("saveSettings", {
+          settings: {
+            inactivityThreshold: defaults.inactivity,
+            flightTimeThreshold: defaults.flight,
+            pasteLengthThreshold: defaults.pasteLength,
+            flagAiEvents: true,
+          },
+        });
       });
 
     // messages from extension
@@ -809,12 +1137,18 @@
               flight: msg.settings.flightTimeThreshold || defaults.flight,
               pasteLength:
                 msg.settings.pasteLengthThreshold || defaults.pasteLength,
+              flagAiEvents:
+                typeof msg.settings.flagAiEvents === "boolean"
+                  ? msg.settings.flagAiEvents
+                  : true,
             };
             if (inactivityInput)
               inactivityInput.value = currentSettings.inactivity;
             if (flightInput) flightInput.value = currentSettings.flight;
             if (pasteLengthInput)
               pasteLengthInput.value = currentSettings.pasteLength;
+            if (flagAiCheckbox)
+              flagAiCheckbox.checked = !!currentSettings.flagAiEvents;
           }
           break;
         case "settingsSaved":
@@ -823,6 +1157,8 @@
           if (flightInput) currentSettings.flight = parseInt(flightInput.value);
           if (pasteLengthInput)
             currentSettings.pasteLength = parseInt(pasteLengthInput.value);
+          if (flagAiCheckbox)
+            currentSettings.flagAiEvents = !!flagAiCheckbox.checked;
           if (settingsMsg) {
             settingsMsg.textContent = "Settings saved successfully!";
             setTimeout(() => (settingsMsg.textContent = ""), 3000);
@@ -836,6 +1172,79 @@
             status.textContent = msg.message;
             setTimeout(() => (status.textContent = "Ready"), 3000);
           }
+          break;
+        case "deletionData":
+          try {
+            const d = msg.data;
+            if (!deletionsView) break;
+            if (typeof d === "string") {
+              deletionsView.innerHTML = "<pre>" + d + "</pre>";
+            } else {
+              const records = Array.isArray(d)
+                ? d
+                : d && Array.isArray(d.deletions)
+                  ? d.deletions
+                  : null;
+              const header = d && d.header ? d.header : null;
+              if (header) {
+                const hdrDiv = document.createElement("div");
+                hdrDiv.className = "meta";
+                hdrDiv.style.marginBottom = "8px";
+                hdrDiv.innerHTML = `<div><strong>${header.note || "Deletion Log"}</strong></div><div class="meta">Created: ${header.createdAt || header.created || ""}</div>`;
+                deletionsView.innerHTML = "";
+                deletionsView.appendChild(hdrDiv);
+              } else {
+                deletionsView.innerHTML = "";
+              }
+              if (!records || records.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "meta";
+                empty.textContent = "No deletion records found.";
+                deletionsView.appendChild(empty);
+              } else {
+                const list = document.createElement("div");
+                list.style.display = "grid";
+                list.style.gap = "10px";
+                records.forEach((item) => {
+                  const row = document.createElement("div");
+                  row.className = "card deletion-row";
+                  const time =
+                    item.modifiedAt || item.time || item.timestamp || "";
+                  const who =
+                    item.user || item.startedBy || item.actor || "Unknown";
+                  const file =
+                    item.modifiedFile ||
+                    item.file ||
+                    item.path ||
+                    item.filePath ||
+                    "(unknown)";
+                  const prevSize =
+                    item.previousSize || item.oldSize || item.previous || "";
+                  const newSize = item.newSize || item.size || "";
+                  const note = item.note || item.reason || "";
+                  row.innerHTML = `
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <div style="font-weight:700;">${file}</div>
+                        <div class="meta">Deleted by ${who} • ${time}</div>
+                      </div>
+                      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+                        ${prevSize ? `<div class="meta">Prev: ${prevSize}</div>` : ""}
+                        ${newSize ? `<div class="meta">Now: ${newSize}</div>` : ""}
+                        ${note ? `<div class="meta">${note}</div>` : ""}
+                      </div>
+                    </div>
+                  `;
+                  list.appendChild(row);
+                });
+                deletionsView.appendChild(list);
+              }
+            }
+          } catch (err) {
+            if (deletionsView)
+              deletionsView.textContent = "Failed to render deletions.";
+          }
+          if (status) status.textContent = "Deletions updated";
           break;
       }
     });

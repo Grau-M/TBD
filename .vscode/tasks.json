@@ -10,7 +10,9 @@
 			"isBackground": true,
 			"problemMatcher": {
 				"owner": "custom",
-				"pattern": [],
+				"pattern": {
+					"regexp": "^$"
+				},
 				"background": {
 					"activeOnStart": true,
 					"beginsPattern": ".",

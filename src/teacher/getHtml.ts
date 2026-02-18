@@ -13,6 +13,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
   const dashboardHtml = fs.readFileSync(path.join(viewsRoot, 'dashboard.html'), 'utf8');
   const logsHtml = fs.readFileSync(path.join(viewsRoot, 'logs.html'), 'utf8');
   const settingsHtml = fs.readFileSync(path.join(viewsRoot, 'settings.html'), 'utf8');
+  const deletionsHtml = fs.readFileSync(path.join(viewsRoot, 'deletions.html'), 'utf8');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -48,6 +49,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     @keyframes spin { to { transform: rotate(360deg); } }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px var(--card-shadow); }
     .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .top-nav { width: 100%; }
     h1 { font-size: 1.5rem; font-weight: 700; color: var(--fg); margin: 0; }
     h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--fg); }
     .form-group { margin-bottom: 16px; position: relative; }
@@ -72,9 +74,43 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     .btn:active { transform: scale(0.98); }
     .btn-primary { background: var(--accent); color: white; }
     .btn-secondary { background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
+    #hamburger { display: none; }
     .btn-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
     #logs-view { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px; }
     #dashboard-view { margin-top: 20px; }
+    /* Deletions responsive rows */
+    .deletion-row { display:flex; flex-direction:column; gap:8px; }
+    .deletion-row .meta { margin-top:0; }
+    @media (min-width:700px) {
+      .deletion-row { flex-direction:row; justify-content:space-between; align-items:center; }
+    }
+    /* Responsive: collapse sidebar into hamburger for small widths */
+    @media (max-width:865px) {
+      /* position sidebar below the fixed top-nav so it doesn't get covered */
+        .sidebar { display: none; position: fixed; left: 0; top: 0; height: 100%; width: 240px; transform: translateX(-100%); transition: transform 220ms ease; z-index: 150; }
+        .sidebar.open { display: flex; transform: translateX(0); z-index: 240; }
+      #hamburger { display: inline-flex; align-items: center; justify-content: center; font-size: 18px; }
+      .backdrop { display:none; }
+      .backdrop.show { display:block; position:fixed; inset:0; background: rgba(0,0,0,0.45); z-index: 210; }
+      .main-content { padding: 16px; }
+      /* make the small-screen top nav fixed so hamburger+theme stay visible while scrolling
+        and page content scrolls underneath it. */
+      .top-nav { position: fixed; top: 0; left: 0; right: 0; width: 100%; height: 56px; z-index: 220; display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: var(--surface); box-shadow: 0 6px 18px rgba(2,6,23,0.18); backdrop-filter: blur(6px); border-bottom: 1px solid rgba(0,0,0,0.06); }
+      /* ensure page content sits under the fixed nav (avoid overlap) */
+      .main-content { padding-top: calc(16px + 56px); }
+      /* keep sidebar underneath the top nav when opened */
+      .sidebar { top: 0; z-index: 150; }
+    }
+    /* Extra small screens: stack dashboard cards one-per-row */
+    @media (max-width:579px) {
+      .top-cards { grid-template-columns: 1fr !important; gap: 10px !important; }
+      .stats-row { grid-template-columns: 1fr !important; gap: 10px !important; }
+      /* make cards full width and allow auto height */
+      .top-cards .card, .stats-row .card, .card { width: 100% !important; min-width: auto !important; height: auto !important; }
+      /* slightly reduce padding to fit narrow screens */
+      .card { padding: 12px !important; }
+    }
+    pre { white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
   </style>
 </head>
 <body>
@@ -83,13 +119,17 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     ${sidebarHtml}
 
     <main class="main-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <div></div>
+      <div class="top-nav" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button id="hamburger" class="btn btn-secondary" style="min-width:40px; height:36px; padding:6px 8px; border-radius:8px;">☰</button>
+          <div></div>
+        </div>
         <button id="themeToggle" class="btn btn-secondary" style="min-width:40px; height:36px; padding:6px 8px; border-radius:8px;">🌓</button>
       </div>
 
       ${dashboardHtml}
       ${logsHtml}
+      ${deletionsHtml}
       ${settingsHtml}
 
     </main>

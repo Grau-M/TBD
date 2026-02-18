@@ -24,6 +24,14 @@
       <div class="meta">Pastes longer than this will be visually flagged.</div>
     </div>
 
+    <div class="form-group">
+      <label>Flag AI-detected events</label>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" id="flagAiEvents" />
+        <div class="meta" style="margin:0">When enabled, events detected as AI will be counted as flagged in the integrity scoring and per-file analysis.</div>
+      </div>
+    </div>
+
     <div style="display:flex; gap:10px; margin-top:24px; border-top:1px solid var(--border); padding-top:20px;">
       <button id="saveSettings" class="btn btn-primary">Save Changes</button>
       <button id="resetSettings" class="btn btn-danger">Reset to Defaults</button>

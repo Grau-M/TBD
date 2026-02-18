@@ -138,8 +138,8 @@ export async function activate(context: vscode.ExtensionContext) {
     const openTeacherCommand = vscode.commands.registerCommand('tbd-logger.openTeacherView', () => openTeacherView(context));
     context.subscriptions.push(openTeacherCommand);
 
-    // Create status bar and start UI timer (also show small lock icon wired to hidden deletions)
-    const statusBarItem = createStatusBar(context, 'tbd-logger.openLogs', 'tbd-logger.showHiddenDeletions');
+    // Create status bar and start UI timer (also show small lock icon wired to open Teacher Dashboard)
+    const statusBarItem = createStatusBar(context, 'tbd-logger.openLogs', 'tbd-logger.openTeacherView');
     const uiTimerDisposable = startUiTimer(statusBarItem);
     context.subscriptions.push(uiTimerDisposable);
 

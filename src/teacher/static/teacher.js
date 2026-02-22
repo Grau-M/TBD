@@ -1,4 +1,4 @@
-/* Webview client script for Teacher View - cleaned and fixed */
+/* Webview client script for Teacher View - cleaned and defensive */
 (function () {
   const vscode = acquireVsCodeApi();
 
@@ -7,10 +7,9 @@
   const defaults = { inactivity: 5, flight: 50, pasteLength: 50 };
   let currentSettings = { ...defaults };
   let currentTab = "dashboard";
-  let requestedDashboardFile = null; // filename requested to show in dashboard per-file dropdown
-  let expandedFile = null; // filename currently expanded in dashboard
+  let requestedDashboardFile = null;
+  let expandedFile = null;
 
-  // Helper: Format milliseconds into human readable string
   function formatDuration(ms) {
     if (!ms || ms < 0) return "0m";
     const seconds = Math.floor(ms / 1000);
@@ -22,7 +21,6 @@
     return `${seconds}s`;
   }
 
-  // Helper: Parse Log Timestamp "Feb-04-2026 17:51:19:284 EST" -> timestamp
   function parseLogTime(timeStr) {
     if (!timeStr) return null;
     const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
@@ -68,10 +66,8 @@
 
   // wait for DOM to be ready
   window.addEventListener("DOMContentLoaded", () => {
-    // element helpers
     const $ = (id) => document.getElementById(id);
 
-    // DOM refs
     const searchInput = $("log-search-input");
     const dropdown = $("log-dropdown");
     const logCountLabel = $("log-count");
@@ -82,8 +78,6 @@
     const dashboardEmpty = $("dashboard-empty");
     const dashboardLogName = $("dashboard-log-name");
 
-    const deletionsView = $("deletions-view");
-
     const logsView = $("logs-view");
     const logsViewerContainer = $("logs-viewer-container");
     const logsLogName = $("logs-log-name");
@@ -91,87 +85,9 @@
     const inactivityInput = $("inactivityInput");
     const flightInput = $("flightInput");
     const pasteLengthInput = $("pasteLengthInput");
-    const flagAiCheckbox = $("flagAiEvents");
     const settingsMsg = $("settings-msg");
 
     const themeToggle = $("themeToggle");
-    const hamburgerBtn = $("hamburger");
-    const sidebarEl = document.querySelector(".sidebar");
-    let closeSidebar = () => {};
-
-    // Small-screen sidebar toggle
-    try {
-      let backdrop = null;
-      if (hamburgerBtn && sidebarEl) {
-        hamburgerBtn.addEventListener("click", () => {
-          const isOpen = sidebarEl.classList.toggle("open");
-          if (isOpen) {
-            backdrop = document.createElement("div");
-            backdrop.id = "sidebar-backdrop";
-            backdrop.className = "backdrop show";
-            document.body.appendChild(backdrop);
-            backdrop.addEventListener("click", () => {
-              sidebarEl.classList.remove("open");
-              try {
-                backdrop.remove();
-              } catch (e) {}
-            });
-          } else {
-            const existing = document.getElementById("sidebar-backdrop");
-            if (existing)
-              try {
-                existing.remove();
-              } catch (e) {}
-          }
-        });
-      }
-      closeSidebar = () => {
-        try {
-          if (sidebarEl) sidebarEl.classList.remove("open");
-          const existing = document.getElementById("sidebar-backdrop");
-          if (existing)
-            try {
-              existing.remove();
-            } catch (e) {}
-        } catch (e) {}
-      };
-      window.addEventListener("resize", () => {
-        try {
-          if (window.innerWidth > 865) closeSidebar();
-        } catch (e) {}
-      });
-    } catch (err) {}
-
-    // Clear search button
-    let clearSearchBtn = $("clear-search");
-    if (!clearSearchBtn && searchInput) {
-      try {
-        clearSearchBtn = document.createElement("button");
-        clearSearchBtn.id = "clear-search";
-        clearSearchBtn.type = "button";
-        clearSearchBtn.className = "btn clear-btn";
-        clearSearchBtn.textContent = "✖";
-        if (searchInput.parentNode)
-          searchInput.parentNode.insertBefore(
-            clearSearchBtn,
-            searchInput.nextSibling,
-          );
-      } catch (e) {
-        clearSearchBtn = null;
-      }
-    }
-    if (clearSearchBtn) {
-      clearSearchBtn.addEventListener("click", () => {
-        try {
-          if (searchInput) searchInput.value = "";
-          if (dropdown) {
-            renderDropdown(logNamesCache);
-            dropdown.classList.remove("show");
-          }
-          if (searchInput) searchInput.focus();
-        } catch (err) {}
-      });
-    }
 
     function switchTab(tabName) {
       document
@@ -193,40 +109,26 @@
       } catch (e) {}
     }
 
-    // Nav listeners
     const navDashboard = $("nav-dashboard");
     if (navDashboard)
       navDashboard.addEventListener("click", () => {
         switchTab("dashboard");
         post("analyzeLogs");
-        closeSidebar();
       });
     const navLogs = $("nav-logs");
     if (navLogs)
       navLogs.addEventListener("click", () => {
         switchTab("logs");
         post("listLogs");
-        closeSidebar();
       });
     const navSettings = $("nav-settings");
     if (navSettings)
       navSettings.addEventListener("click", () => {
         switchTab("settings");
-        closeSidebar();
-      });
-    const navDeletions = $("nav-deletions");
-    if (navDeletions)
-      navDeletions.addEventListener("click", () => {
-        switchTab("deletions");
-        post("getDeletions");
-        closeSidebar();
       });
     const btnGotoLogs = $("btn-goto-logs");
     if (btnGotoLogs)
-      btnGotoLogs.addEventListener("click", () => {
-        switchTab("logs");
-        closeSidebar();
-      });
+      btnGotoLogs.addEventListener("click", () => switchTab("logs"));
 
     const closeLogBtn = $("close-log");
     if (closeLogBtn)
@@ -237,14 +139,6 @@
         if (searchInput) searchInput.value = "";
       });
 
-    const refreshDeletionsBtn = $("refreshDeletions");
-    if (refreshDeletionsBtn)
-      refreshDeletionsBtn.addEventListener("click", () => {
-        if (status) status.textContent = "Fetching deletions...";
-        post("getDeletions");
-      });
-
-    // Theme logic
     let isDark = false;
     try {
       const st =
@@ -258,7 +152,10 @@
       )
         isDark = true;
     } catch (e) {
-      isDark = document.documentElement.classList.contains("dark");
+      isDark =
+        document.documentElement.classList.contains("dark") ||
+        (window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
     }
     if (isDark) document.documentElement.classList.add("dark");
     if (themeToggle) themeToggle.textContent = isDark ? "🌙" : "☀️";
@@ -329,7 +226,6 @@
       )
         dropdown.classList.remove("show");
 
-      // Handle dropdown close when clicking outside
       const filesSection = document.getElementById("per-file-section");
       if (filesSection) {
         const targetIsRow =
@@ -341,13 +237,16 @@
             const prev = document.querySelector(
               `[data-file-row="${expandedFile}"]`,
             );
-            if (
-              prev &&
-              prev.nextSibling &&
-              prev.nextSibling.classList &&
-              prev.nextSibling.classList.contains("file-dropdown")
-            )
-              prev.nextSibling.remove();
+            if (prev) {
+              const arrowCell = prev.querySelector(".row-arrow");
+              if (arrowCell) arrowCell.textContent = "▼";
+              if (
+                prev.nextSibling &&
+                prev.nextSibling.classList &&
+                prev.nextSibling.classList.contains("file-dropdown")
+              )
+                prev.nextSibling.remove();
+            }
             expandedFile = null;
           }
         }
@@ -360,7 +259,7 @@
         post("listLogs");
       });
 
-    // --- RENDER LOGIC ---
+    // --- RENDER LOGS TAB ---
     function renderParsedInLogs(parsed, filename) {
       if (logsView) logsView.innerHTML = "";
       if (dashboardEmpty) dashboardEmpty.style.display = "none";
@@ -371,37 +270,31 @@
         flaggedEvents = 0,
         integrityScore = 100;
 
-      // Calculate Scores
       if (parsed && Array.isArray(parsed.events)) {
         totalEvents = parsed.events.length;
         parsed.events.forEach((e) => {
           let flagged = false;
-          const et = (e.eventType || "").toString().toLowerCase();
-          const len =
-            typeof e.pasteCharCount === "number"
-              ? e.pasteCharCount
-              : typeof e.length === "number"
+          if (e.eventType === "paste") {
+            const len =
+              typeof e.length === "number"
                 ? e.length
                 : typeof e.pasteLength === "number"
                   ? e.pasteLength
-                  : null;
-          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
-            if (len === null || len > currentSettings.pasteLength)
+                  : typeof e.pasteCharCount === "number"
+                    ? e.pasteCharCount
+                    : typeof e.text === "string"
+                      ? e.text.length
+                      : null;
+            if (len !== null && len > currentSettings.pasteLength)
               flagged = true;
+            else if (len === null) flagged = true;
           }
           if (
-            et === "input" &&
+            e.eventType === "input" &&
             e.flightTime &&
             parseInt(e.flightTime) < currentSettings.flight
           )
             flagged = true;
-          try {
-            if (
-              currentSettings.flagAiEvents &&
-              (et.startsWith("ai-") || e.possibleAiDetection)
-            )
-              flagged = true;
-          } catch (err) {}
           if (flagged) flaggedEvents++;
         });
         if (totalEvents > 0) {
@@ -414,26 +307,23 @@
       if (integrityScore < 85) scoreColor = "#f59e0b";
       if (integrityScore < 50) scoreColor = "#ef4444";
 
-      // Render Header and Score Card
       if (logsView) {
         const scoreDiv = document.createElement("div");
         scoreDiv.className = "card";
         scoreDiv.style.borderLeft = "6px solid " + scoreColor;
         scoreDiv.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
-            <div style="text-align: left;">
-              <h2 style="margin: 0; font-size: 2rem; color: ${scoreColor}; line-height: 1;">${integrityScore}%</h2>
-              <div class="meta" style="font-size: 1rem; margin-top: 4px;">Integrity Score</div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <h2 style="margin:0; font-size:2rem; color:${scoreColor}">${integrityScore}%</h2>
+              <div class="meta" style="font-size:1rem;">Integrity Score</div>
             </div>
-            <div style="text-align: right;">
-              <div style="font-weight: 600; font-size: 1.2rem;">
-                ${flaggedEvents} <span style="font-weight: 400; color: var(--muted)">/ ${totalEvents}</span>
-              </div>
+            <div style="text-align:right;">
+              <div style="font-weight:600; font-size:1.2rem;">${flaggedEvents} <span style="font-weight:400; color:var(--muted)">/ ${totalEvents}</span></div>
               <div class="meta">Flagged Events</div>
             </div>
           </div>
-          <div class="meta" style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px;">
-            Score affected by <strong style="color: #f59e0b">Suspicious Pastes (> ${currentSettings.pasteLength} chars)</strong> and <strong style="color: #8b5cf6">Fast Typing (< ${currentSettings.flight}ms)</strong>.
+          <div class="meta" style="margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
+            Score affected by <strong style="color:#f59e0b">Suspicious Pastes (&gt; ${currentSettings.pasteLength} chars)</strong> and <strong style="color:#8b5cf6">Fast Typing (&lt; ${currentSettings.flight}ms)</strong>.
           </div>
         `;
         logsView.appendChild(scoreDiv);
@@ -476,11 +366,8 @@
         }
       }
 
-      // Render Events (Newest First + Inactivity Gaps)
       if (logsView && parsed && Array.isArray(parsed.events)) {
         const container = document.createElement("div");
-
-        // Helper to format file paths
         const formatFilePath = (p) => {
           if (!p || typeof p !== "string") return p;
           const project =
@@ -509,7 +396,6 @@
           let className = "event";
           let flagReason = "";
 
-          // --- INACTIVITY CHECK ---
           const currentTime = parseLogTime(e.time);
           if (previousTime !== null && currentTime !== null) {
             const gap = currentTime - previousTime;
@@ -519,20 +405,18 @@
               gapRow.style.borderLeft = "4px solid #ef4444";
               gapRow.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
               gapRow.innerHTML = `
-                  <div style="display:flex; justify-content:space-between; align-items:center;">
-                      <strong style="color:#ef4444">⚠️ Major Focus Away Time</strong>
-                      <span class="meta" style="color:#ef4444; font-weight:bold;">${formatDuration(gap)}</span>
-                  </div>
-                  <div class="meta">Student was inactive for > ${currentSettings.inactivity} mins.</div>
-              `;
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <strong style="color:#ef4444">⚠️ Major Focus Away Time</strong>
+                            <span class="meta" style="color:#ef4444; font-weight:bold;">${formatDuration(gap)}</span>
+                        </div>
+                        <div class="meta">Student was inactive for > ${currentSettings.inactivity} mins.</div>
+                    `;
               rowElements.push(gapRow);
             }
           }
           if (currentTime) previousTime = currentTime;
 
-          // 1. Paste Check
-          const et = (e.eventType || "").toString().toLowerCase();
-          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
+          if (e.eventType === "paste") {
             const len =
               typeof e.length === "number"
                 ? e.length
@@ -543,6 +427,7 @@
                     : typeof e.text === "string"
                       ? e.text.length
                       : null;
+
             if (len !== null && len > currentSettings.pasteLength) {
               className += " paste";
               flagReason = "(Large Paste)";
@@ -551,26 +436,14 @@
             }
           }
 
-          // 2. Flight Check
           if (
-            et === "input" &&
+            e.eventType === "input" &&
             e.flightTime &&
             parseInt(e.flightTime) < currentSettings.flight
           ) {
             className += " fast";
             flagReason = "(Fast Input)";
           }
-
-          // 3. AI Check
-          try {
-            if (
-              currentSettings.flagAiEvents &&
-              (et.startsWith("ai-") || e.possibleAiDetection)
-            ) {
-              className += " ai";
-              flagReason = "(AI-detected)";
-            }
-          } catch (err) {}
 
           row.className = className;
           let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || "Unknown"}</strong> ${flagReason}</div><span class="meta">${e.time || ""}</span></div>`;
@@ -583,8 +456,9 @@
               k === "fileView" ||
               k === "file" ||
               k === "filePath"
-            )
+            ) {
               val = formatFilePath(val);
+            }
             try {
               if (typeof val === "object") val = JSON.stringify(val);
             } catch (err) {}
@@ -595,77 +469,324 @@
           rowElements.push(row);
         }
 
-        // Display Newest First
         rowElements.reverse().forEach((r) => container.appendChild(r));
         if (logsView) logsView.appendChild(container);
       }
     }
 
+    // --- BEHAVIORAL PROFILE RENDERER ---
+    function renderProfile(data) {
+      let pCard = document.getElementById("profile-card");
+      if (!pCard) {
+        pCard = document.createElement("div");
+        pCard.id = "profile-card";
+        pCard.className = "card";
+        pCard.style.borderLeft = "6px solid var(--accent-2)";
+        pCard.style.marginTop = "12px";
+
+        const dashboardView = $("dashboard-view");
+        const filesSection = document.getElementById("per-file-section");
+        if (dashboardView && filesSection) {
+          // Insert profile right above the file breakdown table
+          dashboardView.insertBefore(pCard, filesSection.parentElement);
+        } else if (dashboardView) {
+          dashboardView.appendChild(pCard);
+        }
+      }
+
+      pCard.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2 style="margin:0; color:var(--accent-2);">Behavioral Profile: ${data.user}</h2>
+                    <div class="meta">Project: ${data.project} &nbsp;|&nbsp; Sessions: ${data.sessionsAnalyzed} &nbsp;|&nbsp; Active Mins: ${data.totalActiveMins}</div>
+                </div>
+                <button id="close-profile" class="btn btn-secondary" style="padding:4px 8px;">Close</button>
+            </div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:12px; margin-top:16px;">
+                <div><div style="font-weight:700; font-size:1.4rem;">${data.wpm}</div><div class="meta">Avg WPM</div></div>
+                <div><div style="font-weight:700; font-size:1.4rem;">${data.editRate}</div><div class="meta">Edits/min</div></div>
+                <div><div style="font-weight:700; font-size:1.4rem;">${data.pasteFreq}</div><div class="meta">Pastes/hr</div></div>
+                <div><div style="font-weight:700; font-size:1.4rem;">${data.avgPauseMs > 0 ? (data.avgPauseMs / 1000).toFixed(1) + "s" : "N/A"}</div><div class="meta">Avg Pause Length</div></div>
+            </div>
+            <div class="meta" style="margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
+                This profile establishes a baseline for this student. Compare future sessions against these averages to detect anomalies.
+            </div>
+        `;
+
+      document
+        .getElementById("close-profile")
+        .addEventListener("click", () => pCard.remove());
+    }
+
+    // --- DASHBOARD AGGREGATE RENDERER ---
+    function renderDashboard(data) {
+      const container = $("dashboard-view");
+      if (container) container.innerHTML = "";
+      if (dashboardEmpty) dashboardEmpty.style.display = "none";
+      if (!data || !data.metrics) {
+        if (container)
+          container.innerHTML = '<div class="meta">No data available.</div>';
+        return;
+      }
+      const m = data.metrics;
+
+      const top = document.createElement("div");
+      top.style.display = "grid";
+      top.style.gridTemplateColumns = "1fr 1fr 1fr 1fr";
+      top.style.gap = "12px";
+      const makeCard = (title, value, subtitle) => {
+        const c = document.createElement("div");
+        c.className = "card";
+        c.style.padding = "12px";
+        c.innerHTML = `<div style="font-weight:700; font-size:1.1rem;">${value}</div><div class="meta">${title}${subtitle ? " • " + subtitle : ""}</div>`;
+        return c;
+      };
+
+      let efficiency = 0;
+      if (data.totalWallTime > 0)
+        efficiency = Math.round(
+          (data.totalActiveTime / data.totalWallTime) * 100,
+        );
+
+      top.appendChild(
+        makeCard("Active Time", formatDuration(data.totalActiveTime)),
+      );
+      top.appendChild(
+        makeCard("Wall Time", formatDuration(data.totalWallTime)),
+      );
+      top.appendChild(makeCard("Efficiency", efficiency + "%", "Active/Total"));
+      top.appendChild(makeCard("AI Probability", m.aiProbability + "%"));
+
+      const statsRow = document.createElement("div");
+      statsRow.style.display = "flex";
+      statsRow.style.gap = "12px";
+      statsRow.style.marginTop = "12px";
+      statsRow.appendChild(
+        makeCard("Paste %", m.pasteRatio + "%", "of all events"),
+      );
+      statsRow.appendChild(
+        makeCard("Avg Paste Length", m.avgPasteLength + " chars"),
+      );
+      statsRow.appendChild(
+        makeCard(
+          "Totals",
+          data.totalLogs + " logs • " + data.totalEvents + " events",
+        ),
+      );
+
+      if (container) {
+        container.appendChild(top);
+        container.appendChild(statsRow);
+      }
+
+      if (container) {
+        const filesCard = document.createElement("div");
+        filesCard.className = "card";
+        filesCard.style.marginTop = "12px";
+
+        // Header with Behavior Profile Button
+        const filesHeaderRow = document.createElement("div");
+        filesHeaderRow.style.display = "flex";
+        filesHeaderRow.style.justifyContent = "space-between";
+        filesHeaderRow.style.alignItems = "center";
+        filesHeaderRow.innerHTML = `<h2 style="margin:0;">Per-file breakdown</h2>`;
+
+        const btnAnalyze = document.createElement("button");
+        btnAnalyze.className = "btn btn-primary";
+        btnAnalyze.textContent = "Analyze Behavioral Patterns";
+        btnAnalyze.addEventListener("click", () => {
+          const checks = document.querySelectorAll(".log-checkbox:checked");
+          const filenames = Array.from(checks).map((c) => c.value);
+          if (filenames.length < 2) {
+            if (status)
+              status.textContent =
+                "Error: Select at least 2 logs to build a profile.";
+            return;
+          }
+          if (status) status.textContent = "Generating Profile...";
+          post("generateProfile", { filenames });
+        });
+        filesHeaderRow.appendChild(btnAnalyze);
+        filesCard.appendChild(filesHeaderRow);
+
+        const filesSection = document.createElement("div");
+        filesSection.id = "per-file-section";
+        filesSection.style.marginTop = "16px";
+
+        // Multi-Select Headers
+        const header = document.createElement("div");
+        header.style.display = "grid";
+        header.style.gridTemplateColumns = "40px 2fr 1fr 1fr 1fr 1fr 40px"; // Outer columns for checkbox and arrow
+        header.style.fontWeight = "700";
+        header.style.gap = "8px";
+        header.innerHTML =
+          "<div></div><div>File</div><div>Events</div><div>Active</div><div>Paste</div><div>Delete</div><div></div>";
+        filesSection.appendChild(header);
+
+        (data.perFile || []).forEach((f) => {
+          const row = document.createElement("div");
+          row.style.display = "grid";
+          row.style.gridTemplateColumns = "40px 2fr 1fr 1fr 1fr 1fr 40px";
+          row.style.gap = "8px";
+          row.style.padding = "8px 4px";
+          row.setAttribute("data-file-row", f.name || "");
+          row.style.cursor = "pointer";
+
+          const checkCell = document.createElement("div");
+          const check = document.createElement("input");
+          check.type = "checkbox";
+          check.className = "log-checkbox";
+          check.value = f.name;
+          check.addEventListener("click", (e) => e.stopPropagation()); // Don't trigger row expansion
+          checkCell.appendChild(check);
+
+          const name = document.createElement("div");
+          name.textContent = f.name || (f.error ? "(failed)" : "unknown");
+          const ev = document.createElement("div");
+          ev.textContent = f.events ? String(f.events) : "-";
+          const active = document.createElement("div");
+          active.textContent = f.activeTime
+            ? formatDuration(f.activeTime)
+            : "-";
+          const p = document.createElement("div");
+          p.textContent = f.events
+            ? Math.round(((f.paste || 0) / Math.max(1, f.events)) * 1000) / 10 +
+              "%"
+            : "-";
+          const d = document.createElement("div");
+          d.textContent = f.events
+            ? Math.round(((f.delete || 0) / Math.max(1, f.events)) * 1000) /
+                10 +
+              "%"
+            : "-";
+
+          const arrowCell = document.createElement("div");
+          arrowCell.className = "row-arrow meta";
+          arrowCell.textContent = expandedFile === f.name ? "▲" : "▼";
+          arrowCell.style.textAlign = "center";
+
+          row.appendChild(checkCell);
+          row.appendChild(name);
+          row.appendChild(ev);
+          row.appendChild(active);
+          row.appendChild(p);
+          row.appendChild(d);
+          row.appendChild(arrowCell);
+
+          row.addEventListener("click", (evClick) => {
+            evClick.stopPropagation();
+            const fname = f.name;
+
+            if (expandedFile === fname) {
+              const prev = document.querySelector(
+                `[data-file-row="${expandedFile}"]`,
+              );
+              if (prev) {
+                const arr = prev.querySelector(".row-arrow");
+                if (arr) arr.textContent = "▼";
+                if (
+                  prev.nextSibling &&
+                  prev.nextSibling.classList &&
+                  prev.nextSibling.classList.contains("file-dropdown")
+                )
+                  prev.nextSibling.remove();
+              }
+              expandedFile = null;
+              return;
+            }
+
+            requestedDashboardFile = fname;
+            const loading = document.createElement("div");
+            loading.className = "meta loading";
+            loading.textContent = "Loading...";
+            const existing = document.querySelector(
+              `[data-file-row="${fname}"] .meta.loading`,
+            );
+            if (!existing) name.appendChild(loading);
+            post("openLog", { filename: fname }); // We fetch the file to show the inline summary
+          });
+          filesSection.appendChild(row);
+        });
+        filesCard.appendChild(filesSection);
+        container.appendChild(filesCard);
+      }
+    }
+
+    // --- DASHBOARD EXPANDED ROW LOGIC ---
     function renderDashboardFileDropdown(parsed, filename) {
       const filesSection = document.getElementById("per-file-section");
       if (!filesSection) return;
+
       if (expandedFile && expandedFile !== filename) {
         const prev = document.querySelector(
           `[data-file-row="${expandedFile}"]`,
         );
-        if (
-          prev &&
-          prev.nextSibling &&
-          prev.nextSibling.classList &&
-          prev.nextSibling.classList.contains("file-dropdown")
-        )
-          prev.nextSibling.remove();
+        if (prev) {
+          const arrowCell = prev.querySelector(".row-arrow");
+          if (arrowCell) arrowCell.textContent = "▼";
+          if (
+            prev.nextSibling &&
+            prev.nextSibling.classList &&
+            prev.nextSibling.classList.contains("file-dropdown")
+          )
+            prev.nextSibling.remove();
+        }
       }
+
       expandedFile = filename;
       const row = document.querySelector(`[data-file-row="${filename}"]`);
       if (!row) return;
+
+      const arrowCell = row.querySelector(".row-arrow");
+
       const loadIndicator = row.querySelector(".meta.loading");
       if (loadIndicator) loadIndicator.remove();
+
       if (
         row.nextSibling &&
         row.nextSibling.classList &&
         row.nextSibling.classList.contains("file-dropdown")
       ) {
         row.nextSibling.remove();
+        if (arrowCell) arrowCell.textContent = "▼";
         expandedFile = null;
         return;
       }
 
+      if (arrowCell) arrowCell.textContent = "▲";
+
       const dropdown = document.createElement("div");
       dropdown.className = "file-dropdown card";
       dropdown.style.marginTop = "8px";
+
       let total = (parsed.events && parsed.events.length) || 0;
       let flagged = 0;
-      if (parsed.events)
+      if (parsed.events) {
         parsed.events.forEach((e) => {
-          const et = (e.eventType || "").toString().toLowerCase();
-          const len =
-            typeof e.pasteCharCount === "number"
-              ? e.pasteCharCount
-              : typeof e.length === "number"
+          if (e.eventType === "paste") {
+            const len =
+              typeof e.length === "number"
                 ? e.length
                 : typeof e.pasteLength === "number"
                   ? e.pasteLength
-                  : null;
-          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
+                  : typeof e.pasteCharCount === "number"
+                    ? e.pasteCharCount
+                    : typeof e.text === "string"
+                      ? e.text.length
+                      : null;
             if (len === null || len > currentSettings.pasteLength) flagged++;
           }
           if (
-            et === "input" &&
+            e.eventType === "input" &&
             e.flightTime &&
             parseInt(e.flightTime) < currentSettings.flight
           )
             flagged++;
-          try {
-            if (
-              currentSettings.flagAiEvents &&
-              (et.startsWith("ai-") || e.possibleAiDetection)
-            )
-              flagged++;
-          } catch (err) {}
         });
+      }
       const score =
         total > 0 ? Math.max(0, Math.round((1 - flagged / total) * 100)) : 100;
+
       let scoreColor = "#10b981";
       if (score < 85) scoreColor = "#f59e0b";
       if (score < 50) scoreColor = "#ef4444";
@@ -689,17 +810,10 @@
 
       try {
         const affected = new Set();
-        const getPasteLen = (ev) => {
-          if (!ev) return null;
-          if (typeof ev.pasteCharCount === "number") return ev.pasteCharCount;
-          if (typeof ev.pasteLength === "number") return ev.pasteLength;
-          if (typeof ev.length === "number") return ev.length;
-          return null;
-        };
         if (parsed && Array.isArray(parsed.events)) {
           parsed.events.forEach((ev) => {
             if (!ev || !ev.eventType) return;
-            const et = (ev.eventType || "").toString().toLowerCase();
+            const et = ev.eventType;
             if (
               et === "input" &&
               ev.flightTime &&
@@ -712,21 +826,19 @@
               et === "replace" ||
               et === "ai-replace"
             ) {
-              const plen = getPasteLen(ev);
+              const plen =
+                typeof ev.pasteCharCount === "number"
+                  ? ev.pasteCharCount
+                  : typeof ev.pasteLength === "number"
+                    ? ev.pasteLength
+                    : typeof ev.length === "number"
+                      ? ev.length
+                      : null;
               if (plen === null || plen > currentSettings.pasteLength)
                 affected.add(
                   `Suspicious Pastes (> ${currentSettings.pasteLength} chars)`,
                 );
             }
-            if (
-              currentSettings.flagAiEvents &&
-              (et.startsWith("ai-") ||
-                et === "ai-paste" ||
-                et === "ai-replace" ||
-                et === "ai-delete" ||
-                ev.possibleAiDetection)
-            )
-              affected.add("AI-assisted edits");
           });
         }
 
@@ -739,8 +851,6 @@
               return `<strong style='color:#f59e0b'>${item}</strong>`;
             if (item.startsWith("Fast Typing"))
               return `<strong style='color:#8b5cf6'>${item}</strong>`;
-            if (item.includes("AI"))
-              return `<strong style='color:#60a5fa'>${item}</strong>`;
             return `<strong>${item}</strong>`;
           });
           affectedHtml = `<div class="meta">Score affected by ${items.join(" and ")}.</div>`;
@@ -750,280 +860,6 @@
         dropdown.innerHTML += `<div class="meta">Score factors unavailable.</div>`;
       }
       row.parentNode.insertBefore(dropdown, row.nextSibling);
-    }
-
-    function renderDashboard(data) {
-      const container = $("dashboard-view");
-      if (container) container.innerHTML = "";
-      if (dashboardEmpty) dashboardEmpty.style.display = "none";
-      if (!data || !data.metrics) {
-        if (container)
-          container.innerHTML = '<div class="meta">No data available.</div>';
-        return;
-      }
-      const m = data.metrics;
-      const pasteIsAI =
-        (data.aiPasteCount &&
-          data.totalPasteCount &&
-          data.aiPasteCount === data.totalPasteCount) ||
-        false;
-      const deleteIsAI =
-        (data.aiDeleteCount &&
-          data.totalDeleteCount &&
-          data.aiDeleteCount === data.totalDeleteCount) ||
-        false;
-
-      // 1. Top Cards
-      const top = document.createElement("div");
-      top.className = "top-cards";
-      top.style.display = "grid";
-      top.style.gridTemplateColumns = "1fr 1fr";
-      top.style.gap = "12px";
-      top.style.marginBottom = "4px";
-
-      const makeCard = (title, value, subtitle) => {
-        const c = document.createElement("div");
-        c.className = "card";
-        c.style.padding = "12px";
-        c.style.display = "flex";
-        c.style.flexDirection = "column";
-        c.style.justifyContent = "center";
-        c.style.boxSizing = "border-box";
-        c.style.height = "96px";
-        c.style.minWidth = "140px";
-        c.innerHTML = `<div style="font-weight:700; font-size:1.1rem;">${value}</div><div class="meta">${title}${subtitle ? " • " + subtitle : ""}</div>`;
-        return c;
-      };
-
-      top.appendChild(
-        makeCard(
-          pasteIsAI ? "AI Paste %" : "Paste %",
-          m.pasteRatio + "%",
-          pasteIsAI ? "of AI-generated events" : "of all events",
-        ),
-      );
-      top.appendChild(
-        makeCard(
-          deleteIsAI ? "AI Delete %" : "Delete %",
-          m.deleteRatio + "%",
-          deleteIsAI ? "of AI-originated events" : "of all events",
-        ),
-      );
-
-      // 2. Integrity & Stats Row
-      let integrityDiv = null;
-      try {
-        const integrity =
-          typeof data.integrityScore === "number" ? data.integrityScore : null;
-        const flagged =
-          typeof data.flaggedCount === "number" ? data.flaggedCount : null;
-        const totals = data.totalEvents || 0;
-        let scoreColor = "#10b981";
-        const intVal = integrity !== null ? integrity : null;
-        if (intVal !== null) {
-          if (intVal < 50) scoreColor = "#ef4444";
-          else if (intVal < 85) scoreColor = "#f59e0b";
-          else scoreColor = "#10b981";
-        }
-
-        integrityDiv = document.createElement("div");
-        integrityDiv.className = "card";
-        integrityDiv.style.borderLeft = "6px solid " + scoreColor;
-        integrityDiv.style.padding = "12px";
-        integrityDiv.style.display = "flex";
-        integrityDiv.style.alignItems = "center";
-        integrityDiv.style.width = "100%";
-        integrityDiv.style.boxSizing = "border-box";
-        integrityDiv.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
-            <div style="text-align:left;">
-              <div style="font-size:2rem; font-weight:700; color:${scoreColor}; line-height:1;">${intVal !== null ? String(intVal) + "%" : "N/A"}</div>
-              <div class="meta" style="margin-top:4px;">Integrity Score</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-weight:700; font-size:1.2rem;">
-                ${flagged !== null ? flagged : "-"} <span style="font-weight:400; color:var(--muted)">/ ${totals}</span>
-              </div>
-              <div class="meta">Flagged Events</div>
-            </div>
-          </div>
-        `;
-      } catch (err) {
-        integrityDiv = null;
-      }
-
-      const statsRow = document.createElement("div");
-      statsRow.className = "stats-row";
-      statsRow.style.display = "grid";
-      statsRow.style.gridTemplateColumns = "1fr 1fr";
-      statsRow.style.gap = "12px";
-      statsRow.style.marginTop = "4px";
-
-      if (integrityDiv) {
-        integrityDiv.style.width = "100%";
-        statsRow.appendChild(integrityDiv);
-      }
-      const avgCard = makeCard("Avg Paste Length", m.avgPasteLength + " chars");
-      avgCard.style.width = "100%";
-      statsRow.appendChild(avgCard);
-
-      // 3. AI Bar
-      const barCard = document.createElement("div");
-      barCard.className = "card";
-      barCard.style.padding = "12px";
-      let aiColor = "#10b981";
-      try {
-        const aiVal = Number(m.aiProbability) || 0;
-        if (aiVal >= 75) aiColor = "#ef4444";
-        else if (aiVal >= 40) aiColor = "#f59e0b";
-        else aiColor = "#10b981";
-      } catch (err) {}
-      barCard.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><div style=\"font-weight:700; color:var(--fg)\">AI Probability</div><div style=\"font-weight:700; color:${aiColor}\">${m.aiProbability}%</div></div>`;
-      try {
-        barCard.style.borderLeft = "6px solid " + aiColor;
-      } catch (err) {}
-
-      const barOuter = document.createElement("div");
-      barOuter.style.background = "var(--bg)";
-      barOuter.style.border = "1px solid var(--border)";
-      barOuter.style.borderRadius = "8px";
-      barOuter.style.height = "18px";
-      const barInner = document.createElement("div");
-      barInner.style.height = "100%";
-      barInner.style.width = m.aiProbability + "%";
-      barInner.style.background =
-        "linear-gradient(90deg, var(--accent), var(--accent-2))";
-      barInner.style.borderRadius = "8px";
-      barOuter.appendChild(barInner);
-      barCard.appendChild(barOuter);
-
-      if (container) {
-        container.appendChild(top);
-        container.appendChild(statsRow);
-        container.appendChild(barCard);
-      }
-
-      // 4. Per File
-      if (container) {
-        const filesCard = document.createElement("div");
-        filesCard.className = "card";
-        filesCard.style.marginTop = "12px";
-        filesCard.innerHTML = `<h2>Per-file breakdown - ${data.totalLogs || (data.totalLogs === 0 ? 0 : "?")} logs</h2>`;
-        const filesSection = document.createElement("div");
-        filesSection.id = "per-file-section";
-        filesSection.style.marginTop = "8px";
-        const header = document.createElement("div");
-        header.style.display = "grid";
-        header.style.gridTemplateColumns = "2fr 1fr 1fr 1fr 1fr";
-        header.style.fontWeight = "700";
-        header.style.gap = "8px";
-        const aiHeaderLabel =
-          typeof window !== "undefined" && window.innerWidth <= 579
-            ? "AI"
-            : "AI Probability";
-        header.innerHTML = `<div>File</div><div>Events</div><div>Paste</div><div>${aiHeaderLabel}</div><div>Delete</div>`;
-        filesSection.appendChild(header);
-
-        (data.perFile || []).forEach((f) => {
-          const row = document.createElement("div");
-          row.style.display = "grid";
-          row.style.gridTemplateColumns = "2fr 1fr 1fr 1fr 1fr";
-          row.style.gap = "8px";
-          row.style.padding = "8px 4px";
-          row.setAttribute("data-file-row", f.name || "");
-          row.style.cursor = "pointer";
-          const name = document.createElement("div");
-          name.textContent = f.name || (f.error ? "(failed)" : "unknown");
-          const ev = document.createElement("div");
-          ev.textContent = f.events ? String(f.events) : "-";
-          const totalP = (f.paste || 0) + (f.aiPasteCount || 0);
-          const p = document.createElement("div");
-          p.textContent = f.events
-            ? Math.round((totalP / Math.max(1, f.events)) * 1000) / 10 + "%"
-            : f.error
-              ? "err"
-              : "-";
-          const aiVal =
-            typeof f.aiProbability === "number"
-              ? f.aiProbability
-              : f.metrics && typeof f.metrics.aiProbability === "number"
-                ? f.metrics.aiProbability
-                : null;
-          const ai = document.createElement("div");
-          ai.textContent =
-            aiVal === null || aiVal === undefined
-              ? f.error
-                ? "err"
-                : "-"
-              : String(aiVal) + "%";
-          try {
-            if (aiVal !== null && aiVal !== undefined) {
-              if (aiVal >= 75) ai.style.color = "#ef4444";
-              else if (aiVal >= 40) ai.style.color = "#f59e0b";
-              else ai.style.color = "#10b981";
-            }
-          } catch (err) {}
-          const totalD = (f.delete || 0) + (f.aiDeleteCount || 0);
-          const d = document.createElement("div");
-          d.textContent = f.events
-            ? Math.round((totalD / Math.max(1, f.events)) * 1000) / 10 + "%"
-            : f.error
-              ? "err"
-              : "-";
-          row.appendChild(name);
-          row.appendChild(ev);
-          row.appendChild(p);
-          row.appendChild(ai);
-          row.appendChild(d);
-
-          row.addEventListener("click", (evClick) => {
-            evClick.stopPropagation();
-            const fname = f.name;
-            if (expandedFile === fname) {
-              const prev = document.querySelector(
-                `[data-file-row="${expandedFile}"]`,
-              );
-              if (
-                prev &&
-                prev.nextSibling &&
-                prev.nextSibling.classList &&
-                prev.nextSibling.classList.contains("file-dropdown")
-              )
-                prev.nextSibling.remove();
-              expandedFile = null;
-              return;
-            }
-            requestedDashboardFile = fname;
-            const loading = document.createElement("div");
-            loading.className = "meta loading";
-            loading.textContent = "Loading...";
-            const existing = document.querySelector(
-              `[data-file-row="${fname}"] .meta.loading`,
-            );
-            if (!existing) name.appendChild(loading);
-            post("openLog", { filename: fname });
-          });
-          filesSection.appendChild(row);
-        });
-        filesCard.appendChild(filesSection);
-        container.appendChild(filesCard);
-      }
-
-      try {
-        const updateAiHeaderLabel = () => {
-          const filesSection = document.getElementById("per-file-section");
-          if (!filesSection) return;
-          const hdr = filesSection.querySelector("div");
-          if (!hdr) return;
-          const cols = hdr.children;
-          if (!cols || cols.length < 4) return;
-          cols[3].textContent =
-            window.innerWidth <= 579 ? "AI" : "AI Probability";
-        };
-        window.addEventListener("resize", () => {
-          if (document.getElementById("dashboard-view")) updateAiHeaderLabel();
-        });
-      } catch (err) {}
     }
 
     function showDashboardLoading() {
@@ -1042,7 +878,6 @@
       container.appendChild(card);
     }
 
-    // actions
     const refreshDashboardBtn = $("refreshDashboard");
     if (refreshDashboardBtn)
       refreshDashboardBtn.addEventListener("click", () => {
@@ -1050,6 +885,7 @@
         showDashboardLoading();
         post("analyzeLogs");
       });
+
     const saveSettingsBtn = $("saveSettings");
     if (saveSettingsBtn)
       saveSettingsBtn.addEventListener("click", () => {
@@ -1061,28 +897,19 @@
           pasteLengthThreshold: parseInt(
             pasteLengthInput?.value || defaults.pasteLength,
           ),
-          flagAiEvents: !!(flagAiCheckbox && flagAiCheckbox.checked),
         };
         post("saveSettings", { settings });
       });
+
     const resetSettingsBtn = $("resetSettings");
     if (resetSettingsBtn)
       resetSettingsBtn.addEventListener("click", () => {
         if (inactivityInput) inactivityInput.value = defaults.inactivity;
         if (flightInput) flightInput.value = defaults.flight;
         if (pasteLengthInput) pasteLengthInput.value = defaults.pasteLength;
-        if (flagAiCheckbox) flagAiCheckbox.checked = true;
-        post("saveSettings", {
-          settings: {
-            inactivityThreshold: defaults.inactivity,
-            flightTimeThreshold: defaults.flight,
-            pasteLengthThreshold: defaults.pasteLength,
-            flagAiEvents: true,
-          },
-        });
+        post("saveSettings", { settings: defaults });
       });
 
-    // messages from extension
     window.addEventListener("message", (event) => {
       const msg = event.data || {};
       switch (msg.command) {
@@ -1121,6 +948,10 @@
             dashboardLogName.textContent = "Viewing: All logs";
           if (status) status.textContent = "Dashboard updated";
           break;
+        case "profileData":
+          renderProfile(msg.data);
+          if (status) status.textContent = "Behavioral profile generated.";
+          break;
         case "rawData":
           if (logsViewerContainer) logsViewerContainer.style.display = "block";
           if (logsView) logsView.innerHTML = "<pre>" + msg.data + "</pre>";
@@ -1137,18 +968,12 @@
               flight: msg.settings.flightTimeThreshold || defaults.flight,
               pasteLength:
                 msg.settings.pasteLengthThreshold || defaults.pasteLength,
-              flagAiEvents:
-                typeof msg.settings.flagAiEvents === "boolean"
-                  ? msg.settings.flagAiEvents
-                  : true,
             };
             if (inactivityInput)
               inactivityInput.value = currentSettings.inactivity;
             if (flightInput) flightInput.value = currentSettings.flight;
             if (pasteLengthInput)
               pasteLengthInput.value = currentSettings.pasteLength;
-            if (flagAiCheckbox)
-              flagAiCheckbox.checked = !!currentSettings.flagAiEvents;
           }
           break;
         case "settingsSaved":
@@ -1157,8 +982,6 @@
           if (flightInput) currentSettings.flight = parseInt(flightInput.value);
           if (pasteLengthInput)
             currentSettings.pasteLength = parseInt(pasteLengthInput.value);
-          if (flagAiCheckbox)
-            currentSettings.flagAiEvents = !!flagAiCheckbox.checked;
           if (settingsMsg) {
             settingsMsg.textContent = "Settings saved successfully!";
             setTimeout(() => (settingsMsg.textContent = ""), 3000);
@@ -1173,83 +996,9 @@
             setTimeout(() => (status.textContent = "Ready"), 3000);
           }
           break;
-        case "deletionData":
-          try {
-            const d = msg.data;
-            if (!deletionsView) break;
-            if (typeof d === "string") {
-              deletionsView.innerHTML = "<pre>" + d + "</pre>";
-            } else {
-              const records = Array.isArray(d)
-                ? d
-                : d && Array.isArray(d.deletions)
-                  ? d.deletions
-                  : null;
-              const header = d && d.header ? d.header : null;
-              if (header) {
-                const hdrDiv = document.createElement("div");
-                hdrDiv.className = "meta";
-                hdrDiv.style.marginBottom = "8px";
-                hdrDiv.innerHTML = `<div><strong>${header.note || "Deletion Log"}</strong></div><div class="meta">Created: ${header.createdAt || header.created || ""}</div>`;
-                deletionsView.innerHTML = "";
-                deletionsView.appendChild(hdrDiv);
-              } else {
-                deletionsView.innerHTML = "";
-              }
-              if (!records || records.length === 0) {
-                const empty = document.createElement("div");
-                empty.className = "meta";
-                empty.textContent = "No deletion records found.";
-                deletionsView.appendChild(empty);
-              } else {
-                const list = document.createElement("div");
-                list.style.display = "grid";
-                list.style.gap = "10px";
-                records.forEach((item) => {
-                  const row = document.createElement("div");
-                  row.className = "card deletion-row";
-                  const time =
-                    item.modifiedAt || item.time || item.timestamp || "";
-                  const who =
-                    item.user || item.startedBy || item.actor || "Unknown";
-                  const file =
-                    item.modifiedFile ||
-                    item.file ||
-                    item.path ||
-                    item.filePath ||
-                    "(unknown)";
-                  const prevSize =
-                    item.previousSize || item.oldSize || item.previous || "";
-                  const newSize = item.newSize || item.size || "";
-                  const note = item.note || item.reason || "";
-                  row.innerHTML = `
-                    <div style="display:flex; flex-direction:column; gap:6px;">
-                      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-                        <div style="font-weight:700;">${file}</div>
-                        <div class="meta">Deleted by ${who} • ${time}</div>
-                      </div>
-                      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
-                        ${prevSize ? `<div class="meta">Prev: ${prevSize}</div>` : ""}
-                        ${newSize ? `<div class="meta">Now: ${newSize}</div>` : ""}
-                        ${note ? `<div class="meta">${note}</div>` : ""}
-                      </div>
-                    </div>
-                  `;
-                  list.appendChild(row);
-                });
-                deletionsView.appendChild(list);
-              }
-            }
-          } catch (err) {
-            if (deletionsView)
-              deletionsView.textContent = "Failed to render deletions.";
-          }
-          if (status) status.textContent = "Deletions updated";
-          break;
       }
     });
 
-    // startup
     try {
       switchTab("dashboard");
     } catch (e) {}

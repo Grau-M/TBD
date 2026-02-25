@@ -64,7 +64,6 @@
     return new Date(year, month, day, hr, min, sec, ms).getTime();
   }
 
-  // wait for DOM to be ready
   window.addEventListener("DOMContentLoaded", () => {
     const $ = (id) => document.getElementById(id);
 
@@ -82,7 +81,6 @@
     const logsViewerContainer = $("logs-viewer-container");
     const logsLogName = $("logs-log-name");
 
-    // Deletions View
     const deletionsView = $("deletions-view");
 
     const inactivityInput = $("inactivityInput");
@@ -290,11 +288,23 @@
         flaggedEvents = 0,
         integrityScore = 100;
 
+      // Reporting Stats
+      let focusAwayCount = 0;
+      let largePasteCount = 0;
+      let fastInputCount = 0;
+      let deleteCount = 0;
+      let replaceCount = 0;
+
       if (parsed && Array.isArray(parsed.events)) {
         totalEvents = parsed.events.length;
         parsed.events.forEach((e) => {
           let flagged = false;
-          if (e.eventType === "paste") {
+          const et = (e.eventType || "").toLowerCase();
+
+          if (et === "delete" || et === "backspace") deleteCount++;
+          if (et === "replace") replaceCount++;
+
+          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
             const len =
               typeof e.length === "number"
                 ? e.length
@@ -305,16 +315,22 @@
                     : typeof e.text === "string"
                       ? e.text.length
                       : null;
-            if (len !== null && len > currentSettings.pasteLength)
+            if (len !== null && len > currentSettings.pasteLength) {
               flagged = true;
-            else if (len === null) flagged = true;
+              largePasteCount++;
+            } else if (len === null) {
+              flagged = true;
+              largePasteCount++;
+            }
           }
           if (
-            e.eventType === "input" &&
+            et === "input" &&
             e.flightTime &&
             parseInt(e.flightTime) < currentSettings.flight
-          )
+          ) {
             flagged = true;
+            fastInputCount++;
+          }
           if (flagged) flaggedEvents++;
         });
         if (totalEvents > 0) {
@@ -341,9 +357,6 @@
               <div style="font-weight:600; font-size:1.2rem;">${flaggedEvents} <span style="font-weight:400; color:var(--muted)">/ ${totalEvents}</span></div>
               <div class="meta">Flagged Events</div>
             </div>
-          </div>
-          <div class="meta" style="margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
-            Score affected by <strong style="color:#f59e0b">Suspicious Pastes (&gt; ${currentSettings.pasteLength} chars)</strong> and <strong style="color:#8b5cf6">Fast Typing (&lt; ${currentSettings.flight}ms)</strong>.
           </div>
         `;
         logsView.appendChild(scoreDiv);
@@ -386,8 +399,43 @@
         }
       }
 
-      if (logsView && parsed && Array.isArray(parsed.events)) {
-        const container = document.createElement("div");
+      // --- ADD UI CONTROLS FOR TABS AND FILTERS ---
+      const controlsDiv = document.createElement("div");
+      controlsDiv.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin: 16px 0 8px 0;">
+            <div class="btn-group" style="display:flex; gap:8px;">
+                <button class="btn btn-primary" id="btn-tab-events">Raw Events</button>
+                <button class="btn btn-secondary" id="btn-tab-report">Integrity Report</button>
+            </div>
+            <div id="filter-wrapper" style="display:flex; align-items:center; gap:8px;">
+                <span class="meta">Filter:</span>
+                <select id="log-event-filter" style="padding:4px 8px; border-radius:4px; background:var(--bg); color:var(--fg); border:1px solid var(--border);">
+                    <option value="all">All Events</option>
+                    <option value="focus-away">Focus Away Times</option>
+                    <option value="flagged-paste">Flagged Pastes</option>
+                    <option value="flagged-fast">Flagged Fast Inputs</option>
+                    <option value="input">Normal Inputs</option>
+                    <option value="delete">Deletions</option>
+                    <option value="replace">Replacements</option>
+                </select>
+            </div>
+        </div>
+      `;
+      logsView.appendChild(controlsDiv);
+
+      // Create containers for the two views
+      const eventsContainer = document.createElement("div");
+      eventsContainer.id = "events-container";
+
+      const reportContainer = document.createElement("div");
+      reportContainer.id = "report-container";
+      reportContainer.style.display = "none";
+
+      logsView.appendChild(eventsContainer);
+      logsView.appendChild(reportContainer);
+
+      // --- GENERATE EVENTS LIST ---
+      if (parsed && Array.isArray(parsed.events)) {
         const formatFilePath = (p) => {
           if (!p || typeof p !== "string") return p;
           const project =
@@ -415,15 +463,22 @@
           const row = document.createElement("div");
           let className = "event";
           let flagReason = "";
+          let filterCat = "other";
+          let isFlagged = false;
 
+          const et = (e.eventType || "").toLowerCase();
+
+          // 1. Inactivity Gap Check
           const currentTime = parseLogTime(e.time);
           if (previousTime !== null && currentTime !== null) {
             const gap = currentTime - previousTime;
             if (gap > inactivityLimitMs) {
+              focusAwayCount++;
               const gapRow = document.createElement("div");
               gapRow.className = "event";
               gapRow.style.borderLeft = "4px solid #ef4444";
               gapRow.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+              gapRow.dataset.filterCategory = "focus-away"; // Set filter cat
               gapRow.innerHTML = `
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <strong style="color:#ef4444">⚠️ Major Focus Away Time</strong>
@@ -436,7 +491,14 @@
           }
           if (currentTime) previousTime = currentTime;
 
-          if (e.eventType === "paste") {
+          // 2. Base Categorization
+          if (et === "input" || et === "key" || et === "keystroke")
+            filterCat = "input";
+          if (et === "delete" || et === "backspace") filterCat = "delete";
+          if (et === "replace") filterCat = "replace";
+
+          // 3. Flags and Overrides
+          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
             const len =
               typeof e.length === "number"
                 ? e.length
@@ -447,25 +509,34 @@
                     : typeof e.text === "string"
                       ? e.text.length
                       : null;
-
             if (len !== null && len > currentSettings.pasteLength) {
               className += " paste";
               flagReason = "(Large Paste)";
+              isFlagged = true;
+              filterCat = "flagged-paste";
             } else if (len === null) {
               className += " paste";
+              isFlagged = true;
+              filterCat = "flagged-paste";
+            } else {
+              filterCat = "paste";
             }
           }
 
           if (
-            e.eventType === "input" &&
+            et === "input" &&
             e.flightTime &&
             parseInt(e.flightTime) < currentSettings.flight
           ) {
             className += " fast";
             flagReason = "(Fast Input)";
+            isFlagged = true;
+            filterCat = "flagged-fast";
           }
 
           row.className = className;
+          row.dataset.filterCategory = filterCat; // Attach for JS filter
+
           let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || "Unknown"}</strong> ${flagReason}</div><span class="meta">${e.time || ""}</span></div>`;
 
           Object.keys(e).forEach((k) => {
@@ -489,9 +560,97 @@
           rowElements.push(row);
         }
 
-        rowElements.reverse().forEach((r) => container.appendChild(r));
-        if (logsView) logsView.appendChild(container);
+        // Add them to the container newest first
+        rowElements.reverse().forEach((r) => eventsContainer.appendChild(r));
       }
+
+      // --- GENERATE DESCRIPTIVE INTEGRITY REPORT ---
+      const churnRate =
+        totalEvents > 0 ? (deleteCount + replaceCount) / totalEvents : 0;
+      let churnText =
+        "A healthy amount of editing indicates normal problem-solving and iteration.";
+      if (churnRate < 0.05 && totalEvents > 100)
+        churnText =
+          "<strong>Warning:</strong> A very low edit rate combined with high output suggests code was pre-written or copied perfectly without trial and error.";
+
+      let pasteText = "Good, no massive code dumps detected.";
+      if (largePasteCount > 0)
+        pasteText = `<strong>Warning:</strong> ${largePasteCount} pastes exceeded the limit. This significantly lowers the integrity score, as large un-typed blocks are highly unusual unless the student is refactoring their own code.`;
+
+      let focusText = "Consistent work session with no major gaps.";
+      if (focusAwayCount > 0)
+        focusText = `Detected ${focusAwayCount} instances of extended inactivity. While taking breaks is normal, excessive gaps followed immediately by large pastes may indicate copying from an external source.`;
+
+      let fastInputText = "Normal human typing cadence detected.";
+      if (fastInputCount > 0)
+        fastInputText = `<strong>Warning:</strong> ${fastInputCount} keystrokes registered suspiciously fast. This indicates potential auto-typing scripts or pasting disguised as typing events.`;
+
+      reportContainer.innerHTML = `
+        <div class="card" style="margin-top: 12px; line-height: 1.6;">
+            <h2 style="margin-top:0; border-bottom:1px solid var(--border); padding-bottom:8px;">Descriptive Integrity Summary</h2>
+            <p><strong>Overall Session Score: <span style="color:${scoreColor}">${integrityScore}%</span></strong></p>
+            <p class="meta">This score evaluates the likelihood that this work represents natural human coding behavior based on a deep analysis of ${totalEvents} logged events.</p>
+            
+            <ul style="padding-left: 20px; margin-top: 16px;">
+                <li style="margin-bottom: 12px;">
+                    <strong>Code Churn (Delete/Replace):</strong> The student made ${deleteCount} deletions and ${replaceCount} replacements.<br>
+                    <span class="meta">${churnText}</span>
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <strong>Suspicious Pastes:</strong> Evaluated based on the >${currentSettings.pasteLength} character threshold.<br>
+                    <span class="meta">${pasteText}</span>
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <strong>Fast Inputs:</strong> Evaluated based on <${currentSettings.flight}ms flight time.<br>
+                    <span class="meta">${fastInputText}</span>
+                </li>
+                <li style="margin-bottom: 12px;">
+                    <strong>Focus & Inactivity:</strong> Evaluated based on >${currentSettings.inactivity} min pauses.<br>
+                    <span class="meta">${focusText}</span>
+                </li>
+            </ul>
+        </div>
+      `;
+
+      // --- ATTACH EVENT LISTENERS FOR CONTROLS ---
+      const btnTabEvents = document.getElementById("btn-tab-events");
+      const btnTabReport = document.getElementById("btn-tab-report");
+      const filterSelect = document.getElementById("log-event-filter");
+      const filterWrapper = document.getElementById("filter-wrapper");
+
+      // Tab Switching
+      btnTabEvents.addEventListener("click", () => {
+        btnTabEvents.className = "btn btn-primary";
+        btnTabReport.className = "btn btn-secondary";
+        eventsContainer.style.display = "block";
+        reportContainer.style.display = "none";
+        filterWrapper.style.display = "flex"; // Show filter on Events tab
+      });
+
+      btnTabReport.addEventListener("click", () => {
+        btnTabReport.className = "btn btn-primary";
+        btnTabEvents.className = "btn btn-secondary";
+        reportContainer.style.display = "block";
+        eventsContainer.style.display = "none";
+        filterWrapper.style.display = "none"; // Hide filter on Report tab
+      });
+
+      // Filtering Logic
+      filterSelect.addEventListener("change", (e) => {
+        const val = e.target.value;
+        const rows = eventsContainer.querySelectorAll(".event");
+        rows.forEach((r) => {
+          if (val === "all") {
+            r.style.display = ""; // Remove inline style, restores CSS
+          } else {
+            if (r.dataset.filterCategory === val) {
+              r.style.display = "";
+            } else {
+              r.style.display = "none";
+            }
+          }
+        });
+      });
     }
 
     // --- BEHAVIORAL PROFILE RENDERER ---
@@ -626,11 +785,33 @@
         filesCard.className = "card";
         filesCard.style.marginTop = "12px";
 
+        // ADDED CLEAR BUTTON & FORMATTED HEADER
         const filesHeaderRow = document.createElement("div");
         filesHeaderRow.style.display = "flex";
         filesHeaderRow.style.justifyContent = "space-between";
         filesHeaderRow.style.alignItems = "center";
-        filesHeaderRow.innerHTML = `<h2 style="margin:0;">Per-file breakdown</h2>`;
+
+        const titleDiv = document.createElement("div");
+        titleDiv.style.display = "flex";
+        titleDiv.style.alignItems = "center";
+        titleDiv.style.gap = "12px";
+        titleDiv.innerHTML = `<h2 style="margin:0;">Per-file breakdown</h2>`;
+
+        const btnClear = document.createElement("button");
+        btnClear.className = "btn btn-secondary";
+        btnClear.textContent = "Clear Selection";
+        btnClear.style.padding = "2px 8px";
+        btnClear.style.fontSize = "0.85rem";
+        btnClear.addEventListener("click", () => {
+          document
+            .querySelectorAll(".log-checkbox")
+            .forEach((cb) => (cb.checked = false));
+        });
+        titleDiv.appendChild(btnClear);
+
+        const actionBtnsDiv = document.createElement("div");
+        actionBtnsDiv.style.display = "flex";
+        actionBtnsDiv.style.gap = "8px";
 
         const btnAnalyze = document.createElement("button");
         btnAnalyze.className = "btn btn-primary";
@@ -647,7 +828,11 @@
           if (status) status.textContent = "Generating Profile...";
           post("generateProfile", { filenames });
         });
-        filesHeaderRow.appendChild(btnAnalyze);
+
+        actionBtnsDiv.appendChild(btnAnalyze);
+
+        filesHeaderRow.appendChild(titleDiv);
+        filesHeaderRow.appendChild(actionBtnsDiv);
         filesCard.appendChild(filesHeaderRow);
 
         const filesSection = document.createElement("div");
@@ -717,7 +902,6 @@
           row.addEventListener("click", (evClick) => {
             evClick.stopPropagation();
 
-            // Figure out which cell was clicked
             let clickedCell = evClick.target;
             while (clickedCell && clickedCell.parentNode !== row) {
               clickedCell = clickedCell.parentNode;
@@ -728,11 +912,10 @@
             // Left Area clicked: Checkbox (0) or File Name (1) -> Select the log
             if (cellIndex === 0 || cellIndex === 1) {
               const checkbox = checkCell.querySelector("input");
-              // Toggle if user didn't click the checkbox directly
               if (evClick.target !== checkbox) {
                 checkbox.checked = !checkbox.checked;
               }
-              return; // Stop here, don't expand
+              return;
             }
 
             // Right Area clicked: Events (2) onwards -> Expand the Integrity Score
@@ -1058,7 +1241,6 @@
             setTimeout(() => (status.textContent = "Ready"), 3000);
           }
           break;
-
         case "deletionData":
           try {
             const d = msg.data;

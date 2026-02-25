@@ -5,6 +5,16 @@ import { getHtml } from './getHtml';
 let panel: vscode.WebviewPanel | undefined;
 let sessionPassword: string | undefined;
 
+// Helper to parse "MM-DD-YYYY hh:mm:ss:SSS" into milliseconds
+function parseLogTime(s: string): number {
+    if (!s) return 0;
+    const [datePart, timePart] = s.split(' ');
+    if (!datePart || !timePart) return 0;
+    const [month, day, year] = datePart.split('-').map(Number);
+    const [hr, min, sec, ms] = timePart.split(':').map(Number);
+    return new Date(year, month - 1, day, hr, min, sec, ms || 0).getTime();
+}
+
 export async function openTeacherView(context: vscode.ExtensionContext) {
     if (panel) {
         panel.reveal(vscode.ViewColumn.One);
@@ -17,7 +27,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         ignoreFocusOut: true
     });
 
-    if (!initialPassword) return; // user cancelled
+    if (!initialPassword) return; 
     sessionPassword = initialPassword;
 
     panel = vscode.window.createWebviewPanel(
@@ -27,6 +37,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         { enableScripts: true, localResourceRoots: [vscode.Uri.file(context.extensionPath)] }
     );
 
+    // The HTML is loaded modularly from your separate files via getHtml
     panel.webview.html = getHtml(panel.webview, context);
 
     panel.onDidDispose(() => {
@@ -37,11 +48,9 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     panel.webview.onDidReceiveMessage(async message => {
         try {
             if (message.command === 'clientReady') {
-                // debug: confirm webview script executed
                 console.log('[teacher] webview clientReady received');
-                // optionally respond or request a fresh list
-                // panel?.webview.postMessage({ command: 'listLogs', data: [] });
             }
+
             if (message.command === 'listLogs') {
                 const files = await storageManager.listLogFiles();
                 panel?.webview.postMessage({ command: 'logList', data: files.map(f => f.label) });
@@ -88,6 +97,165 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 }
             }
 
+            if (message.command === 'exportLog') {
+                const filename: string = message.filename;
+                const format: 'csv' | 'json' = message.format;
+                
+                let password = sessionPassword;
+                if (!password) {
+                    password = await vscode.window.showInputBox({ prompt: `Enter Admin Password to Export ${filename}`, password: true });
+                    if (!password) { panel?.webview.postMessage({ command: 'error', message: 'Export cancelled: Password required.' }); return; }
+                    sessionPassword = password;
+                }
+
+                try {
+                    const files = await storageManager.listLogFiles();
+                    const chosen = files.find(f => f.label === filename);
+                    if(!chosen) throw new Error("File not found on disk");
+
+                    const res = await storageManager.retrieveLogContentWithPassword(password, chosen.uri);
+                    const logData = JSON.parse(res.text);
+
+                    let fileContent = '';
+                    let fileExtension = format;
+
+                    if (format === 'json') {
+                        fileContent = JSON.stringify(logData, null, 2);
+                    } else {
+                        const header = "Timestamp,EventType,FlightTime(ms),File,PasteLength,Details\n";
+                        const rows = (logData.events || []).map((e: any) => {
+                            const escape = (s: any) => `"${String(s || '').replace(/"/g, '""')}"`;
+                            return [
+                                escape(e.time), escape(e.eventType), escape(e.flightTime),
+                                escape(e.fileView || e.fileEdit), escape(e.pasteLength || e.length),
+                                escape(e.text ? e.text.substring(0, 50) + "..." : "")
+                            ].join(',');
+                        });
+                        fileContent = header + rows.join('\n');
+                    }
+
+                    const saveUri = await vscode.window.showSaveDialog({
+                        defaultUri: vscode.Uri.file(`export-${filename.replace('.log','')}.${fileExtension}`),
+                        filters: format === 'json' ? {'JSON': ['json']} : {'CSV': ['csv']}
+                    });
+
+                    if (saveUri) {
+                        await vscode.workspace.fs.writeFile(saveUri, Buffer.from(fileContent, 'utf8'));
+                        
+                        const auditEntry = `[${new Date().toISOString()}] EXPORT: Instructor exported ${filename} as ${format.toUpperCase()}.\n`;
+                        const workspaceFolders = vscode.workspace.workspaceFolders;
+                        if (workspaceFolders) {
+                            const auditUri = vscode.Uri.joinPath(workspaceFolders[0].uri, '.vscode', 'audit_log.txt');
+                            let currentAudit = '';
+                            try { currentAudit = (await vscode.workspace.fs.readFile(auditUri)).toString(); } catch {} 
+                            await vscode.workspace.fs.writeFile(auditUri, Buffer.from(currentAudit + auditEntry, 'utf8'));
+                        }
+
+                        vscode.window.showInformationMessage(`Successfully exported ${filename} to ${format.toUpperCase()}`);
+                        panel?.webview.postMessage({ command: 'success', message: 'Export complete.' });
+                    }
+                } catch (err: any) {
+                    vscode.window.showErrorMessage(`Export Failed: ${err.message}`);
+                    panel?.webview.postMessage({ command: 'error', message: `Export failed: ${err.message}` });
+                }
+            }
+
+            // GENERATE BEHAVIORAL PROFILE 
+            if (message.command === 'generateProfile') {
+                const filenames: string[] = message.filenames;
+                
+                let password = sessionPassword;
+                if (!password) {
+                    password = await vscode.window.showInputBox({ prompt: `Enter Administrator Password to analyze logs`, password: true, ignoreFocusOut: true });
+                    if (!password) { panel?.webview.postMessage({ command: 'error', message: 'Password required' }); return; }
+                    sessionPassword = password;
+                }
+
+                try {
+                    const files = await storageManager.listLogFiles();
+                    const selectedFiles = files.filter(f => filenames.includes(f.label));
+
+                    let commonUser: string | null = null;
+                    let commonProject: string | null = null;
+                    let valid = true;
+
+                    let totalInputs = 0, totalDeletes = 0, totalPastes = 0, totalActiveMs = 0;
+                    let pausesMs: number[] = [];
+
+                    const settings = context.globalState.get('tbdSettings', { inactivityThreshold: 5 });
+                    const inactivityMs = (settings.inactivityThreshold || 5) * 60 * 1000;
+
+                    for (const f of selectedFiles) {
+                        const res = await storageManager.retrieveLogContentWithPassword(password, f.uri);
+                        let parsed: any = null;
+                        try { parsed = JSON.parse(res.text); } catch { continue; } // Skip corrupted for profile
+                        if (!parsed) continue;
+
+                        if (parsed.sessionHeader) {
+                            const user = parsed.sessionHeader.startedBy || 'unknown';
+                            const project = parsed.sessionHeader.project || 'unknown';
+
+                            if (commonUser === null) commonUser = user;
+                            if (commonProject === null) commonProject = project;
+
+                            // Integrity check: do these logs belong to the same person?
+                            if (commonUser !== user || commonProject !== project) {
+                                valid = false;
+                                break;
+                            }
+                        }
+
+                        if (Array.isArray(parsed.events)) {
+                            for (const e of parsed.events) {
+                                const t = (e.eventType || '').toString().toLowerCase();
+                                const flight = parseInt(e.flightTime || '0');
+
+                                if (t === 'input' || t === 'key' || t === 'keystroke') totalInputs++;
+                                else if (t === 'delete' || t === 'backspace' || t === 'deletion') totalDeletes++;
+                                else if (t === 'paste' || t === 'clipboard' || t === 'pasteevent') totalPastes++;
+
+                                if (flight > 0 && flight < inactivityMs) {
+                                    totalActiveMs += flight;
+                                    if (flight > 2000) pausesMs.push(flight); // >2 seconds is considered a "pause break"
+                                }
+                            }
+                        }
+                    }
+
+                    if (!valid) {
+                        panel?.webview.postMessage({ command: 'error', message: 'Rainy Day: Selected logs do not match student or project.' });
+                        return;
+                    }
+
+                    if (totalActiveMs === 0) {
+                        panel?.webview.postMessage({ command: 'error', message: 'Rainy Day: Insufficient active data to establish profile.' });
+                        return;
+                    }
+
+                    const activeMins = totalActiveMs / 60000;
+                    const wpm = (totalInputs / 5) / activeMins; // standard wpm calc
+                    const editRate = totalDeletes / activeMins;
+                    const pasteFreq = totalPastes / (activeMins / 60); 
+                    const avgPause = pausesMs.length ? pausesMs.reduce((a,b)=>a+b,0)/pausesMs.length : 0;
+
+                    const profile = {
+                        user: commonUser,
+                        project: commonProject,
+                        sessionsAnalyzed: selectedFiles.length,
+                        wpm: Math.round(wpm),
+                        editRate: Math.round(editRate * 10) / 10,
+                        pasteFreq: Math.round(pasteFreq * 10) / 10,
+                        avgPauseMs: Math.round(avgPause),
+                        totalActiveMins: Math.round(activeMins)
+                    };
+
+                    panel?.webview.postMessage({ command: 'profileData', data: profile });
+
+                } catch (err: any) {
+                    panel?.webview.postMessage({ command: 'error', message: `Profile generation failed: ${err.message}` });
+                }
+            }
+
             if (message.command === 'analyzeLogs') {
                 const files = await storageManager.listLogFiles();
                 if (!files || files.length === 0) {
@@ -102,16 +270,13 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     sessionPassword = password;
                 }
 
-                            // Load persisted thresholds/settings so analysis matches client-side flagging rules
-                            const savedSettings = context.globalState.get('tbdSettings', { inactivityThreshold: 5, flightTimeThreshold: 50, pasteLengthThreshold: 50, flagAiEvents: true });
-                            const thresholds = {
-                                inactivity: savedSettings.inactivityThreshold || 5,
-                                flight: savedSettings.flightTimeThreshold || 50,
-                                pasteLength: savedSettings.pasteLengthThreshold || 50,
-                                flagAiEvents: (typeof savedSettings.flagAiEvents === 'boolean') ? savedSettings.flagAiEvents : true
-                            };
+                const settings = context.globalState.get('tbdSettings', { inactivityThreshold: 5 });
+                const inactivityMs = (settings.inactivityThreshold || 5) * 60 * 1000;
 
-                            const aggregate: any = { totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, pasteLengths: [], partialCount: 0, perFile: [], aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0, aiDeleteCount: 0, flaggedCount: 0 };
+                const aggregate: any = { 
+                    totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, 
+                    pasteLengths: [], partialCount: 0, totalWallTime: 0, totalActiveTime: 0, perFile: [] 
+                };
 
                 for (const f of files) {
                     try {
@@ -128,44 +293,34 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                             } catch (_) { parsed = null; }
                         }
 
-                        const fileStats: any = { name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, avgPasteLength: 0, aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0, flagged: 0 };
+                        const fileStats: any = { 
+                            name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, 
+                            avgPasteLength: 0, activeTime: 0, wallTime: 0
+                        };
 
-                        if (parsed && Array.isArray(parsed.events)) {
-                            fileStats.events = parsed.events.length;
-                            for (const e of parsed.events) {
+                        if (parsed && Array.isArray(parsed.events) && parsed.events.length > 0) {
+                            const events = parsed.events;
+                            fileStats.events = events.length;
+                            
+                            const firstTime = parseLogTime(events[0].time);
+                            const lastTime = parseLogTime(events[events.length - 1].time);
+                            if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) {
+                                fileStats.wallTime = lastTime - firstTime;
+                            }
+
+                            for (const e of events) {
                                 const t = (e.eventType || '').toString().toLowerCase();
                                 if (t === 'paste' || t === 'clipboard' || t === 'pasteevent') {
                                     fileStats.paste++;
                                     const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : (typeof e.text === 'string' ? e.text.length : 0));
                                     if (len && len > 0) aggregate.pasteLengths.push(len);
-                                    // flag suspicious pastes based on pasteLength threshold
-                                    if (!len || len === 0 || len > thresholds.pasteLength) { fileStats.flagged = (fileStats.flagged || 0) + 1; aggregate.flaggedCount = (aggregate.flaggedCount || 0) + 1; }
-                                }
-                                // AI-specific events (aggregate + per-file)
-                                if (t.startsWith('ai-') || t === 'ai' || t === 'ai-assist') {
-                                    aggregate.aiCount = (aggregate.aiCount || 0) + 1;
-                                    fileStats.aiCount = (fileStats.aiCount || 0) + 1;
-                                    // treat ai-paste/replace as paste-like
-                                    if (t === 'ai-paste' || t === 'ai-replace') {
-                                        aggregate.aiPasteCount = (aggregate.aiPasteCount || 0) + 1;
-                                        fileStats.aiPasteCount = (fileStats.aiPasteCount || 0) + 1;
-                                        const alen = (typeof e.pasteCharCount === 'number') ? e.pasteCharCount : ((typeof e.pasteLength === 'number') ? e.pasteLength : ((typeof e.length === 'number') ? e.length : (typeof e.text === 'string' ? e.text.length : 0)));
-                                        if (alen && alen > 0) { aggregate.aiPasteLengths.push(alen); fileStats.aiPasteLengths.push(alen); }
-                                    }
-                                    // detect ai-delete events as deletes originating from AI
-                                    if (t === 'ai-delete' || (t.includes('delete') && t.startsWith('ai-'))) {
-                                        aggregate.aiDeleteCount = (aggregate.aiDeleteCount || 0) + 1;
-                                        fileStats.aiDeleteCount = (fileStats.aiDeleteCount || 0) + 1;
-                                    }
-                                        if (e.possibleAiDetection) { aggregate.aiFlagCount = (aggregate.aiFlagCount || 0) + 1; fileStats.aiFlagCount = (fileStats.aiFlagCount || 0) + 1; if (thresholds.flagAiEvents) { fileStats.flagged = (fileStats.flagged || 0) + 1; aggregate.flaggedCount = (aggregate.flaggedCount || 0) + 1; } }
                                 }
                                 if (t === 'delete' || t === 'deletion' || t === 'backspace') fileStats.delete++;
-                                if (t === 'key' || t === 'keystroke' || t === 'keypress' || t === 'input') {
-                                    fileStats.keystrokes++;
-                                    // flag fast typing (input/keystroke with flightTime below threshold)
-                                    try {
-                                        if (e.flightTime && parseInt(e.flightTime) < thresholds.flight) { fileStats.flagged = (fileStats.flagged || 0) + 1; aggregate.flaggedCount = (aggregate.flaggedCount || 0) + 1; }
-                                    } catch (err) {}
+                                if (t === 'key' || t === 'keystroke' || t === 'keypress' || t === 'input') fileStats.keystrokes++;
+
+                                const flight = parseInt(e.flightTime || '0');
+                                if (flight > 0 && flight < inactivityMs) {
+                                    fileStats.activeTime += flight;
                                 }
                             }
 
@@ -173,6 +328,8 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                             aggregate.pasteCount += fileStats.paste;
                             aggregate.deleteCount += fileStats.delete;
                             aggregate.keystrokeCount += fileStats.keystrokes;
+                            aggregate.totalWallTime += fileStats.wallTime;
+                            aggregate.totalActiveTime += fileStats.activeTime;
                         }
 
                         aggregate.perFile.push(fileStats);
@@ -182,102 +339,32 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 }
 
                 const total = aggregate.totalEvents || 1;
-                // combine human and AI paste lengths/counts for dashboard metrics
-                const combinedPasteLengths = (aggregate.pasteLengths || []).concat(aggregate.aiPasteLengths || []);
-                const avgPasteLength = combinedPasteLengths.length ? (combinedPasteLengths.reduce((a: number, b: number) => a + b, 0) / combinedPasteLengths.length) : 0;
-                const totalPasteCount = (aggregate.pasteCount || 0) + (aggregate.aiPasteCount || 0);
-                const totalDeleteCount = (aggregate.deleteCount || 0) + (aggregate.aiDeleteCount || 0);
-                const pasteRatio = Math.min(1, totalPasteCount / total);
-                const deleteRatio = Math.min(1, totalDeleteCount / total);
+                const pasteRatio = Math.min(1, aggregate.pasteCount / total);
+                const deleteRatio = Math.min(1, aggregate.deleteCount / total);
+                const avgPasteLength = aggregate.pasteLengths.length ? (aggregate.pasteLengths.reduce((a: number, b: number) => a + b, 0) / aggregate.pasteLengths.length) : 0;
 
-                // New AI probability algorithm
-                // Signals:
-                // - aiEventRatio: fraction of events that are AI-labeled
-                // - aiPasteRatio: fraction of AI events that are paste-like (ai-paste / ai events)
-                // - avgAIPasteLen: average length of AI-generated pastes (normalized)
-                // - aiFlagRate: fraction of AI events containing a possibleAiDetection flag
-                const aiEventRatio = Math.min(1, (aggregate.aiCount || 0) / total);
-                const aiPasteRatio = Math.min(1, (aggregate.aiPasteCount || 0) / Math.max(1, (aggregate.aiCount || 0)));
-                const avgAIPasteLen = aggregate.aiPasteLengths.length ? (aggregate.aiPasteLengths.reduce((a: number, b: number) => a + b, 0) / aggregate.aiPasteLengths.length) : 0;
-                const avgAIPasteLenNorm = Math.min(1, avgAIPasteLen / Math.max(100, avgPasteLength || 100));
-                const aiFlagRate = Math.min(1, (aggregate.aiFlagCount || 0) / Math.max(1, (aggregate.aiCount || 0)));
+                const normalizedPasteLen = Math.min(1, avgPasteLength / 1000);
+                let score = (pasteRatio * 0.6 + normalizedPasteLen * 0.35 + deleteRatio * 0.05) * 100;
+                score = Math.max(0, Math.min(100, Math.round(score)));
 
-                // Weighted combination (tunable): prioritize aiEventRatio, then aiPasteRatio, then avgAIPasteLen, then flags
-                const aiScoreRaw = (aiEventRatio * 0.6) + (aiPasteRatio * 0.2) + (avgAIPasteLenNorm * 0.15) + (aiFlagRate * 0.05);
-                let aiProbability = Math.max(0, Math.min(100, Math.round(aiScoreRaw * 100)));
-
-                // Keep previous heuristics available as other metrics
-                aggregate.totalPasteCount = totalPasteCount;
-                aggregate.totalDeleteCount = totalDeleteCount;
-                // compute overall integrity score based on flagged events vs total events
-                aggregate.flaggedCount = aggregate.flaggedCount || 0;
-                aggregate.integrityScore = Math.max(0, Math.round((1 - (aggregate.flaggedCount / Math.max(1, aggregate.totalEvents))) * 100));
-                aggregate.metrics = {
-                    pasteRatio: Math.round(pasteRatio * 1000) / 10,
-                    deleteRatio: Math.round(deleteRatio * 1000) / 10,
-                    avgPasteLength: Math.round(avgPasteLength),
-                    aiProbability,
-                    _debug: {
-                        aiEventRatio: +(aiEventRatio.toFixed(4)),
-                        aiPasteRatio: +(aiPasteRatio.toFixed(4)),
-                        avgAIPasteLen: Math.round(avgAIPasteLen),
-                        aiFlagRate: +(aiFlagRate.toFixed(4))
-                    }
+                aggregate.metrics = { 
+                    pasteRatio: Math.round(pasteRatio * 1000) / 10, 
+                    deleteRatio: Math.round(deleteRatio * 1000) / 10, 
+                    avgPasteLength: Math.round(avgPasteLength), 
+                    aiProbability: score 
                 };
-
-                // Compute per-file AI probability using same heuristics as aggregate
-                try {
-                    for (const fs of aggregate.perFile) {
-                        if (!fs || fs.error) continue;
-                        const totalF = fs.events || 1;
-                        const aiEventRatioF = Math.min(1, (fs.aiCount || 0) / totalF);
-                        const aiPasteRatioF = Math.min(1, (fs.aiPasteCount || 0) / Math.max(1, (fs.aiCount || 0)));
-                        const avgAIPasteLenF = (fs.aiPasteLengths && fs.aiPasteLengths.length) ? (fs.aiPasteLengths.reduce((a: number, b: number) => a + b, 0) / fs.aiPasteLengths.length) : 0;
-                        const avgAIPasteLenNormF = Math.min(1, avgAIPasteLenF / Math.max(100, avgPasteLength || 100));
-                        const aiFlagRateF = Math.min(1, (fs.aiFlagCount || 0) / Math.max(1, (fs.aiCount || 0)));
-                        const aiScoreRawF = (aiEventRatioF * 0.6) + (aiPasteRatioF * 0.2) + (avgAIPasteLenNormF * 0.15) + (aiFlagRateF * 0.05);
-                        const aiProbF = Math.max(0, Math.min(100, Math.round(aiScoreRawF * 100)));
-                        fs.aiProbability = aiProbF;
-                        fs.metrics = fs.metrics || {};
-                        fs.metrics.aiProbability = aiProbF;
-                        fs.metrics._debug = {
-                            aiEventRatio: +(aiEventRatioF.toFixed(4)),
-                            aiPasteRatio: +(aiPasteRatioF.toFixed(4)),
-                            avgAIPasteLen: Math.round(avgAIPasteLenF),
-                            aiFlagRate: +(aiFlagRateF.toFixed(4))
-                        };
-                    }
-                } catch (e) {
-                    // ignore per-file metric failures
-                }
 
                 panel?.webview.postMessage({ command: 'dashboardData', data: aggregate });
             }
 
             if (message.command === 'getSettings') {
-                const current = context.globalState.get('tbdSettings', { inactivityThreshold: 5, flightTimeThreshold: 50, pasteLengthThreshold: 50, flagAiEvents: true });
+                const current = context.globalState.get('tbdSettings', { inactivityThreshold: 5, flightTimeThreshold: 50, pasteLengthThreshold: 50 });
                 panel?.webview.postMessage({ command: 'loadSettings', settings: current });
             }
 
             if (message.command === 'saveSettings') {
                 await context.globalState.update('tbdSettings', message.settings);
                 panel?.webview.postMessage({ command: 'settingsSaved', success: true });
-            }
-            if (message.command === 'getDeletions') {
-                let password = sessionPassword;
-                if (!password) {
-                    password = await vscode.window.showInputBox({ prompt: `Enter Administrator Password to view deletion activity`, password: true, ignoreFocusOut: true });
-                    if (!password) { panel?.webview.postMessage({ command: 'error', message: 'Password required' }); return; }
-                    sessionPassword = password;
-                }
-                try {
-                    const json = await storageManager.retrieveHiddenLogContent(password);
-                    let parsed: any = null;
-                    try { parsed = JSON.parse(json); } catch { parsed = { raw: json }; }
-                    panel?.webview.postMessage({ command: 'deletionData', data: parsed });
-                } catch (err: any) {
-                    panel?.webview.postMessage({ command: 'error', message: String(err) });
-                }
             }
 
         } catch (e) {

@@ -5,8 +5,6 @@
         "**/.hg": true,
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
-        "out": false,
-        "dist": false,
         ".vscode/logs": true,
         ".vscode/logs/**": true,
         ".vscode/settings.json": true

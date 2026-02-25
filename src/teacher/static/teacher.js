@@ -82,6 +82,9 @@
     const logsViewerContainer = $("logs-viewer-container");
     const logsLogName = $("logs-log-name");
 
+    // Deletions View
+    const deletionsView = $("deletions-view");
+
     const inactivityInput = $("inactivityInput");
     const flightInput = $("flightInput");
     const pasteLengthInput = $("pasteLengthInput");
@@ -115,17 +118,27 @@
         switchTab("dashboard");
         post("analyzeLogs");
       });
+
     const navLogs = $("nav-logs");
     if (navLogs)
       navLogs.addEventListener("click", () => {
         switchTab("logs");
         post("listLogs");
       });
+
+    const navDeletions = $("nav-deletions");
+    if (navDeletions)
+      navDeletions.addEventListener("click", () => {
+        switchTab("deletions");
+        post("getDeletions");
+      });
+
     const navSettings = $("nav-settings");
     if (navSettings)
       navSettings.addEventListener("click", () => {
         switchTab("settings");
       });
+
     const btnGotoLogs = $("btn-goto-logs");
     if (btnGotoLogs)
       btnGotoLogs.addEventListener("click", () => switchTab("logs"));
@@ -137,6 +150,13 @@
         if (logsView) logsView.innerHTML = "";
         if (logsLogName) logsLogName.textContent = "";
         if (searchInput) searchInput.value = "";
+      });
+
+    const refreshDeletionsBtn = $("refreshDeletions");
+    if (refreshDeletionsBtn)
+      refreshDeletionsBtn.addEventListener("click", () => {
+        if (status) status.textContent = "Fetching deletions...";
+        post("getDeletions");
       });
 
     let isDark = false;
@@ -487,7 +507,6 @@
         const dashboardView = $("dashboard-view");
         const filesSection = document.getElementById("per-file-section");
         if (dashboardView && filesSection) {
-          // Insert profile right above the file breakdown table
           dashboardView.insertBefore(pCard, filesSection.parentElement);
         } else if (dashboardView) {
           dashboardView.appendChild(pCard);
@@ -498,18 +517,41 @@
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
                     <h2 style="margin:0; color:var(--accent-2);">Behavioral Profile: ${data.user}</h2>
-                    <div class="meta">Project: ${data.project} &nbsp;|&nbsp; Sessions: ${data.sessionsAnalyzed} &nbsp;|&nbsp; Active Mins: ${data.totalActiveMins}</div>
+                    <div class="meta">Project: ${data.project} &nbsp;|&nbsp; Sessions Analyzed: ${data.sessionsAnalyzed} &nbsp;|&nbsp; Active Time: ${data.totalActiveMins} mins &nbsp;|&nbsp; <strong>Total Time in VS Code: ${data.totalWallMins} mins</strong></div>
                 </div>
                 <button id="close-profile" class="btn btn-secondary" style="padding:4px 8px;">Close</button>
             </div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:12px; margin-top:16px;">
-                <div><div style="font-weight:700; font-size:1.4rem;">${data.wpm}</div><div class="meta">Avg WPM</div></div>
-                <div><div style="font-weight:700; font-size:1.4rem;">${data.editRate}</div><div class="meta">Edits/min</div></div>
-                <div><div style="font-weight:700; font-size:1.4rem;">${data.pasteFreq}</div><div class="meta">Pastes/hr</div></div>
-                <div><div style="font-weight:700; font-size:1.4rem;">${data.avgPauseMs > 0 ? (data.avgPauseMs / 1000).toFixed(1) + "s" : "N/A"}</div><div class="meta">Avg Pause Length</div></div>
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-top:20px;">
+                <div>
+                    <div style="font-weight:700; font-size:1.5rem;">${data.wpm}</div>
+                    <div class="meta">Avg WPM</div>
+                </div>
+                <div>
+                    <div style="font-weight:700; font-size:1.5rem;">${data.editRate}</div>
+                    <div class="meta">Edits/min (Code Churn)</div>
+                </div>
+                <div>
+                    <div style="font-weight:700; font-size:1.5rem;">${data.pasteFreq}</div>
+                    <div class="meta">Pastes/hr</div>
+                </div>
+                
+                <div>
+                    <div style="font-weight:700; font-size:1.5rem;">${data.avgPauseMs > 0 ? (data.avgPauseMs / 1000).toFixed(1) + "s" : "N/A"}</div>
+                    <div class="meta">Avg Micro-Pause (Thinking Time)</div>
+                </div>
+                <div>
+                    <div style="font-weight:700; font-size:1.5rem;">${data.internalPasteRatio}% <span style="font-size:1rem; color:var(--muted)">Int</span> / ${data.externalPasteRatio}% <span style="font-size:1rem; color:var(--muted)">Ext</span></div>
+                    <div class="meta">Internal vs External Paste Ratio</div>
+                </div>
+                <div>
+                    <div style="font-weight:700; font-size:1.5rem;">${data.debugRunFreq}</div>
+                    <div class="meta">Terminal Runs/hr (Testing Freq)</div>
+                </div>
             </div>
-            <div class="meta" style="margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
-                This profile establishes a baseline for this student. Compare future sessions against these averages to detect anomalies.
+            
+            <div class="meta" style="margin-top:16px; border-top:1px solid var(--border); padding-top:12px;">
+                <strong>Pedagogical Insight:</strong> This establishes the student's unique workflow. Frequent terminal runs indicate iterative testing. High internal paste ratio indicates normal refactoring, while high external paste ratio indicates sourcing outside code.
             </div>
         `;
 
@@ -584,7 +626,6 @@
         filesCard.className = "card";
         filesCard.style.marginTop = "12px";
 
-        // Header with Behavior Profile Button
         const filesHeaderRow = document.createElement("div");
         filesHeaderRow.style.display = "flex";
         filesHeaderRow.style.justifyContent = "space-between";
@@ -613,10 +654,9 @@
         filesSection.id = "per-file-section";
         filesSection.style.marginTop = "16px";
 
-        // Multi-Select Headers
         const header = document.createElement("div");
         header.style.display = "grid";
-        header.style.gridTemplateColumns = "40px 2fr 1fr 1fr 1fr 1fr 40px"; // Outer columns for checkbox and arrow
+        header.style.gridTemplateColumns = "40px 2fr 1fr 1fr 1fr 1fr 40px";
         header.style.fontWeight = "700";
         header.style.gap = "8px";
         header.innerHTML =
@@ -637,7 +677,7 @@
           check.type = "checkbox";
           check.className = "log-checkbox";
           check.value = f.name;
-          check.addEventListener("click", (e) => e.stopPropagation()); // Don't trigger row expansion
+          check.addEventListener("click", (e) => e.stopPropagation());
           checkCell.appendChild(check);
 
           const name = document.createElement("div");
@@ -673,8 +713,29 @@
           row.appendChild(d);
           row.appendChild(arrowCell);
 
+          // NEW ROW CLICK LOGIC
           row.addEventListener("click", (evClick) => {
             evClick.stopPropagation();
+
+            // Figure out which cell was clicked
+            let clickedCell = evClick.target;
+            while (clickedCell && clickedCell.parentNode !== row) {
+              clickedCell = clickedCell.parentNode;
+            }
+            const cellNodes = Array.from(row.children);
+            const cellIndex = cellNodes.indexOf(clickedCell);
+
+            // Left Area clicked: Checkbox (0) or File Name (1) -> Select the log
+            if (cellIndex === 0 || cellIndex === 1) {
+              const checkbox = checkCell.querySelector("input");
+              // Toggle if user didn't click the checkbox directly
+              if (evClick.target !== checkbox) {
+                checkbox.checked = !checkbox.checked;
+              }
+              return; // Stop here, don't expand
+            }
+
+            // Right Area clicked: Events (2) onwards -> Expand the Integrity Score
             const fname = f.name;
 
             if (expandedFile === fname) {
@@ -703,8 +764,9 @@
               `[data-file-row="${fname}"] .meta.loading`,
             );
             if (!existing) name.appendChild(loading);
-            post("openLog", { filename: fname }); // We fetch the file to show the inline summary
+            post("openLog", { filename: fname });
           });
+
           filesSection.appendChild(row);
         });
         filesCard.appendChild(filesSection);
@@ -995,6 +1057,80 @@
             status.textContent = msg.message;
             setTimeout(() => (status.textContent = "Ready"), 3000);
           }
+          break;
+
+        case "deletionData":
+          try {
+            const d = msg.data;
+            if (!deletionsView) break;
+            if (typeof d === "string") {
+              deletionsView.innerHTML = "<pre>" + d + "</pre>";
+            } else {
+              const records = Array.isArray(d)
+                ? d
+                : d && Array.isArray(d.deletions)
+                  ? d.deletions
+                  : null;
+              const header = d && d.header ? d.header : null;
+              if (header) {
+                const hdrDiv = document.createElement("div");
+                hdrDiv.className = "meta";
+                hdrDiv.style.marginBottom = "8px";
+                hdrDiv.innerHTML = `<div><strong>${header.note || "Deletion Log"}</strong></div><div class="meta">Created: ${header.createdAt || header.created || ""}</div>`;
+                deletionsView.innerHTML = "";
+                deletionsView.appendChild(hdrDiv);
+              } else {
+                deletionsView.innerHTML = "";
+              }
+              if (!records || records.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "meta";
+                empty.textContent = "No deletion records found.";
+                deletionsView.appendChild(empty);
+              } else {
+                const list = document.createElement("div");
+                list.style.display = "grid";
+                list.style.gap = "10px";
+                records.forEach((item) => {
+                  const row = document.createElement("div");
+                  row.className = "card deletion-row";
+                  const time =
+                    item.modifiedAt || item.time || item.timestamp || "";
+                  const who =
+                    item.user || item.startedBy || item.actor || "Unknown";
+                  const file =
+                    item.modifiedFile ||
+                    item.file ||
+                    item.path ||
+                    item.filePath ||
+                    "(unknown)";
+                  const prevSize =
+                    item.previousSize || item.oldSize || item.previous || "";
+                  const newSize = item.newSize || item.size || "";
+                  const note = item.note || item.reason || "";
+                  row.innerHTML = `
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <div style="font-weight:700;">${file}</div>
+                        <div class="meta">Deleted by ${who} • ${time}</div>
+                      </div>
+                      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+                        ${prevSize ? `<div class="meta">Prev: ${prevSize}</div>` : ""}
+                        ${newSize ? `<div class="meta">Now: ${newSize}</div>` : ""}
+                        ${note ? `<div class="meta">${note}</div>` : ""}
+                      </div>
+                    </div>
+                  `;
+                  list.appendChild(row);
+                });
+                deletionsView.appendChild(list);
+              }
+            }
+          } catch (err) {
+            if (deletionsView)
+              deletionsView.textContent = "Failed to render deletions.";
+          }
+          if (status) status.textContent = "Deletions updated";
           break;
       }
     });

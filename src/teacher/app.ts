@@ -5,7 +5,6 @@ import { getHtml } from './getHtml';
 let panel: vscode.WebviewPanel | undefined;
 let sessionPassword: string | undefined;
 
-// FIXED: Now properly handles alphabetic months (e.g., "Feb") and timezones
 function parseLogTime(s: string): number {
     if (!s) return 0;
     const cleanStr = s.replace(/ [A-Z]{3,4}$/, ""); // remove EST/UTC etc.
@@ -24,7 +23,6 @@ function parseLogTime(s: string): number {
         Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
     };
     
-    // Parse the string month into a number
     const month = months[monthStr] !== undefined ? months[monthStr] : parseInt(monthStr) - 1;
     const day = parseInt(dateSub[1]);
     const year = parseInt(dateSub[2]);
@@ -183,6 +181,124 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 }
             }
 
+            // --- GENERATE ASSIGNMENT TIMELINE ---
+            if (message.command === 'generateTimeline') {
+                const filenames: string[] = message.filenames;
+                let password = sessionPassword;
+                if (!password) {
+                    password = await vscode.window.showInputBox({ prompt: `Enter Administrator Password to Generate Timeline`, password: true });
+                    if (!password) { panel?.webview.postMessage({ command: 'error', message: 'Password required' }); return; }
+                    sessionPassword = password;
+                }
+
+                try {
+                    const files = await storageManager.listLogFiles();
+                    let expectedUser: string | null = null;
+                    let expectedProject: string | null = null;
+                    let allEvents: any[] = [];
+                    
+                    let userMismatch = false;
+                    let projectMismatch = false;
+
+                    // 1. Fetch and Verify Data
+                    for (const fname of filenames) {
+                        const chosen = files.find(f => f.label === fname);
+                        if (!chosen) continue;
+                        
+                        const res = await storageManager.retrieveLogContentWithPassword(password, chosen.uri);
+                        let parsed: any = null;
+                        try { parsed = JSON.parse(res.text); } catch {
+                            try {
+                                const s = res.text.indexOf('{');
+                                const e = res.text.lastIndexOf('}');
+                                if (s !== -1 && e > s) parsed = JSON.parse(res.text.slice(s, e + 1));
+                            } catch (_) { continue; }
+                        }
+
+                        if (parsed && parsed.events && parsed.events.length > 0) {
+                            const sessionUser = parsed.sessionHeader?.startedBy || 'Unknown';
+                            const sessionProject = parsed.sessionHeader?.project || 'Unknown';
+
+                            if (expectedUser === null) expectedUser = sessionUser;
+                            if (expectedProject === null) expectedProject = sessionProject;
+
+                            // VERIFICATION CHECK
+                            if (expectedUser !== sessionUser) {
+                                userMismatch = true;
+                                break;
+                            }
+                            if (expectedProject !== sessionProject) {
+                                projectMismatch = true;
+                                break;
+                            }
+
+                            allEvents = allEvents.concat(parsed.events);
+                        }
+                    }
+
+                    // TRIGGER ALERTS
+                    if (userMismatch) {
+                        vscode.window.showErrorMessage("Timeline Cancelled: The selected logs belong to different students.");
+                        panel?.webview.postMessage({ command: 'error', message: 'Timeline cancelled: Student mismatch.' });
+                        return;
+                    }
+                    if (projectMismatch) {
+                        vscode.window.showErrorMessage("Timeline Cancelled: The selected logs belong to different projects/workspaces.");
+                        panel?.webview.postMessage({ command: 'error', message: 'Timeline cancelled: Project mismatch.' });
+                        return;
+                    }
+
+                    if (allEvents.length < 5) {
+                        vscode.window.showErrorMessage("Timeline Cancelled: Sparse activity. Not enough data points to map.");
+                        panel?.webview.postMessage({ command: 'error', message: 'Sparse activity: Not enough data points.' });
+                        return;
+                    }
+
+                    // 2. Sort Events Chronologically
+                    allEvents.sort((a, b) => parseLogTime(a.time) - parseLogTime(b.time));
+
+                    // 3. Process into Work Periods and Gaps
+                    const settings = context.globalState.get('tbdSettings', { inactivityThreshold: 5 });
+                    const gapThresholdMs = (settings.inactivityThreshold || 5) * 60 * 1000;
+
+                    const periods: any[] = [];
+                    let currentPeriod: any = null;
+
+                    for (let i = 0; i < allEvents.length; i++) {
+                        const e = allEvents[i];
+                        const t = parseLogTime(e.time);
+                        if (t === 0) continue;
+
+                        if (!currentPeriod) {
+                            currentPeriod = { startTime: t, endTime: t, eventCount: 1 };
+                        } else {
+                            const diff = t - currentPeriod.endTime;
+                            if (diff > gapThresholdMs) {
+                                periods.push(currentPeriod);
+                                currentPeriod = { startTime: t, endTime: t, eventCount: 1 };
+                            } else {
+                                currentPeriod.endTime = t;
+                                currentPeriod.eventCount++;
+                            }
+                        }
+                    }
+                    if (currentPeriod) periods.push(currentPeriod);
+
+                    panel?.webview.postMessage({
+                        command: 'timelineData',
+                        data: {
+                            user: expectedUser,
+                            project: expectedProject,
+                            periods: periods,
+                            totalEvents: allEvents.length
+                        }
+                    });
+
+                } catch (err: any) {
+                    panel?.webview.postMessage({ command: 'error', message: `Timeline generation failed: ${err.message}` });
+                }
+            }
+
             // --- GENERATE BEHAVIORAL PROFILE ---
             if (message.command === 'generateProfile') {
                 const filenames: string[] = message.filenames;
@@ -195,6 +311,12 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
 
                 try {
                     const files = await storageManager.listLogFiles();
+                    
+                    let expectedUser: string | null = null;
+                    let expectedProject: string | null = null;
+                    let userMismatch = false;
+                    let projectMismatch = false;
+
                     let totalActiveMs = 0;
                     let totalWallMs = 0;
                     let keystrokes = 0;
@@ -203,8 +325,6 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     let externalPastes = 0;
                     let terminalRuns = 0;
                     let pauseLengths: number[] = [];
-                    let project = "Unknown";
-                    let user = "Unknown";
 
                     for (const fname of filenames) {
                         const chosen = files.find(f => f.label === fname);
@@ -221,10 +341,22 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                         }
                         
                         if (parsed && parsed.events && parsed.events.length > 0) {
-                            if (parsed.sessionHeader) {
-                                project = parsed.sessionHeader.project || project;
-                                user = parsed.sessionHeader.startedBy || user;
+                            const sessionUser = parsed.sessionHeader?.startedBy || 'Unknown';
+                            const sessionProject = parsed.sessionHeader?.project || 'Unknown';
+
+                            if (expectedUser === null) expectedUser = sessionUser;
+                            if (expectedProject === null) expectedProject = sessionProject;
+
+                            // VERIFICATION CHECK
+                            if (expectedUser !== sessionUser) {
+                                userMismatch = true;
+                                break;
                             }
+                            if (expectedProject !== sessionProject) {
+                                projectMismatch = true;
+                                break;
+                            }
+
                             const events = parsed.events;
                             const firstTime = parseLogTime(events[0].time);
                             const lastTime = parseLogTime(events[events.length - 1].time);
@@ -238,11 +370,9 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                                 const t = parseLogTime(e.time);
                                 if (prevTime > 0 && t > 0) {
                                     const diff = t - prevTime;
-                                    // Less than 5 mins is considered "Active" time
                                     if (diff < 5 * 60 * 1000) { 
                                         totalActiveMs += diff;
                                     }
-                                    // Micro-pauses (Thinking time): Pauses between 5 seconds and 1 minute
                                     if (diff >= 5000 && diff <= 60000) { 
                                         pauseLengths.push(diff);
                                     }
@@ -251,14 +381,12 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
 
                                 const evType = (e.eventType || '').toLowerCase();
                                 
-                                // Metrics Counting
                                 if (evType === 'input' || evType === 'key' || evType === 'keystroke') keystrokes++;
                                 if (evType === 'replace' || evType === 'delete' || evType === 'backspace') edits++;
                                 if (evType === 'terminal' || evType === 'debug' || evType === 'run' || evType === 'terminalcommand') terminalRuns++;
                                 
                                 if (evType === 'paste' || evType === 'clipboard' || evType === 'pasteevent' || evType === 'ai-paste') {
                                     pastes++;
-                                    // FIXED PASTE LOGIC: Assume Internal unless explicitly marked otherwise
                                     if (e.source === 'external' || e.pastedFrom === 'external' || evType === 'ai-paste' || e.internal === false) {
                                         externalPastes++;
                                     }
@@ -267,10 +395,21 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                         }
                     }
 
-                    // FIXED MATH: Use floats so short test sessions (e.g. 40 seconds) don't round down to 0 minutes!
+                    // TRIGGER ALERTS
+                    if (userMismatch) {
+                        vscode.window.showErrorMessage("Profile Cancelled: Selected logs belong to different students.");
+                        panel?.webview.postMessage({ command: 'error', message: 'Profile cancelled: Student mismatch.' });
+                        return;
+                    }
+                    if (projectMismatch) {
+                        vscode.window.showErrorMessage("Profile Cancelled: Selected logs belong to different projects.");
+                        panel?.webview.postMessage({ command: 'error', message: 'Profile cancelled: Project mismatch.' });
+                        return;
+                    }
+
                     const activeMinsFloat = totalActiveMs / 60000;
                     const wallMinsFloat = totalWallMs / 60000;
-                    const activeHoursFloat = activeMinsFloat / 60 || 0.01; // Prevent divide by zero
+                    const activeHoursFloat = activeMinsFloat / 60 || 0.01;
 
                     const wpm = activeMinsFloat > 0 ? Math.round((keystrokes / 5) / activeMinsFloat) : 0;
                     const editRate = activeMinsFloat > 0 ? Math.round(edits / activeMinsFloat) : 0;
@@ -279,15 +418,14 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     const externalPasteRatio = pastes > 0 ? Math.round((externalPastes / pastes) * 100) : 0;
                     const debugRunFreq = Math.round(terminalRuns / activeHoursFloat);
 
-                    // Provide rounded values for the UI display only
                     const totalActiveMins = Math.max(0, Math.round(activeMinsFloat));
                     const totalWallMins = Math.max(0, Math.round(wallMinsFloat));
 
                     panel?.webview.postMessage({
                         command: 'profileData',
                         data: {
-                            user,
-                            project,
+                            user: expectedUser,
+                            project: expectedProject,
                             sessionsAnalyzed: filenames.length,
                             totalActiveMins,
                             totalWallMins,
@@ -306,7 +444,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 }
             }
 
-            // --- ANALYZE LOGS (WITH ADVANCED AI DETECTION) ---
+            // --- ANALYZE LOGS ---
             if (message.command === 'analyzeLogs') {
                 const files = await storageManager.listLogFiles();
                 if (!files || files.length === 0) {
@@ -321,7 +459,6 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                     sessionPassword = password;
                 }
 
-                // Load persisted thresholds
                 const savedSettings = context.globalState.get('tbdSettings', { inactivityThreshold: 5, flightTimeThreshold: 50, pasteLengthThreshold: 50, flagAiEvents: true });
                 const thresholds = {
                     inactivity: savedSettings.inactivityThreshold || 5,
@@ -435,7 +572,6 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 const pasteRatio = Math.min(1, totalPasteCount / total);
                 const deleteRatio = Math.min(1, totalDeleteCount / total);
 
-                // Advanced AI probability algorithm
                 const aiEventRatio = Math.min(1, (aggregate.aiCount || 0) / total);
                 const aiPasteRatio = Math.min(1, (aggregate.aiPasteCount || 0) / Math.max(1, (aggregate.aiCount || 0)));
                 const avgAIPasteLen = aggregate.aiPasteLengths.length ? (aggregate.aiPasteLengths.reduce((a: number, b: number) => a + b, 0) / aggregate.aiPasteLengths.length) : 0;

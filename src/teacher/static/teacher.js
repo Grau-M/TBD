@@ -15,7 +15,9 @@
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
 
+    if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
@@ -277,6 +279,87 @@
         post("listLogs");
       });
 
+    // --- RENDER TIMELINE TAB ---
+    function renderTimeline(data) {
+      let tCard = document.getElementById("timeline-card");
+      if (!tCard) {
+        tCard = document.createElement("div");
+        tCard.id = "timeline-card";
+        tCard.className = "card";
+        tCard.style.borderLeft = "6px solid var(--accent)";
+        tCard.style.marginTop = "12px";
+
+        const dashboardView = $("dashboard-view");
+        const filesSection = document.getElementById("per-file-section");
+        if (dashboardView && filesSection) {
+          dashboardView.insertBefore(tCard, filesSection.parentElement);
+        } else if (dashboardView) {
+          dashboardView.appendChild(tCard);
+        }
+      }
+
+      let html = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2 style="margin:0; color:var(--accent);">Assignment Timeline: ${data.user}</h2>
+                    <div class="meta">Project: ${data.project} &nbsp;|&nbsp; Total Analyzed Events: ${data.totalEvents}</div>
+                </div>
+                <button id="close-timeline" class="btn btn-secondary" style="padding:4px 8px;">Close</button>
+            </div>
+            <div style="margin-top: 16px;">
+        `;
+
+      if (data.sparse || !data.periods || data.periods.length === 0) {
+        html += `<div class="meta" style="color: #f59e0b; padding:12px; border:1px solid #f59e0b; border-radius:4px;"><strong>Sparse Activity Detected:</strong> The timeline is incomplete because there are not enough recorded events across these logs to form a steady baseline.</div>`;
+      } else {
+        const formatTime = (ts) => {
+          const d = new Date(ts);
+          return d.toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        };
+
+        data.periods.forEach((p, index) => {
+          const durMs = p.endTime - p.startTime;
+          const durStr = durMs < 60000 ? "< 1m" : formatDuration(durMs);
+
+          html += `
+                    <div style="display:flex; flex-direction:column; gap:4px; margin-bottom: 8px;">
+                        <div style="display:flex; justify-content:space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);">
+                            <div>
+                                <strong style="font-size:1.1rem;">Work Period ${index + 1}</strong>
+                                <div class="meta" style="margin-top:4px;">${formatTime(p.startTime)} &rarr; ${formatTime(p.endTime)}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight:bold;">${durStr}</div>
+                                <div class="meta">${p.eventCount} logged events</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+          if (index < data.periods.length - 1) {
+            const gapMs = data.periods[index + 1].startTime - p.endTime;
+            if (gapMs > 4 * 60 * 60 * 1000) {
+              html += `<div class="meta" style="text-align:center; padding: 8px 0; color: #f59e0b;">⟐ <strong>Significant Gap: ${formatDuration(gapMs)}</strong> (Potential unrecorded offline work, crash, or extended break) ⟐</div>`;
+            } else {
+              html += `<div class="meta" style="text-align:center; padding: 6px 0;">↓ Gap: ${formatDuration(gapMs)} ↓</div>`;
+            }
+          }
+        });
+      }
+
+      html += `</div>`;
+      tCard.innerHTML = html;
+
+      document
+        .getElementById("close-timeline")
+        .addEventListener("click", () => tCard.remove());
+    }
+
     // --- RENDER LOGS TAB ---
     function renderParsedInLogs(parsed, filename) {
       if (logsView) logsView.innerHTML = "";
@@ -288,7 +371,6 @@
         flaggedEvents = 0,
         integrityScore = 100;
 
-      // Reporting Stats
       let focusAwayCount = 0;
       let largePasteCount = 0;
       let fastInputCount = 0;
@@ -399,7 +481,6 @@
         }
       }
 
-      // --- ADD UI CONTROLS FOR TABS AND FILTERS ---
       const controlsDiv = document.createElement("div");
       controlsDiv.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; margin: 16px 0 8px 0;">
@@ -423,7 +504,6 @@
       `;
       logsView.appendChild(controlsDiv);
 
-      // Create containers for the two views
       const eventsContainer = document.createElement("div");
       eventsContainer.id = "events-container";
 
@@ -434,7 +514,6 @@
       logsView.appendChild(eventsContainer);
       logsView.appendChild(reportContainer);
 
-      // --- GENERATE EVENTS LIST ---
       if (parsed && Array.isArray(parsed.events)) {
         const formatFilePath = (p) => {
           if (!p || typeof p !== "string") return p;
@@ -464,11 +543,9 @@
           let className = "event";
           let flagReason = "";
           let filterCat = "other";
-          let isFlagged = false;
 
           const et = (e.eventType || "").toLowerCase();
 
-          // 1. Inactivity Gap Check
           const currentTime = parseLogTime(e.time);
           if (previousTime !== null && currentTime !== null) {
             const gap = currentTime - previousTime;
@@ -478,7 +555,7 @@
               gapRow.className = "event";
               gapRow.style.borderLeft = "4px solid #ef4444";
               gapRow.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
-              gapRow.dataset.filterCategory = "focus-away"; // Set filter cat
+              gapRow.dataset.filterCategory = "focus-away";
               gapRow.innerHTML = `
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <strong style="color:#ef4444">⚠️ Major Focus Away Time</strong>
@@ -491,13 +568,11 @@
           }
           if (currentTime) previousTime = currentTime;
 
-          // 2. Base Categorization
           if (et === "input" || et === "key" || et === "keystroke")
             filterCat = "input";
           if (et === "delete" || et === "backspace") filterCat = "delete";
           if (et === "replace") filterCat = "replace";
 
-          // 3. Flags and Overrides
           if (et === "paste" || et === "clipboard" || et === "pasteevent") {
             const len =
               typeof e.length === "number"
@@ -512,11 +587,9 @@
             if (len !== null && len > currentSettings.pasteLength) {
               className += " paste";
               flagReason = "(Large Paste)";
-              isFlagged = true;
               filterCat = "flagged-paste";
             } else if (len === null) {
               className += " paste";
-              isFlagged = true;
               filterCat = "flagged-paste";
             } else {
               filterCat = "paste";
@@ -530,12 +603,11 @@
           ) {
             className += " fast";
             flagReason = "(Fast Input)";
-            isFlagged = true;
             filterCat = "flagged-fast";
           }
 
           row.className = className;
-          row.dataset.filterCategory = filterCat; // Attach for JS filter
+          row.dataset.filterCategory = filterCat;
 
           let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || "Unknown"}</strong> ${flagReason}</div><span class="meta">${e.time || ""}</span></div>`;
 
@@ -560,11 +632,9 @@
           rowElements.push(row);
         }
 
-        // Add them to the container newest first
         rowElements.reverse().forEach((r) => eventsContainer.appendChild(r));
       }
 
-      // --- GENERATE DESCRIPTIVE INTEGRITY REPORT ---
       const churnRate =
         totalEvents > 0 ? (deleteCount + replaceCount) / totalEvents : 0;
       let churnText =
@@ -612,19 +682,17 @@
         </div>
       `;
 
-      // --- ATTACH EVENT LISTENERS FOR CONTROLS ---
       const btnTabEvents = document.getElementById("btn-tab-events");
       const btnTabReport = document.getElementById("btn-tab-report");
       const filterSelect = document.getElementById("log-event-filter");
       const filterWrapper = document.getElementById("filter-wrapper");
 
-      // Tab Switching
       btnTabEvents.addEventListener("click", () => {
         btnTabEvents.className = "btn btn-primary";
         btnTabReport.className = "btn btn-secondary";
         eventsContainer.style.display = "block";
         reportContainer.style.display = "none";
-        filterWrapper.style.display = "flex"; // Show filter on Events tab
+        filterWrapper.style.display = "flex";
       });
 
       btnTabReport.addEventListener("click", () => {
@@ -632,16 +700,15 @@
         btnTabEvents.className = "btn btn-secondary";
         reportContainer.style.display = "block";
         eventsContainer.style.display = "none";
-        filterWrapper.style.display = "none"; // Hide filter on Report tab
+        filterWrapper.style.display = "none";
       });
 
-      // Filtering Logic
       filterSelect.addEventListener("change", (e) => {
         const val = e.target.value;
         const rows = eventsContainer.querySelectorAll(".event");
         rows.forEach((r) => {
           if (val === "all") {
-            r.style.display = ""; // Remove inline style, restores CSS
+            r.style.display = "";
           } else {
             if (r.dataset.filterCategory === val) {
               r.style.display = "";
@@ -785,7 +852,6 @@
         filesCard.className = "card";
         filesCard.style.marginTop = "12px";
 
-        // ADDED CLEAR BUTTON & FORMATTED HEADER
         const filesHeaderRow = document.createElement("div");
         filesHeaderRow.style.display = "flex";
         filesHeaderRow.style.justifyContent = "space-between";
@@ -812,6 +878,24 @@
         const actionBtnsDiv = document.createElement("div");
         actionBtnsDiv.style.display = "flex";
         actionBtnsDiv.style.gap = "8px";
+
+        // TIMELINE BUTTON - Now uses btn-primary (Blue)
+        const btnTimeline = document.createElement("button");
+        btnTimeline.className = "btn btn-primary";
+        btnTimeline.textContent = "Create Timeline";
+        btnTimeline.addEventListener("click", () => {
+          const checks = document.querySelectorAll(".log-checkbox:checked");
+          const filenames = Array.from(checks).map((c) => c.value);
+          if (filenames.length === 0) {
+            if (status)
+              status.textContent =
+                "Error: Select at least 1 log to build a timeline.";
+            return;
+          }
+          if (status) status.textContent = "Generating Timeline...";
+          post("generateTimeline", { filenames });
+        });
+        actionBtnsDiv.appendChild(btnTimeline);
 
         const btnAnalyze = document.createElement("button");
         btnAnalyze.className = "btn btn-primary";
@@ -1197,6 +1281,10 @@
           renderProfile(msg.data);
           if (status) status.textContent = "Behavioral profile generated.";
           break;
+        case "timelineData":
+          renderTimeline(msg.data);
+          if (status) status.textContent = "Timeline generated.";
+          break;
         case "rawData":
           if (logsViewerContainer) logsViewerContainer.style.display = "block";
           if (logsView) logsView.innerHTML = "<pre>" + msg.data + "</pre>";
@@ -1234,6 +1322,15 @@
           break;
         case "error":
           if (status) status.textContent = "Error: " + (msg.message || "");
+
+          // ADDED EXPLICIT BROWSER ALERT HERE TO ENSURE IN-YOUR-FACE VISIBILITY
+          if (
+            msg.message &&
+            (msg.message.toLowerCase().includes("mismatch") ||
+              msg.message.toLowerCase().includes("sparse"))
+          ) {
+            alert(msg.message);
+          }
           break;
         case "success":
           if (status) {

@@ -6,7 +6,8 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
   const nonce = getNonce();
   // add a cache-busting query so updated static script is always loaded in development
   const scriptFile = vscode.Uri.file(context.asAbsolutePath('src/teacher/static/teacher.js')).with({ query: `v=${Date.now()}` });
-  const scriptUri = webview.asWebviewUri(scriptFile);
+  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'src', 'teacher', 'static', 'teacher.js'));
+  const renderersUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'src', 'teacher', 'static', 'renderers.js'));
 
   const viewsRoot = context.asAbsolutePath('src/teacher/views');
   const sidebarHtml = fs.readFileSync(path.join(viewsRoot, 'sidebar.html'), 'utf8');
@@ -14,6 +15,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
   const logsHtml = fs.readFileSync(path.join(viewsRoot, 'logs.html'), 'utf8');
   const settingsHtml = fs.readFileSync(path.join(viewsRoot, 'settings.html'), 'utf8');
   const deletionsHtml = fs.readFileSync(path.join(viewsRoot, 'deletions.html'), 'utf8');
+  
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -135,6 +137,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     </main>
   </div>
 
+  <script nonce="${nonce}" src="${renderersUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

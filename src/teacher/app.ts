@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { storageManager } from '../state';
 import { getHtml } from './getHtml';
 import { handleAnalyzeLogs, handleGenerateProfile, handleGenerateTimeline } from './services/dashboardService';
-import { handleOpenLog, handleExportLog, handleGetDeletions } from './services/fileService';
+import { handleOpenLog, handleExportLog, handleGetDeletions, handleSaveLogNotes, handleLoadLogNotes } from './services/fileService';
 
 let panel: vscode.WebviewPanel | undefined;
 let sessionPassword: string | undefined;
@@ -74,6 +74,18 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 case 'getDeletions': {
                     const pwd = await ensurePassword(`Enter Administrator Password to view deletion activity`);
                     if (pwd && panel) await handleGetDeletions(panel, pwd);
+                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    break;
+                }
+                case 'loadLogNotes': {
+                    const pwd = await ensurePassword(`Enter Administrator Password to load notes for ${message.filename}`);
+                    if (pwd && panel) await handleLoadLogNotes(panel, pwd, message.filename);
+                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    break;
+                }
+                case 'saveLogNotes': {
+                    const pwd = await ensurePassword(`Enter Administrator Password to save notes for ${message.filename}`);
+                    if (pwd && panel) await handleSaveLogNotes(panel, pwd, message.filename, message.notes);
                     else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
                     break;
                 }

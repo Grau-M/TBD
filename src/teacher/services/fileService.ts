@@ -79,3 +79,21 @@ export async function handleGetDeletions(panel: vscode.WebviewPanel, password: s
     try { parsed = JSON.parse(json); } catch { parsed = { raw: json }; }
     panel.webview.postMessage({ command: 'deletionData', data: parsed });
 }
+
+export async function handleSaveLogNotes(panel: vscode.WebviewPanel, password: string, filename: string, notes: Array<{ timestamp: string; text: string }>) {
+    try {
+        await storageManager.saveLogNotes(password, filename, notes);
+        panel.webview.postMessage({ command: 'success', message: 'Notes saved successfully.' });
+    } catch (err: any) {
+        panel.webview.postMessage({ command: 'error', message: `Failed to save notes: ${err.message}` });
+    }
+}
+
+export async function handleLoadLogNotes(panel: vscode.WebviewPanel, password: string, filename: string) {
+    try {
+        const notes = await storageManager.loadLogNotes(password, filename);
+        panel.webview.postMessage({ command: 'logNotes', filename, notes });
+    } catch (err: any) {
+        panel.webview.postMessage({ command: 'error', message: `Failed to load notes: ${err.message}` });
+    }
+}

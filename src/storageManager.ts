@@ -863,4 +863,74 @@ export class StorageManager {
             return [];
         }
     }
+
+    // Save instructor notes for a specific log file
+    async saveLogNotes(passwordAttempt: string, filename: string, notes: Array<{ timestamp: string; text: string }>): Promise<void> {
+        // Function: saveLogNotes
+        // Purpose: Save private instructor notes for a specific log file.
+        // Notes are stored encrypted in the hidden directory with naming
+        // convention: <log_filename>.notes.json. Validates password before
+        // allowing save.
+        if (passwordAttempt !== SECRET_PASSPHRASE) {
+            throw new Error('Invalid Password');
+        }
+        if (!this.hiddenDir) {
+            throw new Error('Hidden directory not initialized');
+        }
+
+        try {
+            // Sanitize filename - replace .log with empty string, then add .notes.json
+            const safeFilename = filename.replace(/\.log$/, '') + '.notes.json';
+            const notesUri = vscode.Uri.joinPath(this.hiddenDir, safeFilename);
+            
+            // Create the notes data structure
+            const notesData = {
+                createdAt: formatTimestamp(Date.now()),
+                logFile: filename,
+                notes: Array.isArray(notes) ? notes : []
+            };
+
+            const encryptedData = this.encrypt(JSON.stringify(notesData, null, 2));
+            await vscode.workspace.fs.writeFile(notesUri, encryptedData);
+            console.log(`[TBD Logger] Saved notes for log: ${filename}`);
+        } catch (err) {
+            console.error('[TBD Logger] Failed to save notes:', err);
+            throw new Error('Failed to save notes');
+        }
+    }
+
+    // Load instructor notes for a specific log file
+    async loadLogNotes(passwordAttempt: string, filename: string): Promise<Array<{ timestamp: string; text: string }>> {
+        // Function: loadLogNotes
+        // Purpose: Load and return previously saved instructor notes for
+        // a specific log file. Returns an empty array if no notes exist.
+        // Validates password before allowing load.
+        if (passwordAttempt !== SECRET_PASSPHRASE) {
+            throw new Error('Invalid Password');
+        }
+        if (!this.hiddenDir) {
+            throw new Error('Hidden directory not initialized');
+        }
+
+        try {
+            // Sanitize filename - replace .log with empty string, then add .notes.json
+            const safeFilename = filename.replace(/\.log$/, '') + '.notes.json';
+            const notesUri = vscode.Uri.joinPath(this.hiddenDir, safeFilename);
+            
+            // Try to read the notes file
+            try {
+                const data = await vscode.workspace.fs.readFile(notesUri);
+                const decryptedText = this.decrypt(data);
+                const notesData = JSON.parse(decryptedText);
+                return Array.isArray(notesData.notes) ? notesData.notes : [];
+            } catch (readErr) {
+                // Notes file doesn't exist or couldn't be decrypted - return empty array
+                return [];
+            }
+        } catch (err) {
+            console.error('[TBD Logger] Failed to load notes:', err);
+            // Return empty array on error instead of throwing
+            return [];
+        }
+    }
 }

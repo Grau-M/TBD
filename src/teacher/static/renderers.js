@@ -613,7 +613,8 @@ window.TeacherUI = {
 
           row.className = className;
           row.dataset.filterCategory = filterCat;
-          let html = `<div style="display:flex; justify-content:space-between;"><div><strong>${e.eventType || "Unknown"}</strong> ${flagReason}</div><span class="meta">${e.time || ""}</span></div>`;
+          row.dataset.eventTime = e.time || '';
+          let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="display:flex; gap:8px; align-items:center;"><strong>${e.eventType || "Unknown"}</strong> ${flagReason}<button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes"><span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span></button></div><span class="meta">${e.time || ""}</span></div>`;
 
           Object.keys(e).forEach((k) => {
             if (["eventType", "time"].includes(k)) return;
@@ -630,6 +631,8 @@ window.TeacherUI = {
             } catch (err) {}
             html += `<div class="meta">${k}: ${val}</div>`;
           });
+
+          html += `<div class="event-notes-area" style="display:none; margin-top:12px; padding-top:8px; border-top:1px solid var(--border);"><textarea class="event-note-input" placeholder="Add private instructor notes for this event..." style="width:100%; min-height:60px; padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); font-family:monospace; font-size:0.9rem;" rows="3"></textarea><div style="display:flex; gap:8px; margin-top:8px;"><button class="btn-save-note" style="background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Save Note</button><button class="btn-close-notes" style="background:var(--border); color:var(--fg); border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Cancel</button></div></div>`;
 
           row.innerHTML = html;
           rowElements.push(row);
@@ -695,6 +698,79 @@ window.TeacherUI = {
         rows.forEach((r) => {
           if (val === "all") r.style.display = "";
           else r.style.display = r.dataset.filterCategory === val ? "" : "none";
+        });
+      });
+
+      // Setup notes button listeners
+      const notesButtons = eventsContainer.querySelectorAll(".btn-notes");
+      const saveNoteButtons = eventsContainer.querySelectorAll(".btn-save-note");
+      const closeNoteButtons = eventsContainer.querySelectorAll(".btn-close-notes");
+
+      notesButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          if (notesArea) {
+            const isVisible = notesArea.style.display !== "none";
+            notesArea.style.display = isVisible ? "none" : "block";
+            if (!isVisible) {
+              const textarea = notesArea.querySelector(".event-note-input");
+              if (textarea) textarea.focus();
+            }
+          }
+        });
+      });
+
+      saveNoteButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          const textarea = notesArea?.querySelector(".event-note-input");
+          const timestamp = eventRow?.dataset.eventTime || "";
+          const noteText = textarea?.value || "";
+
+          if (!window.currentLogFilename) return;
+
+          // Prepare notes array
+          const allNotes = [];
+          document.querySelectorAll(".event").forEach((row) => {
+            const area = row.querySelector(".event-notes-area");
+            const input = area?.querySelector(".event-note-input");
+            const ts = row.dataset.eventTime || "";
+            const text = input?.value || "";
+            if (ts && text) {
+              allNotes.push({ timestamp: ts, text });
+            }
+          });
+
+          // Send save command to backend
+          if (window.postTeacherMessage) {
+            window.postTeacherMessage("saveLogNotes", { filename: window.currentLogFilename, notes: allNotes });
+          }
+          
+          // Update visual indicator for this event
+          const noteBtn = eventRow?.querySelector(".btn-notes");
+          if (noteBtn) {
+            const isEmpty = !noteText || noteText.trim() === "";
+            noteBtn.dataset.hasNote = isEmpty ? "false" : "true";
+            const emptyIcon = noteBtn.querySelector(".note-icon-empty");
+            const filledIcon = noteBtn.querySelector(".note-icon-filled");
+            if (emptyIcon && filledIcon) {
+              emptyIcon.style.display = isEmpty ? "inline" : "none";
+              filledIcon.style.display = isEmpty ? "none" : "inline";
+            }
+          }
+          
+          // Close the notes area
+          if (notesArea) notesArea.style.display = "none";
+        });
+      });
+
+      closeNoteButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          if (notesArea) notesArea.style.display = "none";
         });
       });
     }

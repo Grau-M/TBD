@@ -10,6 +10,7 @@
   let currentTab = "dashboard";
   let requestedDashboardFile = null;
   let expandedFile = null;
+  let currentLogFilename = null;
 
   window.addEventListener("DOMContentLoaded", () => {
     const $ = (id) => document.getElementById(id);
@@ -25,6 +26,9 @@
         vscode.postMessage(Object.assign({ command }, payload));
       } catch (e) {}
     }
+
+    // Make post available globally for note handlers
+    window.postTeacherMessage = post;
 
     // --- UI & THEME TOGGLES ---
     let isDark = false;
@@ -303,6 +307,8 @@
           break;
 
         case "logData":
+          currentLogFilename = msg.filename;
+          window.currentLogFilename = msg.filename;
           if (
             requestedDashboardFile &&
             msg.filename === requestedDashboardFile &&
@@ -322,8 +328,41 @@
               currentSettings,
               handlers,
             );
+            // Load notes for this log file
+            post("loadLogNotes", { filename: msg.filename });
             if (status) status.textContent = "Loaded " + msg.filename;
           }
+          break;
+
+        case "logNotes":
+          // Load notes into the event rows
+          const notesMap = {};
+          if (Array.isArray(msg.notes)) {
+            msg.notes.forEach(note => {
+              notesMap[note.timestamp] = note.text;
+            });
+          }
+          // Populate notes into the textareas and update visual indicators
+          const eventRows = document.querySelectorAll(".event-notes-area");
+          eventRows.forEach((area) => {
+            const input = area.querySelector(".event-note-input");
+            const eventRow = area.closest(".event");
+            const timestamp = eventRow?.dataset.eventTime || "";
+            if (input && notesMap[timestamp]) {
+              input.value = notesMap[timestamp];
+              // Update the note button visual indicator
+              const noteBtn = eventRow?.querySelector(".btn-notes");
+              if (noteBtn) {
+                noteBtn.dataset.hasNote = "true";
+                const emptyIcon = noteBtn.querySelector(".note-icon-empty");
+                const filledIcon = noteBtn.querySelector(".note-icon-filled");
+                if (emptyIcon && filledIcon) {
+                  emptyIcon.style.display = "none";
+                  filledIcon.style.display = "inline";
+                }
+              }
+            }
+          });
           break;
 
         case "rawData":

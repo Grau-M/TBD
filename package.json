@@ -46,6 +46,10 @@
         "title": "TBD Logger: Open Teacher Dashboard"
       },
       {
+        "command": "tbd-logger.showHiddenDeletions",
+        "title": "TBD Logger: Show Hidden Deletions"
+      },
+      {
         "command": "tbd-logger.flush",
         "title": "TBD Logger: Flush Events to Disk"
       }

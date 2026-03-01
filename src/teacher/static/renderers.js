@@ -50,8 +50,10 @@ window.TeacherUI = {
   renderDashboard(data, handlers) {
     const container = document.getElementById("dashboard-view");
     const empty = document.getElementById("dashboard-empty");
+    const loading = document.getElementById("dashboard-loading");
     if (container) {container.innerHTML = "";}
     if (empty) {empty.style.display = "none";}
+    if (loading) {loading.style.display = "none";}
     if (!data || !data.metrics) {
       if (container)
         {container.innerHTML = '<div class="meta">No data available.</div>';}

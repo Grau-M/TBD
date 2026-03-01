@@ -11,6 +11,7 @@
   let requestedDashboardFile = null;
   let expandedFile = null;
   let currentLogFilename = null;
+  let dashboardDataCache = null;
 
   window.addEventListener("DOMContentLoaded", () => {
     const $ = (id) => document.getElementById(id);
@@ -101,12 +102,22 @@
       currentTab = tabName;
     }
 
-    $("nav-dashboard")?.addEventListener("click", () => {
-      switchTab("dashboard");
-      // Show loading state
+    function showDashboardLoading() {
       if ($("dashboard-empty")) {$("dashboard-empty").style.display = "none";}
       if ($("dashboard-loading")) {$("dashboard-loading").style.display = "block";}
       if ($("dashboard-view")) {$("dashboard-view").innerHTML = "";}
+    }
+
+    $("nav-dashboard")?.addEventListener("click", () => {
+      switchTab("dashboard");
+      if (dashboardDataCache && dashboardDataCache.metrics) {
+        UI.renderDashboard(dashboardDataCache, handlers);
+        if ($("dashboard-log-name"))
+          {$("dashboard-log-name").textContent = "Viewing: All logs";}
+        if (status) {status.textContent = "Dashboard ready";}
+        return;
+      }
+      showDashboardLoading();
       post("analyzeLogs");
     });
     $("nav-logs")?.addEventListener("click", () => {
@@ -130,6 +141,8 @@
 
     $("refresh-logs")?.addEventListener("click", () => {
       if (status) {status.textContent = "Refreshing list...";}
+      // New/removed logs can change aggregate metrics.
+      dashboardDataCache = null;
       post("listLogs");
     });
     $("refreshDeletions")?.addEventListener("click", () => {
@@ -294,6 +307,7 @@
           break;
 
         case "dashboardData":
+          dashboardDataCache = msg.data || null;
           UI.renderDashboard(msg.data, handlers);
           if ($("dashboard-log-name"))
             {$("dashboard-log-name").textContent = "Viewing: All logs";}
@@ -409,6 +423,7 @@
             $("settings-msg").textContent = "Settings saved successfully!";
             setTimeout(() => ($("settings-msg").textContent = ""), 3000);
           }
+          dashboardDataCache = null;
           break;
 
         case "deletionData":
@@ -448,21 +463,42 @@
                 records.forEach((item) => {
                   const row = document.createElement("div");
                   row.className = "card deletion-row";
+                  const inferActivityType = (entry) => {
+                    if (entry.activityType) {return String(entry.activityType).toLowerCase();}
+                    if (entry.deletedFile || entry.deletedAt || entry.lastKnownSize)
+                      {return "deleted";}
+                    if (entry.modifiedFile || entry.modifiedAt)
+                      {return "modified";}
+                    const lowerNote = String(entry.note || entry.reason || "").toLowerCase();
+                    if (lowerNote.includes("manual edit") || lowerNote.includes("modified"))
+                      {return "modified";}
+                    if (lowerNote.includes("deleted")) {return "deleted";}
+                    return "activity";
+                  };
+
+                  const activityType = inferActivityType(item);
+                  const actionLabel =
+                    activityType === "deleted"
+                      ? "Deleted"
+                      : activityType === "modified"
+                        ? "Modified"
+                        : "Activity";
                   const time =
-                    item.modifiedAt || item.time || item.timestamp || "";
+                    item.modifiedAt || item.deletedAt || item.time || item.timestamp || "";
                   const who =
                     item.user || item.startedBy || item.actor || "Unknown";
                   const file =
                     item.modifiedFile ||
+                    item.deletedFile ||
                     item.file ||
                     item.path ||
                     item.filePath ||
                     "(unknown)";
                   const prevSize =
-                    item.previousSize || item.oldSize || item.previous || "";
-                  const newSize = item.newSize || item.size || "";
+                    item.previousSize || item.oldSize || item.previous || item.lastKnownSize || "";
+                  const newSize = item.newSize || item.size || (activityType === "deleted" ? "0 KB" : "");
                   const note = item.note || item.reason || "";
-                  row.innerHTML = `<div style="display:flex; flex-direction:column; gap:6px;"><div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;"><div style="font-weight:700;">${file}</div><div class="meta">Deleted by ${who} • ${time}</div></div><div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">${prevSize ? `<div class="meta">Prev: ${prevSize}</div>` : ""}${newSize ? `<div class="meta">Now: ${newSize}</div>` : ""}${note ? `<div class="meta">${note}</div>` : ""}</div></div>`;
+                  row.innerHTML = `<div style="display:flex; flex-direction:column; gap:6px;"><div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;"><div style="font-weight:700;">${file}</div><div class="meta">${actionLabel} by ${who} • ${time}</div></div><div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">${prevSize ? `<div class="meta">Prev: ${prevSize}</div>` : ""}${newSize ? `<div class="meta">Now: ${newSize}</div>` : ""}${note ? `<div class="meta">${note}</div>` : ""}</div></div>`;
                   list.appendChild(row);
                 });
                 view.appendChild(list);
@@ -497,9 +533,7 @@
 
     // --- STARTUP LOGIC ---
     switchTab("dashboard");
-    // Show loading state on startup
-    if ($("dashboard-empty")) {$("dashboard-empty").style.display = "none";}
-    if ($("dashboard-loading")) {$("dashboard-loading").style.display = "block";}
+    showDashboardLoading();
     post("clientReady");
     post("analyzeLogs");
     post("listLogs");

@@ -52,10 +52,6 @@
       {
         "command": "tbd-logger.flush",
         "title": "TBD Logger: Flush Events to Disk"
-      },
-      {
-        "command": "tbd-logger.showHiddenDeletions",
-        "title": "TBD Logger: Show Hidden Deletions"
       }
     ]
   },
@@ -70,17 +66,21 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "node ./out/test/runTest.js",
+    "test:coverage": "c8 --reporter=html --reporter=text --reporter=lcov npm test",
     "generate-test-log": "node ./test/scripts/generate_test_log.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
+    "@types/sinon": "^21.0.0",
     "@types/vscode": "^1.108.1",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "c8": "^11.0.0",
     "eslint": "^9.39.2",
     "glob": "^13.0.0",
     "mocha": "^11.7.5",
+    "sinon": "^21.0.1",
     "ts-loader": "^9.5.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.52.0",

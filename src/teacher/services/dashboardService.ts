@@ -27,7 +27,7 @@ export async function handleAnalyzeLogs(panel: vscode.WebviewPanel, password: st
     for (const f of files) {
         try {
             const { parsed, partial } = await fetchAndParseLog(password, f.uri);
-            if (partial) aggregate.partialCount++;
+            if (partial) {aggregate.partialCount++;}
 
             const fileStats: any = { 
                 name: f.label, events: 0, paste: 0, delete: 0, keystrokes: 0, avgPasteLength: 0, 
@@ -51,7 +51,7 @@ export async function handleAnalyzeLogs(panel: vscode.WebviewPanel, password: st
                     if (t === 'paste' || t === 'clipboard' || t === 'pasteevent') {
                         fileStats.paste++;
                         const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : (typeof e.text === 'string' ? e.text.length : 0));
-                        if (len && len > 0) aggregate.pasteLengths.push(len);
+                        if (len && len > 0) {aggregate.pasteLengths.push(len);}
                         if (!len || len === 0 || len > thresholds.pasteLength) { fileStats.flagged++; aggregate.flaggedCount++; }
                     }
                     
@@ -70,7 +70,7 @@ export async function handleAnalyzeLogs(panel: vscode.WebviewPanel, password: st
                             if (thresholds.flagAiEvents) { fileStats.flagged++; aggregate.flaggedCount++; } 
                         }
                     }
-                    if (t === 'delete' || t === 'deletion' || t === 'backspace') fileStats.delete++;
+                    if (t === 'delete' || t === 'deletion' || t === 'backspace') {fileStats.delete++;}
                     if (t === 'key' || t === 'keystroke' || t === 'keypress' || t === 'input') {
                         fileStats.keystrokes++;
                         try {
@@ -129,7 +129,7 @@ export async function handleAnalyzeLogs(panel: vscode.WebviewPanel, password: st
 
     try {
         for (const fs of aggregate.perFile) {
-            if (!fs || fs.error) continue;
+            if (!fs || fs.error) {continue;}
             const totalF = fs.events || 1;
             const aiEventRatioF = Math.min(1, (fs.aiCount || 0) / totalF);
             const aiPasteRatioF = Math.min(1, (fs.aiPasteCount || 0) / Math.max(1, (fs.aiCount || 0)));
@@ -157,41 +157,41 @@ export async function handleGenerateProfile(panel: vscode.WebviewPanel, password
 
     for (const fname of filenames) {
         const chosen = files.find(f => f.label === fname);
-        if (!chosen) continue;
+        if (!chosen) {continue;}
         const { parsed } = await fetchAndParseLog(password, chosen.uri);
         
         if (parsed && parsed.events && parsed.events.length > 0) {
             const sessionUser = parsed.sessionHeader?.startedBy || 'Unknown';
             const sessionProject = parsed.sessionHeader?.project || 'Unknown';
 
-            if (expectedUser === null) expectedUser = sessionUser;
-            if (expectedProject === null) expectedProject = sessionProject;
+            if (expectedUser === null) {expectedUser = sessionUser;}
+            if (expectedProject === null) {expectedProject = sessionProject;}
 
-            if (expectedUser !== sessionUser) return panel.webview.postMessage({ command: 'error', message: 'Profile cancelled: Student mismatch.' });
-            if (expectedProject !== sessionProject) return panel.webview.postMessage({ command: 'error', message: 'Profile cancelled: Project mismatch.' });
+            if (expectedUser !== sessionUser) {return panel.webview.postMessage({ command: 'error', message: 'Profile cancelled: Student mismatch.' });}
+            if (expectedProject !== sessionProject) {return panel.webview.postMessage({ command: 'error', message: 'Profile cancelled: Project mismatch.' });}
 
             const events = parsed.events;
             const firstTime = parseLogTime(events[0].time);
             const lastTime = parseLogTime(events[events.length - 1].time);
-            if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) totalWallMs += (lastTime - firstTime);
+            if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) {totalWallMs += (lastTime - firstTime);}
 
             let prevTime = 0;
             for (const e of events) {
                 const t = parseLogTime(e.time);
                 if (prevTime > 0 && t > 0) {
                     const diff = t - prevTime;
-                    if (diff < 5 * 60 * 1000) totalActiveMs += diff;
-                    if (diff >= 5000 && diff <= 60000) pauseLengths.push(diff);
+                    if (diff < 5 * 60 * 1000) {totalActiveMs += diff;}
+                    if (diff >= 5000 && diff <= 60000) {pauseLengths.push(diff);}
                 }
-                if (t > 0) prevTime = t;
+                if (t > 0) {prevTime = t;}
 
                 const evType = (e.eventType || '').toLowerCase();
-                if (evType === 'input' || evType === 'key' || evType === 'keystroke') keystrokes++;
-                if (evType === 'replace' || evType === 'delete' || evType === 'backspace') edits++;
-                if (evType === 'terminal' || evType === 'debug' || evType === 'run' || evType === 'terminalcommand') terminalRuns++;
+                if (evType === 'input' || evType === 'key' || evType === 'keystroke') {keystrokes++;}
+                if (evType === 'replace' || evType === 'delete' || evType === 'backspace') {edits++;}
+                if (evType === 'terminal' || evType === 'debug' || evType === 'run' || evType === 'terminalcommand') {terminalRuns++;}
                 if (evType === 'paste' || evType === 'clipboard' || evType === 'pasteevent' || evType === 'ai-paste') {
                     pastes++;
-                    if (e.source === 'external' || e.pastedFrom === 'external' || evType === 'ai-paste' || e.internal === false) externalPastes++;
+                    if (e.source === 'external' || e.pastedFrom === 'external' || evType === 'ai-paste' || e.internal === false) {externalPastes++;}
                 }
             }
         }
@@ -225,24 +225,24 @@ export async function handleGenerateTimeline(panel: vscode.WebviewPanel, passwor
     
     for (const fname of filenames) {
         const chosen = files.find(f => f.label === fname);
-        if (!chosen) continue;
+        if (!chosen) {continue;}
         const { parsed } = await fetchAndParseLog(password, chosen.uri);
 
         if (parsed && parsed.events && parsed.events.length > 0) {
             const sessionUser = parsed.sessionHeader?.startedBy || 'Unknown';
             const sessionProject = parsed.sessionHeader?.project || 'Unknown';
 
-            if (expectedUser === null) expectedUser = sessionUser;
-            if (expectedProject === null) expectedProject = sessionProject;
+            if (expectedUser === null) {expectedUser = sessionUser;}
+            if (expectedProject === null) {expectedProject = sessionProject;}
 
-            if (expectedUser !== sessionUser) return panel.webview.postMessage({ command: 'error', message: 'Timeline cancelled: Student mismatch.' });
-            if (expectedProject !== sessionProject) return panel.webview.postMessage({ command: 'error', message: 'Timeline cancelled: Project mismatch.' });
+            if (expectedUser !== sessionUser) {return panel.webview.postMessage({ command: 'error', message: 'Timeline cancelled: Student mismatch.' });}
+            if (expectedProject !== sessionProject) {return panel.webview.postMessage({ command: 'error', message: 'Timeline cancelled: Project mismatch.' });}
 
             allEvents = allEvents.concat(parsed.events);
         }
     }
 
-    if (allEvents.length < 5) return panel.webview.postMessage({ command: 'error', message: 'Sparse activity: Not enough data points.' });
+    if (allEvents.length < 5) {return panel.webview.postMessage({ command: 'error', message: 'Sparse activity: Not enough data points.' });}
 
     allEvents.sort((a, b) => parseLogTime(a.time) - parseLogTime(b.time));
     const gapThresholdMs = (context.globalState.get<any>('tbdSettings', { inactivityThreshold: 5 }).inactivityThreshold || 5) * 60 * 1000;
@@ -251,9 +251,9 @@ export async function handleGenerateTimeline(panel: vscode.WebviewPanel, passwor
 
     for (let i = 0; i < allEvents.length; i++) {
         const t = parseLogTime(allEvents[i].time);
-        if (t === 0) continue;
+        if (t === 0) {continue;}
 
-        if (!currentPeriod) currentPeriod = { startTime: t, endTime: t, eventCount: 1 };
+        if (!currentPeriod) {currentPeriod = { startTime: t, endTime: t, eventCount: 1 };}
         else {
             if (t - currentPeriod.endTime > gapThresholdMs) {
                 periods.push(currentPeriod);
@@ -264,7 +264,7 @@ export async function handleGenerateTimeline(panel: vscode.WebviewPanel, passwor
             }
         }
     }
-    if (currentPeriod) periods.push(currentPeriod);
+    if (currentPeriod) {periods.push(currentPeriod);}
 
     panel.webview.postMessage({ command: 'timelineData', data: { user: expectedUser, project: expectedProject, periods, totalEvents: allEvents.length } });
 }

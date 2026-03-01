@@ -55,12 +55,12 @@ export function computeConfidence(events: any[]): ConfidenceResult {
   for (const e of events) {
     if (typeof e?.time === 'string') {
       const t = Date.parse(e.time.replace(' ', 'T'));
-      if (!Number.isNaN(t)) times.push(t);
+      if (!Number.isNaN(t)) {times.push(t);}
     }
 
     // Pause markers from your interruption tracker use fileView prefix
     const fv = String(e?.fileView ?? '');
-    if (fv.startsWith('[INTERRUPTION] Session Paused')) pauseCount++;
+    if (fv.startsWith('[INTERRUPTION] Session Paused')) {pauseCount++;}
 
     // Integrity warnings (if you already log these anywhere)
     const p = String(e?.possibleAiDetection ?? '');
@@ -78,9 +78,9 @@ export function computeConfidence(events: any[]): ConfidenceResult {
 
   for (let i = 1; i < times.length; i++) {
     const gap = times[i] - times[i - 1];
-    if (gap > maxGapMs) maxGapMs = gap;
-    if (gap >= 30 * 60 * 1000) gapCountOver30m++;
-    if (gap >= 2 * 60 * 60 * 1000) gapCountOver2h++;
+    if (gap > maxGapMs) {maxGapMs = gap;}
+    if (gap >= 30 * 60 * 1000) {gapCountOver30m++;}
+    if (gap >= 2 * 60 * 60 * 1000) {gapCountOver2h++;}
   }
 
   // 4) Scoring rules (simple + defensible)
@@ -125,8 +125,8 @@ export function computeConfidence(events: any[]): ConfidenceResult {
 
   // 5) Label from score
   let label: ConfidenceLabel = 'High';
-  if (score < 45) label = 'Low';
-  else if (score < 75) label = 'Medium';
+  if (score < 45) {label = 'Low';}
+  else if (score < 75) {label = 'Medium';}
 
   // Always ensure at least one reason
   if (reasons.length === 0) {

@@ -10,7 +10,7 @@ import { StorageManager } from './storageManager';
 // to persistent storage via `storageManager.flush`. Ensures only one
 // concurrent flush runs and restores the buffer on failure.
 export async function flushBuffer(): Promise<void> {
-    if (state.isFlushing || state.sessionBuffer.length === 0) return;
+    if (state.isFlushing || state.sessionBuffer.length === 0) {return;}
     state.isFlushing = true;
     const toSave = state.sessionBuffer.splice(0, state.sessionBuffer.length);
     try {

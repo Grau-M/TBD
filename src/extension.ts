@@ -81,9 +81,9 @@ export async function activate(context: vscode.ExtensionContext) {
                     return;
                 }
                 const pick = await vscode.window.showQuickPick(files.map(f => f.label), { placeHolder: 'Select integrity log to open' });
-                if (!pick) return;
+                if (!pick) {return;}
                 const chosen = files.find(f => f.label === pick);
-                if (!chosen) return;
+                if (!chosen) {return;}
                 targetUri = chosen.uri;
             }
 
@@ -95,7 +95,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 placeHolder: 'TBD_CAPSTONE...'
             });
 
-            if (!password) return; // User cancelled
+            if (!password) {return;} // User cancelled
 
             // 2. Retrieve & Decrypt selected file
             const content = await storageManager.retrieveLogContentForUri(password, targetUri);
@@ -123,7 +123,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 password: true,
                 ignoreFocusOut: true
             });
-            if (!password) return;
+            if (!password) {return;}
             const content = await storageManager.retrieveHiddenLogContent(password);
             const doc = await vscode.workspace.openTextDocument({ content: content, language: 'json' });
             await vscode.window.showTextDocument(doc, { preview: false });

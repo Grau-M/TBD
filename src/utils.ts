@@ -18,7 +18,7 @@ export function formatTimestamp(ms: number): string {
     const parts = dtf.formatToParts(new Date(ms));
     const map: Record<string, string> = {};
     for (const p of parts) {
-        if (p.type !== 'literal') map[p.type] = p.value;
+        if (p.type !== 'literal') {map[p.type] = p.value;}
     }
     const MM = map.month || '00';
     const DD = map.day || '00';
@@ -46,10 +46,10 @@ export function formatDuration(ms: number): string {
 // Purpose: Determine whether a relative file path should be ignored by
 // the logger (e.g., editor settings, log files, encrypted files).
 export function isIgnoredPath(relPath: string): boolean {
-    if (!relPath) return true;
+    if (!relPath) {return true;}
     const p = relPath.replace(/\\/g, '/');
-    if (p.startsWith('.vscode/')) return true;
-    if (p.includes('tbd-integrity-log')) return true;
-    if (p.endsWith('.log') || p.endsWith('.json')|| p.endsWith('enc')) return true;
+    if (p.startsWith('.vscode/')) {return true;}
+    if (p.includes('tbd-integrity-log')) {return true;}
+    if (p.endsWith('.log') || p.endsWith('.json')|| p.endsWith('enc')) {return true;}
     return false;
 }

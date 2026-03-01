@@ -54,7 +54,7 @@ export class SessionInterruptionTracker {
         // instance. Detects abnormal end from previous run, logs session
         // start markers, installs lightweight activity listeners, and
         // starts the inactivity monitoring timer.
-        if (SessionInterruptionTracker.instance) return;
+        if (SessionInterruptionTracker.instance) {return;}
 
         const inactivity = opts?.inactivityThresholdMs ?? 5 * 60 * 1000; // default 5 min
         const checkEvery = opts?.checkEveryMs ?? 10_000;                 // default 10 sec
@@ -92,7 +92,7 @@ export class SessionInterruptionTracker {
         // shutdown marker and flush the buffer so the next startup can
         // distinguish between normal and abnormal ends.
         const tracker = SessionInterruptionTracker.instance;
-        if (!tracker) return;
+        if (!tracker) {return;}
 
         tracker.logMarker('Session Ended (Clean Shutdown)', 'Session shutdown cleanly.');
         void flushBuffer();
@@ -100,7 +100,7 @@ export class SessionInterruptionTracker {
     }
 
     private dispose() {
-        if (this.timer) clearInterval(this.timer);
+        if (this.timer) {clearInterval(this.timer);}
         this.timer = null;
     }
 
@@ -147,7 +147,7 @@ export class SessionInterruptionTracker {
         // Purpose: Begin a periodic timer that checks for prolonged
         // inactivity. When inactivity exceeds the configured threshold
         // a pause marker is emitted and the buffer flushed.
-        if (this.timer) return;
+        if (this.timer) {return;}
 
         this.timer = setInterval(() => {
             const now = Date.now();
@@ -194,7 +194,7 @@ export class SessionInterruptionTracker {
         // Window focus changes (alt-tab)
         this.context.subscriptions.push(
             vscode.window.onDidChangeWindowState((s) => {
-                if (s.focused) this.recordActivitySignal('Window Focus');
+                if (s.focused) {this.recordActivitySignal('Window Focus');}
             })
         );
     }
@@ -242,8 +242,8 @@ export class SessionInterruptionTracker {
             const text = new TextDecoder().decode(data);
             const parsed = JSON.parse(text);
 
-            if (typeof parsed?.cleanShutdown !== 'boolean') return null;
-            if (typeof parsed?.lastSeenMs !== 'number') return null;
+            if (typeof parsed?.cleanShutdown !== 'boolean') {return null;}
+            if (typeof parsed?.lastSeenMs !== 'number') {return null;}
 
             return parsed;
         } catch {

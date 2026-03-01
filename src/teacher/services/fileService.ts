@@ -5,14 +5,14 @@ import { fetchAndParseLog } from '../utilis/LogHelpers';
 export async function handleOpenLog(panel: vscode.WebviewPanel, password: string, filename: string) {
     const files = await storageManager.listLogFiles();
     const chosen = files.find(f => f.label === filename);
-    if (!chosen) return panel.webview.postMessage({ command: 'error', message: 'Log not found' });
+    if (!chosen) {return panel.webview.postMessage({ command: 'error', message: 'Log not found' });}
 
     const { content, parsed, partial } = await fetchAndParseLog(password, chosen.uri);
     if (parsed) {
         panel.webview.postMessage({ command: 'logData', filename, data: parsed, partial });
     } else {
         let safe = String(content).replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '\uFFFD');
-        if (safe.length > 200_000) safe = safe.slice(0, 200_000) + '\n\n[truncated]';
+        if (safe.length > 200_000) {safe = safe.slice(0, 200_000) + '\n\n[truncated]';}
         panel.webview.postMessage({ command: 'rawData', filename, data: safe, partial });
     }
 }
@@ -21,7 +21,7 @@ export async function handleExportLog(panel: vscode.WebviewPanel, password: stri
     try {
         const files = await storageManager.listLogFiles();
         const chosen = files.find(f => f.label === filename);
-        if(!chosen) throw new Error("File not found on disk");
+        if(!chosen) {throw new Error("File not found on disk");}
 
         const res = await storageManager.retrieveLogContentWithPassword(password, chosen.uri);
         const logData = JSON.parse(res.text);

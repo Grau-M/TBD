@@ -13,7 +13,7 @@ export function getSessionInfo() {
     const userEnv = process.env.USER || process.env.USERNAME || '';
     let user = userEnv || '';
     try {
-        if (!user) user = os.userInfo().username || '';
+        if (!user) {user = os.userInfo().username || '';}
     } catch (e) {
         // ignore
     }

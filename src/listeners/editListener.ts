@@ -24,7 +24,7 @@ export function createEditListener(): vscode.Disposable {
         
         // Use relative path to check for ignored files (logs, enc, etc.)
         const docPath = vscode.workspace.asRelativePath(event.document.uri, false);
-        if (isIgnoredPath(docPath)) return;
+        if (isIgnoredPath(docPath)) {return;}
 
         // TIMING
         const currentTime = Date.now();
@@ -49,7 +49,7 @@ export function createEditListener(): vscode.Disposable {
         event.contentChanges.forEach((change) => {
             // Skip if the edit itself is in an ignored path (redundant safety)
             const fileEditRaw = event.document ? vscode.workspace.asRelativePath(event.document.uri, false) : '';
-            if (isIgnoredPath(fileEditRaw)) return;
+            if (isIgnoredPath(fileEditRaw)) {return;}
 
             let eventType: StandardEvent['eventType'];
             const isReplace = change.rangeLength > 0 && change.text !== '';

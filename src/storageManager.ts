@@ -85,7 +85,7 @@ export class StorageManager {
             // Full decrypt failed — attempt to decrypt only full AES blocks
             try {
                 const fullBlocks = Math.floor(content.length / 16) * 16;
-                if (fullBlocks <= 0) return { text: '', partial: true };
+                if (fullBlocks <= 0) {return { text: '', partial: true };}
                 const slice = content.subarray(0, fullBlocks);
                 const decipher = crypto.createDecipheriv(ALGORITHM, KEY, iv);
                 const out = decipher.update(slice);
@@ -114,7 +114,7 @@ export class StorageManager {
         } catch (e) {
             try {
                 const fullBlocks = Math.floor(content.length / 16) * 16;
-                if (fullBlocks <= 0) return { text: '', partial: true };
+                if (fullBlocks <= 0) {return { text: '', partial: true };}
                 const slice = content.subarray(0, fullBlocks);
                 const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
                 const out = decipher.update(slice);
@@ -129,7 +129,7 @@ export class StorageManager {
     // accidental external edits; write operations in the extension will
     // temporarily clear the readonly bit before writing.
     private async setFileReadOnly(uri: vscode.Uri, readOnly: boolean): Promise<void> {
-        if (!uri) return;
+        if (!uri) {return;}
         try {
             const mode = readOnly ? 0o444 : 0o666;
             await fs.promises.chmod(uri.fsPath, mode);
@@ -302,7 +302,7 @@ export class StorageManager {
             const m = name.match(new RegExp(`^${prefix}(\\d+)-integrity\\.log$`));
             if (m && m[1]) {
                 const n = parseInt(m[1], 10);
-                if (!isNaN(n) && n > maxSession) maxSession = n;
+                if (!isNaN(n) && n > maxSession) {maxSession = n;}
             }
         }
 
@@ -411,7 +411,7 @@ export class StorageManager {
         // valid JSON structure. If the hidden log is missing or corrupt,
         // create or recreate it with an initial header and empty deletions
         // array.
-        if (!this.hiddenLogUri) return;
+        if (!this.hiddenLogUri) {return;}
         let exists = true;
         try {
             await vscode.workspace.fs.stat(this.hiddenLogUri);
@@ -431,7 +431,7 @@ export class StorageManager {
                 }
                 // validate structure { header: {...}, deletions: [] }
                 const parsed = JSON.parse(text);
-                if (parsed && typeof parsed === 'object' && Array.isArray(parsed.deletions)) return;
+                if (parsed && typeof parsed === 'object' && Array.isArray(parsed.deletions)) {return;}
                 // malformed -> backup
                 throw new Error('Malformed hidden log');
             } catch (e) {
@@ -496,18 +496,18 @@ export class StorageManager {
         // `deletions` array, and write the file back encrypted. If the
         // file is missing or append fails, recreate it with the single
         // provided entry.
-        if (!this.hiddenLogUri) return;
+        if (!this.hiddenLogUri) {return;}
         try {
             let data = await vscode.workspace.fs.readFile(this.hiddenLogUri);
             let text = '';
             try { text = this.decrypt(data); } catch { text = Buffer.from(data).toString('utf8'); }
             let obj: any = { header: { createdAt: formatTimestamp(Date.now()), note: 'Deleted and edited activity log' }, deletions: [] };
             try { obj = JSON.parse(text); } catch { obj = obj; }
-            if (!Array.isArray(obj.deletions)) obj.deletions = [];
+            if (!Array.isArray(obj.deletions)) {obj.deletions = [];}
             // Sanitize entry: ensure we never store raw log contents or large blobs
             const sanitized: any = {};
             for (const k of Object.keys(entry || {})) {
-                if ([ 'content', 'data', 'body', 'events', 'raw', 'fileContent', 'log' ].includes(k)) continue;
+                if ([ 'content', 'data', 'body', 'events', 'raw', 'fileContent', 'log' ].includes(k)) {continue;}
                 sanitized[k] = entry[k];
             }
             obj.deletions.push(sanitized);
@@ -518,7 +518,7 @@ export class StorageManager {
             // sanitize fallback entry as well
             const fallbackSanitized: any = {};
             for (const k of Object.keys(entry || {})) {
-                if ([ 'content', 'data', 'body', 'events', 'raw', 'fileContent', 'log' ].includes(k)) continue;
+                if ([ 'content', 'data', 'body', 'events', 'raw', 'fileContent', 'log' ].includes(k)) {continue;}
                 fallbackSanitized[k] = entry[k];
             }
             const obj = { header: { createdAt: formatTimestamp(Date.now()), note: 'Deleted and edited activity log' }, deletions: [fallbackSanitized] };
@@ -533,12 +533,12 @@ export class StorageManager {
         // Purpose: Convert a numeric byte count into a human-readable
         // string using KB/MB/GB units, rounding to two decimals.
         const KB = 1024;
-        if (!bytes || bytes <= 0) return '0 KB';
-        if (bytes < KB) return '1 KB';
+        if (!bytes || bytes <= 0) {return '0 KB';}
+        if (bytes < KB) {return '1 KB';}
         const mb = KB * KB;
         const gb = mb * KB;
-        if (bytes < mb) return `${(bytes / KB).toFixed(2)} KB`;
-        if (bytes < gb) return `${(bytes / mb).toFixed(2)} MB`;
+        if (bytes < mb) {return `${(bytes / KB).toFixed(2)} KB`;}
+        if (bytes < gb) {return `${(bytes / mb).toFixed(2)} MB`;}
         return `${(bytes / gb).toFixed(2)} GB`;
     }
 
@@ -649,7 +649,7 @@ export class StorageManager {
                 let sessionNumber = 0;
                 try {
                     const m = name.match(/Session(\d+)-/);
-                    if (m && m[1]) sessionNumber = parseInt(m[1], 10);
+                    if (m && m[1]) {sessionNumber = parseInt(m[1], 10);}
                 } catch (_) {}
 
                 const initialData = {
@@ -712,7 +712,7 @@ export class StorageManager {
         if (passwordAttempt !== SECRET_PASSPHRASE) {
             throw new Error('Invalid Password');
         }
-        if (!this.hiddenLogUri) return [];
+        if (!this.hiddenLogUri) {return [];}
         try {
             const data = await vscode.workspace.fs.readFile(this.hiddenLogUri);
             const json = this.decrypt(data);
@@ -731,7 +731,7 @@ export class StorageManager {
         if (passwordAttempt !== SECRET_PASSPHRASE) {
             throw new Error('Invalid Password');
         }
-        if (!this.hiddenLogUri) return '';
+        if (!this.hiddenLogUri) {return '';}
         try {
             const data = await vscode.workspace.fs.readFile(this.hiddenLogUri);
             const json = this.decrypt(data);
@@ -747,15 +747,15 @@ export class StorageManager {
         // Purpose: Append `newEvents` to the on-disk per-session encrypted
         // file. No-op if the manager is not initialized. Errors are logged
         // but do not throw to callers.
-        if (!this.initialized || !this.sessionFileUri) return;
-        if (newEvents.length === 0) return;
+        if (!this.initialized || !this.sessionFileUri) {return;}
+        if (newEvents.length === 0) {return;}
 
         try {
             const fileData = await vscode.workspace.fs.readFile(this.sessionFileUri);
             const jsonStr = this.decrypt(fileData);
             const history = JSON.parse(jsonStr);
 
-            if (!Array.isArray(history.events)) history.events = [];
+            if (!Array.isArray(history.events)) {history.events = [];}
             history.events.push(...newEvents);
 
             const updatedJsonStr = JSON.stringify(history, null, 2);
@@ -768,7 +768,7 @@ export class StorageManager {
             // Mark this flush as an internal write to avoid false-positive "edited" events
             try {
                 const name = this.sessionFileUri?.path.split('/').pop() || '';
-                if (name) this.internalWriteTimestamps.set(name, Date.now());
+                if (name) {this.internalWriteTimestamps.set(name, Date.now());}
             } catch (_) {}
         } catch (err) {
             console.error('[TBD Logger] Critical Error during flush:', err);
@@ -792,7 +792,7 @@ export class StorageManager {
         try {
             const fileData = await vscode.workspace.fs.readFile(this.sessionFileUri);
             const res = this.tryPartialDecrypt(fileData);
-            if (!res.partial) return res.text;
+            if (!res.partial) {return res.text;}
             // partial decrypt — likely tampered/truncated
             return `WARNING: File appears tampered or truncated. Cannot derypt the file with missing data.\n\n${res.text}`;
         } catch (err) {
@@ -813,7 +813,7 @@ export class StorageManager {
         try {
             const fileData = await vscode.workspace.fs.readFile(fileUri);
             const res = this.tryPartialDecrypt(fileData);
-            if (!res.partial) return res.text;
+            if (!res.partial) {return res.text;}
             return `WARNING: File appears tampered or truncated. Cannot derypt the file with missing data.\n\n${res.text}`;
         } catch (err) {
             throw new Error('Failed to read or decrypt file.');
@@ -843,7 +843,7 @@ export class StorageManager {
         // Purpose: Return an ordered list of per-session integrity log
         // files located in the configured storage directory. Each item
         // contains a label and the corresponding `vscode.Uri`.
-        if (!this.storageDir) return [];
+        if (!this.storageDir) {return [];}
         try {
             const files = await vscode.workspace.fs.readDirectory(this.storageDir);
             const matches: Array<{ label: string; uri: vscode.Uri }> = [];

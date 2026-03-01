@@ -14,7 +14,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     }
 
     const initialPassword = await vscode.window.showInputBox({ prompt: `Enter Administrator Password to open Teacher Dashboard`, password: true, ignoreFocusOut: true });
-    if (!initialPassword) return; 
+    if (!initialPassword) {return;} 
     sessionPassword = initialPassword;
 
     panel = vscode.window.createWebviewPanel('tbdTeacherView', 'Teacher Dashboard', { viewColumn: vscode.ViewColumn.One, preserveFocus: false }, { enableScripts: true, localResourceRoots: [vscode.Uri.file(context.extensionPath)] });
@@ -26,7 +26,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     async function ensurePassword(promptMsg: string) {
         if (!sessionPassword) {
             const pwd = await vscode.window.showInputBox({ prompt: promptMsg, password: true, ignoreFocusOut: true });
-            if (pwd) sessionPassword = pwd;
+            if (pwd) {sessionPassword = pwd;}
         }
         return sessionPassword;
     }
@@ -43,50 +43,50 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
 
                 case 'openLog': {
                     const pwd = await ensurePassword(`Enter Administrator Password to view ${message.filename}`);
-                    if (pwd && panel) await handleOpenLog(panel, pwd, message.filename);
-                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    if (pwd && panel) {await handleOpenLog(panel, pwd, message.filename);}
+                    else {panel?.webview.postMessage({ command: 'error', message: 'Password required' });}
                     break;
                 }
                 case 'exportLog': {
                     const pwd = await ensurePassword(`Enter Admin Password to Export ${message.filename}`);
-                    if (pwd && panel) await handleExportLog(panel, pwd, message.filename, message.format);
-                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    if (pwd && panel) {await handleExportLog(panel, pwd, message.filename, message.format);}
+                    else {panel?.webview.postMessage({ command: 'error', message: 'Password required' });}
                     break;
                 }
                 case 'analyzeLogs': {
                     const pwd = await ensurePassword(`Enter Administrator Password to analyze all logs`);
-                    if (pwd && panel) await handleAnalyzeLogs(panel, pwd, context);
-                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    if (pwd && panel) {await handleAnalyzeLogs(panel, pwd, context);}
+                    else {panel?.webview.postMessage({ command: 'error', message: 'Password required' });}
                     break;
                 }
                 case 'generateProfile': {
                     const pwd = await ensurePassword(`Enter Administrator Password to Generate Profile`);
-                    if (pwd && panel) await handleGenerateProfile(panel, pwd, message.filenames);
-                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    if (pwd && panel) {await handleGenerateProfile(panel, pwd, message.filenames);}
+                    else {panel?.webview.postMessage({ command: 'error', message: 'Password required' });}
                     break;
                 }
                 case 'generateTimeline': {
                     const pwd = await ensurePassword(`Enter Administrator Password to Generate Timeline`);
-                    if (pwd && panel) await handleGenerateTimeline(panel, pwd, message.filenames, context);
-                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    if (pwd && panel) {await handleGenerateTimeline(panel, pwd, message.filenames, context);}
+                    else {panel?.webview.postMessage({ command: 'error', message: 'Password required' });}
                     break;
                 }
                 case 'getDeletions': {
                     const pwd = await ensurePassword(`Enter Administrator Password to view deletion activity`);
-                    if (pwd && panel) await handleGetDeletions(panel, pwd);
-                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    if (pwd && panel) {await handleGetDeletions(panel, pwd);}
+                    else {panel?.webview.postMessage({ command: 'error', message: 'Password required' });}
                     break;
                 }
                 case 'loadLogNotes': {
                     const pwd = await ensurePassword(`Enter Administrator Password to load notes for ${message.filename}`);
-                    if (pwd && panel) await handleLoadLogNotes(panel, pwd, message.filename);
-                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    if (pwd && panel) {await handleLoadLogNotes(panel, pwd, message.filename);}
+                    else {panel?.webview.postMessage({ command: 'error', message: 'Password required' });}
                     break;
                 }
                 case 'saveLogNotes': {
                     const pwd = await ensurePassword(`Enter Administrator Password to save notes for ${message.filename}`);
-                    if (pwd && panel) await handleSaveLogNotes(panel, pwd, message.filename, message.notes);
-                    else panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+                    if (pwd && panel) {await handleSaveLogNotes(panel, pwd, message.filename, message.notes);}
+                    else {panel?.webview.postMessage({ command: 'error', message: 'Password required' });}
                     break;
                 }
                 case 'getSettings':

@@ -1,23 +1,23 @@
 window.TeacherUI = {
   formatDuration(ms) {
-    if (!ms || ms < 0) return "0m";
+    if (!ms || ms < 0) {return "0m";}
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
-    if (hours > 0) return `${hours}h ${minutes % 60}m`;
-    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    if (days > 0) {return `${days}d ${hours % 24}h ${minutes % 60}m`;}
+    if (hours > 0) {return `${hours}h ${minutes % 60}m`;}
+    if (minutes > 0) {return `${minutes}m ${seconds % 60}s`;}
     return `${seconds}s`;
   },
 
   parseLogTime(timeStr) {
-    if (!timeStr) return null;
+    if (!timeStr) {return null;}
     const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
     const parts = cleanStr.split(" ");
-    if (parts.length < 2) return null;
+    if (parts.length < 2) {return null;}
     const dateSub = parts[0].split("-");
-    if (dateSub.length < 3) return null;
+    if (dateSub.length < 3) {return null;}
     const monthStr = dateSub[0];
     const months = {
       Jan: 0,
@@ -50,11 +50,11 @@ window.TeacherUI = {
   renderDashboard(data, handlers) {
     const container = document.getElementById("dashboard-view");
     const empty = document.getElementById("dashboard-empty");
-    if (container) container.innerHTML = "";
-    if (empty) empty.style.display = "none";
+    if (container) {container.innerHTML = "";}
+    if (empty) {empty.style.display = "none";}
     if (!data || !data.metrics) {
       if (container)
-        container.innerHTML = '<div class="meta">No data available.</div>';
+        {container.innerHTML = '<div class="meta">No data available.</div>';}
       return;
     }
 
@@ -212,11 +212,11 @@ window.TeacherUI = {
 
   renderDashboardFileDropdown(parsed, filename, currentSettings) {
     const row = document.querySelector(`[data-file-row="${filename}"]`);
-    if (!row) return;
+    if (!row) {return;}
 
     // Clean up any existing loading text
     const loadIndicator = row.querySelector(".meta.loading");
-    if (loadIndicator) loadIndicator.remove();
+    if (loadIndicator) {loadIndicator.remove();}
 
     const dropdown = document.createElement("div");
     dropdown.className = "file-dropdown card";
@@ -237,22 +237,22 @@ window.TeacherUI = {
                   : typeof e.text === "string"
                     ? e.text.length
                     : null;
-          if (len === null || len > currentSettings.pasteLength) flagged++;
+          if (len === null || len > currentSettings.pasteLength) {flagged++;}
         }
         if (
           e.eventType === "input" &&
           e.flightTime &&
           parseInt(e.flightTime) < currentSettings.flight
         )
-          flagged++;
+          {flagged++;}
       });
     }
     const score =
       total > 0 ? Math.max(0, Math.round((1 - flagged / total) * 100)) : 100;
 
     let scoreColor = "#10b981";
-    if (score < 85) scoreColor = "#f59e0b";
-    if (score < 50) scoreColor = "#ef4444";
+    if (score < 85) {scoreColor = "#f59e0b";}
+    if (score < 50) {scoreColor = "#ef4444";}
 
     dropdown.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; gap:16px;">
@@ -275,14 +275,14 @@ window.TeacherUI = {
       const affected = new Set();
       if (parsed && Array.isArray(parsed.events)) {
         parsed.events.forEach((ev) => {
-          if (!ev || !ev.eventType) return;
+          if (!ev || !ev.eventType) {return;}
           const et = ev.eventType;
           if (
             et === "input" &&
             ev.flightTime &&
             parseInt(ev.flightTime) < currentSettings.flight
           )
-            affected.add(`Fast Typing (< ${currentSettings.flight}ms)`);
+            {affected.add(`Fast Typing (< ${currentSettings.flight}ms)`);}
           if (
             et === "paste" ||
             et === "ai-paste" ||
@@ -298,22 +298,22 @@ window.TeacherUI = {
                     ? ev.length
                     : null;
             if (plen === null || plen > currentSettings.pasteLength)
-              affected.add(
+              {affected.add(
                 `Suspicious Pastes (> ${currentSettings.pasteLength} chars)`,
-              );
+              );}
           }
         });
       }
 
       let affectedHtml = "";
       if (affected.size === 0)
-        affectedHtml = '<div class="meta">No notable factors detected.</div>';
+        {affectedHtml = '<div class="meta">No notable factors detected.</div>';}
       else {
         const items = Array.from(affected).map((item) => {
           if (item.startsWith("Suspicious"))
-            return `<strong style='color:#f59e0b'>${item}</strong>`;
+            {return `<strong style='color:#f59e0b'>${item}</strong>`;}
           if (item.startsWith("Fast Typing"))
-            return `<strong style='color:#8b5cf6'>${item}</strong>`;
+            {return `<strong style='color:#8b5cf6'>${item}</strong>`;}
           return `<strong>${item}</strong>`;
         });
         affectedHtml = `<div class="meta">Score affected by ${items.join(" and ")}.</div>`;
@@ -335,7 +335,7 @@ window.TeacherUI = {
       tCard.style.marginTop = "12px";
       const filesSection = document.getElementById("per-file-section");
       if (filesSection)
-        filesSection.parentElement.insertAdjacentElement("beforebegin", tCard);
+        {filesSection.parentElement.insertAdjacentElement("beforebegin", tCard);}
     }
 
     let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><h2 style="margin:0; color:var(--accent);">Assignment Timeline: ${data.user}</h2><div class="meta">Project: ${data.project} &nbsp;|&nbsp; Total Analyzed Events: ${data.totalEvents}</div></div><button id="close-timeline" class="btn btn-secondary" style="padding:4px 8px;">Close</button></div><div style="margin-top: 16px;">`;
@@ -356,9 +356,9 @@ window.TeacherUI = {
         if (index < data.periods.length - 1) {
           const gapMs = data.periods[index + 1].startTime - p.endTime;
           if (gapMs > 4 * 60 * 60 * 1000)
-            html += `<div class="meta" style="text-align:center; padding: 8px 0; color: #f59e0b;">⟐ <strong>Significant Gap: ${this.formatDuration(gapMs)}</strong> (Potential unrecorded offline work, crash, or extended break) ⟐</div>`;
+            {html += `<div class="meta" style="text-align:center; padding: 8px 0; color: #f59e0b;">⟐ <strong>Significant Gap: ${this.formatDuration(gapMs)}</strong> (Potential unrecorded crash, or extended break) ⟐</div>`;}
           else
-            html += `<div class="meta" style="text-align:center; padding: 6px 0;">↓ Gap: ${this.formatDuration(gapMs)} ↓</div>`;
+            {html += `<div class="meta" style="text-align:center; padding: 6px 0;">↓ Gap: ${this.formatDuration(gapMs)} ↓</div>`;}
         }
       });
     }
@@ -379,7 +379,7 @@ window.TeacherUI = {
       pCard.style.marginTop = "12px";
       const filesSection = document.getElementById("per-file-section");
       if (filesSection)
-        filesSection.parentElement.insertAdjacentElement("beforebegin", pCard);
+        {filesSection.parentElement.insertAdjacentElement("beforebegin", pCard);}
     }
     pCard.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><h2 style="margin:0; color:var(--accent-2);">Behavioral Profile: ${data.user}</h2><div class="meta">Project: ${data.project} | Sessions Analyzed: ${data.sessionsAnalyzed} | Active Time: ${data.totalActiveMins} mins | Total Time in VS Code: ${data.totalWallMins} mins</div></div><button id="close-profile" class="btn btn-secondary" style="padding:4px 8px;">Close</button></div><div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-top:20px;"><div><div style="font-weight:700; font-size:1.5rem;">${data.wpm}</div><div class="meta">Avg WPM</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.editRate}</div><div class="meta">Edits/min (Code Churn)</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.pasteFreq}</div><div class="meta">Pastes/hr</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.avgPauseMs > 0 ? (data.avgPauseMs / 1000).toFixed(1) + "s" : "N/A"}</div><div class="meta">Avg Micro-Pause (Thinking Time)</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.internalPasteRatio}% <span style="font-size:1rem; color:var(--muted)">Int</span> / ${data.externalPasteRatio}% <span style="font-size:1rem; color:var(--muted)">Ext</span></div><div class="meta">Internal vs External Paste Ratio</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.debugRunFreq}</div><div class="meta">Terminal Runs/hr (Testing Freq)</div></div></div><div class="meta" style="margin-top:16px; border-top:1px solid var(--border); padding-top:12px;"><strong>Pedagogical Insight:</strong> This establishes the student's unique workflow.</div>`;
     document
@@ -394,11 +394,11 @@ window.TeacherUI = {
     );
     const logsLogName = document.getElementById("logs-log-name");
 
-    if (logsView) logsView.innerHTML = "";
+    if (logsView) {logsView.innerHTML = "";}
     if (document.getElementById("dashboard-empty"))
-      document.getElementById("dashboard-empty").style.display = "none";
-    if (logsViewerContainer) logsViewerContainer.style.display = "block";
-    if (logsLogName) logsLogName.textContent = "Event Log: " + filename;
+      {document.getElementById("dashboard-empty").style.display = "none";}
+    if (logsViewerContainer) {logsViewerContainer.style.display = "block";}
+    if (logsLogName) {logsLogName.textContent = "Event Log: " + filename;}
 
     let totalEvents = 0,
       flaggedEvents = 0,
@@ -415,8 +415,8 @@ window.TeacherUI = {
         let flagged = false;
         const et = (e.eventType || "").toLowerCase();
 
-        if (et === "delete" || et === "backspace") deleteCount++;
-        if (et === "replace") replaceCount++;
+        if (et === "delete" || et === "backspace") {deleteCount++;}
+        if (et === "replace") {replaceCount++;}
 
         if (et === "paste" || et === "clipboard" || et === "pasteevent") {
           const len =
@@ -445,7 +445,7 @@ window.TeacherUI = {
           flagged = true;
           fastInputCount++;
         }
-        if (flagged) flaggedEvents++;
+        if (flagged) {flaggedEvents++;}
       });
       if (totalEvents > 0) {
         const ratio = flaggedEvents / totalEvents;
@@ -454,8 +454,8 @@ window.TeacherUI = {
     }
 
     let scoreColor = "#10b981";
-    if (integrityScore < 85) scoreColor = "#f59e0b";
-    if (integrityScore < 50) scoreColor = "#ef4444";
+    if (integrityScore < 85) {scoreColor = "#f59e0b";}
+    if (integrityScore < 50) {scoreColor = "#ef4444";}
 
     if (logsView) {
       const scoreDiv = document.createElement("div");
@@ -528,7 +528,7 @@ window.TeacherUI = {
 
       if (parsed && Array.isArray(parsed.events)) {
         const formatFilePath = (p) => {
-          if (!p || typeof p !== "string") return p;
+          if (!p || typeof p !== "string") {return p;}
           const project =
             (parsed && parsed.sessionHeader && parsed.sessionHeader.project) ||
             null;
@@ -571,12 +571,12 @@ window.TeacherUI = {
               rowElements.push(gapRow);
             }
           }
-          if (currentTime) previousTime = currentTime;
+          if (currentTime) {previousTime = currentTime;}
 
           if (et === "input" || et === "key" || et === "keystroke")
-            filterCat = "input";
-          if (et === "delete" || et === "backspace") filterCat = "delete";
-          if (et === "replace") filterCat = "replace";
+            {filterCat = "input";}
+          if (et === "delete" || et === "backspace") {filterCat = "delete";}
+          if (et === "replace") {filterCat = "replace";}
 
           if (et === "paste" || et === "clipboard" || et === "pasteevent") {
             const len =
@@ -617,7 +617,7 @@ window.TeacherUI = {
           let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="display:flex; gap:8px; align-items:center;"><strong>${e.eventType || "Unknown"}</strong> ${flagReason}<button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes"><span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span></button></div><span class="meta">${e.time || ""}</span></div>`;
 
           Object.keys(e).forEach((k) => {
-            if (["eventType", "time"].includes(k)) return;
+            if (["eventType", "time"].includes(k)) {return;}
             let val = e[k];
             if (
               k === "fileEdit" ||
@@ -625,9 +625,9 @@ window.TeacherUI = {
               k === "file" ||
               k === "filePath"
             )
-              val = formatFilePath(val);
+              {val = formatFilePath(val);}
             try {
-              if (typeof val === "object") val = JSON.stringify(val);
+              if (typeof val === "object") {val = JSON.stringify(val);}
             } catch (err) {}
             html += `<div class="meta">${k}: ${val}</div>`;
           });
@@ -645,17 +645,17 @@ window.TeacherUI = {
       let churnText =
         "A healthy amount of editing indicates normal problem-solving and iteration.";
       if (churnRate < 0.05 && totalEvents > 100)
-        churnText =
-          "<strong>Warning:</strong> A very low edit rate combined with high output suggests code was pre-written or copied perfectly without trial and error.";
+        {churnText =
+          "<strong>Warning:</strong> A very low edit rate combined with high output suggests code was pre-written or copied perfectly without trial and error.";}
       let pasteText = "Good, no massive code dumps detected.";
       if (largePasteCount > 0)
-        pasteText = `<strong>Warning:</strong> ${largePasteCount} pastes exceeded the limit. This significantly lowers the integrity score, as large un-typed blocks are highly unusual unless the student is refactoring their own code.`;
+        {pasteText = `<strong>Warning:</strong> ${largePasteCount} pastes exceeded the limit. This significantly lowers the integrity score, as large un-typed blocks are highly unusual unless the student is refactoring their own code.`;}
       let focusText = "Consistent work session with no major gaps.";
       if (focusAwayCount > 0)
-        focusText = `Detected ${focusAwayCount} instances of extended inactivity. While taking breaks is normal, excessive gaps followed immediately by large pastes may indicate copying from an external source.`;
+        {focusText = `Detected ${focusAwayCount} instances of extended inactivity. While taking breaks is normal, excessive gaps followed immediately by large pastes may indicate copying from an external source.`;}
       let fastInputText = "Normal human typing cadence detected.";
       if (fastInputCount > 0)
-        fastInputText = `<strong>Warning:</strong> ${fastInputCount} keystrokes registered suspiciously fast. This indicates potential auto-typing scripts or pasting disguised as typing events.`;
+        {fastInputText = `<strong>Warning:</strong> ${fastInputCount} keystrokes registered suspiciously fast. This indicates potential auto-typing scripts or pasting disguised as typing events.`;}
 
       reportContainer.innerHTML = `
                 <div class="card" style="margin-top: 12px; line-height: 1.6;">
@@ -696,8 +696,8 @@ window.TeacherUI = {
         const val = e.target.value;
         const rows = eventsContainer.querySelectorAll(".event");
         rows.forEach((r) => {
-          if (val === "all") r.style.display = "";
-          else r.style.display = r.dataset.filterCategory === val ? "" : "none";
+          if (val === "all") {r.style.display = "";}
+          else {r.style.display = r.dataset.filterCategory === val ? "" : "none";}
         });
       });
 
@@ -715,7 +715,7 @@ window.TeacherUI = {
             notesArea.style.display = isVisible ? "none" : "block";
             if (!isVisible) {
               const textarea = notesArea.querySelector(".event-note-input");
-              if (textarea) textarea.focus();
+              if (textarea) {textarea.focus();}
             }
           }
         });
@@ -729,7 +729,7 @@ window.TeacherUI = {
           const timestamp = eventRow?.dataset.eventTime || "";
           const noteText = textarea?.value || "";
 
-          if (!window.currentLogFilename) return;
+          if (!window.currentLogFilename) {return;}
 
           // Prepare notes array
           const allNotes = [];
@@ -762,7 +762,7 @@ window.TeacherUI = {
           }
           
           // Close the notes area
-          if (notesArea) notesArea.style.display = "none";
+          if (notesArea) {notesArea.style.display = "none";}
         });
       });
 
@@ -770,7 +770,7 @@ window.TeacherUI = {
         btn.addEventListener("click", () => {
           const eventRow = btn.closest(".event");
           const notesArea = eventRow?.querySelector(".event-notes-area");
-          if (notesArea) notesArea.style.display = "none";
+          if (notesArea) {notesArea.style.display = "none";}
         });
       });
     }

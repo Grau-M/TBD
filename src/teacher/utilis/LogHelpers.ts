@@ -2,13 +2,13 @@ import * as vscode from 'vscode';
 import { storageManager } from '../../state';
 
 export function parseLogTime(s: string): number {
-    if (!s) return 0;
+    if (!s) {return 0;}
     const cleanStr = s.replace(/ [A-Z]{3,4}$/, ""); 
     const parts = cleanStr.split(' ');
-    if (parts.length < 2) return 0;
+    if (parts.length < 2) {return 0;}
 
     const dateSub = parts[0].split('-');
-    if (dateSub.length < 3) return 0;
+    if (dateSub.length < 3) {return 0;}
 
     const monthStr = dateSub[0];
     const months: { [key: string]: number } = {
@@ -39,7 +39,7 @@ export async function fetchAndParseLog(password: string, uri: vscode.Uri) {
         try {
             const s = res.text.indexOf('{');
             const e = res.text.lastIndexOf('}');
-            if (s !== -1 && e > s) parsed = JSON.parse(res.text.slice(s, e + 1));
+            if (s !== -1 && e > s) {parsed = JSON.parse(res.text.slice(s, e + 1));}
         } catch (_) { parsed = null; }
     }
     return { content: res.text, parsed, partial: res.partial };

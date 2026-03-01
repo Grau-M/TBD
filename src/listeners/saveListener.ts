@@ -40,6 +40,6 @@ export function createSaveListener(): vscode.Disposable {
         }
 
         state.sessionBuffer.push(saveEvent);
-        if (state.sessionBuffer.length >= CONSTANTS.FLUSH_THRESHOLD) void flushBuffer();
+        if (state.sessionBuffer.length >= CONSTANTS.FLUSH_THRESHOLD) {void flushBuffer();}
     });
 }

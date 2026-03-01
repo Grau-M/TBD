@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { ExtensionApi } from '../../extension';
+import { ExtensionApi } from '../extension';
 
 /**
  * Webview Integration Tests

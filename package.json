@@ -48,6 +48,10 @@
       {
         "command": "tbd-logger.flush",
         "title": "TBD Logger: Flush Events to Disk"
+      },
+      {
+        "command": "tbd-logger.showHiddenDeletions",
+        "title": "TBD Logger: Show Hidden Deletions"
       }
     ]
   },

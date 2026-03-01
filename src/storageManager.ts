@@ -363,6 +363,10 @@ export class StorageManager {
             };
 
             const encryptedData = this.encrypt(JSON.stringify(initialData, null, 2));
+            // Mark internal write before writing to avoid watcher race conditions.
+            try {
+                this.internalWriteTimestamps.set(filename, Date.now());
+            } catch (_) {}
             await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
             try { await this.setFileReadOnly(this.sessionFileUri, true); } catch (_) {}
             // Mark this write as an internal write so the watcher doesn't treat
@@ -577,9 +581,12 @@ export class StorageManager {
                 // change was likely caused by the extension itself — ignore it.
                 const lastInternal = this.internalWriteTimestamps.get(name) || 0;
                 const now = Date.now();
-                const INTERNAL_IGNORE_MS = 3000; // 3 seconds
+                // File watcher events can arrive late on some systems; keep a larger
+                // grace window so extension-owned writes are not mislabeled as manual edits.
+                const INTERNAL_IGNORE_MS = 15000; // 15 seconds
                 if (now - lastInternal > INTERNAL_IGNORE_MS) {
                     const editEntry = {
+                        activityType: 'modified',
                         modifiedFile: name,
                         modifiedAt: formatTimestamp(now),
                         previousSize: this.formatSize(recorded.size),
@@ -614,6 +621,7 @@ export class StorageManager {
         const name = uri.path.split('/').pop() || uri.fsPath;
         const recorded = this.fileIndex.get(name) || { size: 0, mtime: 0 };
         const entry = {
+            activityType: 'deleted',
             deletedFile: name,
             deletedAt: formatTimestamp(Date.now()),
             lastKnownSize: this.formatSize(recorded.size),
@@ -670,6 +678,8 @@ export class StorageManager {
 
                 const enc = this.encrypt(JSON.stringify(initialData, null, 2));
                 try { await this.setFileReadOnly(recreateUri, false); } catch (_) {}
+                // Mark internal write before writing to avoid watcher race conditions.
+                try { this.internalWriteTimestamps.set(name, Date.now()); } catch (_) {}
                 await vscode.workspace.fs.writeFile(recreateUri, enc);
                 try { await this.setFileReadOnly(recreateUri, true); } catch (_) {}
                 // Mark this recreation as an internal write so the watcher ignores it
@@ -691,7 +701,7 @@ export class StorageManager {
         // new hidden log containing the deletion entry.
         // The hidden log was deleted — recreate with a record of that deletion
         const name = uri.path.split('/').pop() || 'hidden_log';
-        const entry = { note: 'Hidden log file deleted', file: name, deletedAt: formatTimestamp(Date.now()) };
+        const entry = { activityType: 'hidden-log-deleted', note: 'Hidden log file deleted', file: name, deletedAt: formatTimestamp(Date.now()) };
         try {
             await this.appendToHiddenLog(entry);
         } catch (e) {
@@ -761,14 +771,25 @@ export class StorageManager {
             const updatedJsonStr = JSON.stringify(history, null, 2);
             const encryptedData = this.encrypt(updatedJsonStr);
 
+            const sessionFileName = this.sessionFileUri?.path.split('/').pop() || '';
+            if (sessionFileName) {
+                // Mark internal write before writing to avoid watcher race conditions.
+                try { this.internalWriteTimestamps.set(sessionFileName, Date.now()); } catch (_) {}
+            }
             try { await this.setFileReadOnly(this.sessionFileUri, false); } catch (_) {}
             await vscode.workspace.fs.writeFile(this.sessionFileUri, encryptedData);
             try { await this.setFileReadOnly(this.sessionFileUri, true); } catch (_) {}
+            // Update index immediately so delayed watcher events compare against latest state.
+            try {
+                if (sessionFileName) {
+                    const stat = await vscode.workspace.fs.stat(this.sessionFileUri);
+                    this.fileIndex.set(sessionFileName, { size: stat.size, mtime: stat.mtime });
+                }
+            } catch (_) {}
             console.log(`[TBD Logger] Securely appended ${newEvents.length} events.`);
             // Mark this flush as an internal write to avoid false-positive "edited" events
             try {
-                const name = this.sessionFileUri?.path.split('/').pop() || '';
-                if (name) {this.internalWriteTimestamps.set(name, Date.now());}
+                if (sessionFileName) {this.internalWriteTimestamps.set(sessionFileName, Date.now());}
             } catch (_) {}
         } catch (err) {
             console.error('[TBD Logger] Critical Error during flush:', err);

@@ -103,6 +103,10 @@
 
     $("nav-dashboard")?.addEventListener("click", () => {
       switchTab("dashboard");
+      // Show loading state
+      if ($("dashboard-empty")) {$("dashboard-empty").style.display = "none";}
+      if ($("dashboard-loading")) {$("dashboard-loading").style.display = "block";}
+      if ($("dashboard-view")) {$("dashboard-view").innerHTML = "";}
       post("analyzeLogs");
     });
     $("nav-logs")?.addEventListener("click", () => {
@@ -493,6 +497,9 @@
 
     // --- STARTUP LOGIC ---
     switchTab("dashboard");
+    // Show loading state on startup
+    if ($("dashboard-empty")) {$("dashboard-empty").style.display = "none";}
+    if ($("dashboard-loading")) {$("dashboard-loading").style.display = "block";}
     post("clientReady");
     post("analyzeLogs");
     post("listLogs");

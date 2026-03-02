@@ -1,3 +1,4 @@
+// renderers.js (FULL FILE as you shared it, with the Confidence + Student Summary dropdown changes added)
 window.TeacherUI = {
   formatDuration(ms) {
     if (!ms || ms < 0) {
@@ -305,6 +306,60 @@ window.TeacherUI = {
             <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
         `;
 
+    // === Evidence Confidence Indicator (Dashboard dropdown) ===
+    try {
+      const c = parsed && parsed.confidence ? parsed.confidence : null;
+
+      let label = "Unknown";
+      let color = "#9ca3af"; // gray
+      let desc =
+        "Quick reliability signal based on missing data, interruptions, and integrity checks.";
+
+      if (typeof c === "string") {
+        label = c;
+      } else if (typeof c === "object" && c) {
+        label = c.label || "Unknown";
+        if (c.description) {
+          desc = c.description;
+        } else if (c.reason) {
+          desc = c.reason;
+        }
+      }
+
+      const l = String(label || "").toLowerCase();
+      if (l === "high") color = "#10b981";
+      if (l === "medium") color = "#f59e0b";
+      if (l === "low") color = "#ef4444";
+
+      dropdown.innerHTML += `
+        <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
+          <div style="font-weight:700; color:${color}; font-size:1.05rem;">
+            ${label} Confidence
+          </div>
+          <div class="meta" style="margin-top:6px;">
+            ${desc}
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      // skip if confidence missing
+    }
+
+    // === Student Transparency Summary (Dashboard dropdown) ===
+    const safeId = String(filename || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+    dropdown.innerHTML += `
+      <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <div>
+          <div style="font-weight:800;">Student Transparency Summary</div>
+          <div class="meta">Creates a student-safe summary (no internal metrics).</div>
+        </div>
+        <button class="btn btn-primary" id="btn-generate-student-summary-${safeId}">
+          Generate
+        </button>
+      </div>
+      <div id="student-summary-output-${safeId}" style="margin-top:10px;"></div>
+    `;
+
     try {
       const affected = new Set();
       if (parsed && Array.isArray(parsed.events)) {
@@ -362,7 +417,31 @@ window.TeacherUI = {
     } catch (err) {
       dropdown.innerHTML += `<div class="meta">Score factors unavailable.</div>`;
     }
+
+    // Insert into DOM
     row.parentNode.insertBefore(dropdown, row.nextSibling);
+
+    // Attach click handler AFTER insert
+    try {
+      const btn = dropdown.querySelector(
+        `#btn-generate-student-summary-${safeId}`,
+      );
+      if (btn) {
+        btn.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation(); // keep dropdown open
+
+          const out = dropdown.querySelector(
+            `#student-summary-output-${safeId}`,
+          );
+          if (out) out.innerHTML = `<div class="meta">Generating summary...</div>`;
+
+          if (window.postTeacherMessage) {
+            window.postTeacherMessage("generateStudentSummary", { filename });
+          }
+        });
+      }
+    } catch (e) {}
   },
 
   renderTimeline(data) {
@@ -528,6 +607,92 @@ window.TeacherUI = {
                 </div>
             `;
       logsView.appendChild(scoreDiv);
+
+      // === Evidence Confidence Indicator (Logs view) ===
+      try {
+        const c = parsed && parsed.confidence ? parsed.confidence : null;
+
+        let label = "Unknown";
+        let color = "#9ca3af";
+        let desc =
+          "Quick reliability signal based on missing data, interruptions, and integrity checks.";
+
+        if (typeof c === "string") {
+          label = c;
+        } else if (typeof c === "object" && c) {
+          label = c.label || "Unknown";
+          if (c.description) desc = c.description;
+          else if (c.reason) desc = c.reason;
+        }
+
+        const l = String(label || "").toLowerCase();
+        if (l === "high") color = "#10b981";
+        if (l === "medium") color = "#f59e0b";
+        if (l === "low") color = "#ef4444";
+
+        const confidenceDiv = document.createElement("div");
+        confidenceDiv.className = "card";
+        confidenceDiv.style.borderLeft = `6px solid ${color}`;
+        confidenceDiv.style.marginTop = "12px";
+        confidenceDiv.innerHTML = `
+          <div style="font-weight:800; color:${color}; font-size:1.1rem;">
+            ${label} Confidence
+          </div>
+          <div class="meta" style="margin-top:6px;">
+            ${desc}
+          </div>
+        `;
+        logsView.appendChild(confidenceDiv);
+      } catch (e) {}
+
+      // === Student Transparency Summary (LOGS VIEW) ===
+try {
+  const safeId = String(filename || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+
+  const summaryCard = document.createElement("div");
+  summaryCard.className = "card";
+  summaryCard.style.marginTop = "12px";
+  summaryCard.style.borderLeft = "6px solid var(--accent)";
+
+  summaryCard.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+      <div>
+        <div style="font-weight:800;">Student Transparency Summary</div>
+        <div class="meta">Student-safe summary (no internal metrics).</div>
+      </div>
+      <button class="btn btn-primary" id="btn-generate-student-summary-logs-${safeId}">
+        Generate
+      </button>
+    </div>
+    <div id="student-summary-output-${safeId}" style="margin-top:10px;"></div>
+  `;
+
+  logsView.appendChild(summaryCard);
+
+  // Hook button click
+  setTimeout(() => {
+    const btn = document.getElementById(
+      `btn-generate-student-summary-logs-${safeId}`,
+    );
+    if (btn) {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        // optional: show loading text immediately
+        const out = document.getElementById(`student-summary-output-${safeId}`);
+        if (out) {
+          out.innerHTML =
+            '<div class="meta">Generating student summary...</div>';
+        }
+
+        if (window.postTeacherMessage) {
+          window.postTeacherMessage("generateStudentSummary", { filename });
+        }
+      });
+    }
+  }, 0);
+} catch (e) {}
 
       if (parsed.sessionHeader) {
         const h = parsed.sessionHeader;

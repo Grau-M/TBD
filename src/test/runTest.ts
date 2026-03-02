@@ -34,10 +34,11 @@ async function main() {
 				`--extensions-dir=${extensionsDir}`,
 			],
 		});
-	} catch (err) {
+	} /* c8 ignore next 4 */ catch (err) {
 		console.error('Failed to run tests', err);
 		process.exit(1);
 	} finally {
+		/* c8 ignore start */
 		if (userDataDir && fs.existsSync(userDataDir)) {
 			try {
 				fs.rmSync(userDataDir, { recursive: true, force: true });
@@ -55,6 +56,7 @@ async function main() {
 		if (linkRoot && fs.existsSync(linkRoot)) {
 			fs.unlinkSync(linkRoot);
 		}
+		/* c8 ignore end */
 	}
 }
 

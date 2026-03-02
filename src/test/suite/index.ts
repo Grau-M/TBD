@@ -12,6 +12,7 @@ export function run(): Promise<void> {
     const testsRoot = path.resolve(__dirname, '.');
 
     return new Promise(async (resolve, reject) => {
+        /* c8 ignore start */
         try {
             const files = await glob('**/*.test.js', { cwd: testsRoot });
 
@@ -34,5 +35,6 @@ export function run(): Promise<void> {
         } catch (err) {
             reject(err);
         }
+        /* c8 ignore end */
     });
 }

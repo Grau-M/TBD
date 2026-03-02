@@ -1,0 +1,124 @@
+{
+  "sessionHeader": {
+    "sessionNumber": 9,
+    "startedBy": "swage",
+    "project": "capstoneprep",
+    "startTime": "Feb-25-2026 11:48:04:987 EST",
+    "metadata": {
+      "vscodeVersion": "1.109.5",
+      "startTimestamp": "Feb-25-2026 11:48:04:987 EST",
+      "extensionVersion": "0.0.3"
+    }
+  },
+  "events": [
+    {
+      "time": "Feb-25-2026 11:48:05:040 EST",
+      "flightTime": "0",
+      "eventType": "focusChange",
+      "fileEdit": "",
+      "fileView": "[INTERRUPTION] Session End Detected (Previous session has shutdown)",
+      "possibleAiDetection": "interruptionKind= The User has ended the Session"
+    },
+    {
+      "time": "Feb-25-2026 11:48:05:041 EST",
+      "flightTime": "0",
+      "eventType": "focusChange",
+      "fileEdit": "",
+      "fileView": "[INTERRUPTION] Session Started",
+      "possibleAiDetection": "interruptionKind= Session started normally"
+    },
+    {
+      "time": "Feb-25-2026 11:48:05:104 EST",
+      "flightTime": "0",
+      "eventType": "session-start",
+      "fileEdit": "",
+      "fileView": "VS Code Session Started"
+    },
+    {
+      "time": "Feb-25-2026 11:51:46:472 EST",
+      "flightTime": "214822",
+      "eventType": "focusChange",
+      "fileEdit": "",
+      "fileView": "Focus Away (Major)"
+    },
+    {
+      "time": "Feb-25-2026 11:51:46:473 EST",
+      "flightTime": "0",
+      "eventType": "focusChange",
+      "fileEdit": "",
+      "fileView": "txtfile"
+    },
+    {
+      "time": "Feb-25-2026 11:51:50:794 EST",
+      "flightTime": "4322",
+      "eventType": "paste",
+      "fileEdit": "txtfile",
+      "fileView": "txtfile",
+      "pasteCharCount": 2,
+      "fileFocusCount": "00:00:04"
+    },
+    {
+      "time": "Feb-25-2026 11:51:51:104 EST",
+      "flightTime": "310",
+      "eventType": "paste",
+      "fileEdit": "txtfile",
+      "fileView": "txtfile",
+      "pasteCharCount": 31,
+      "fileFocusCount": "00:00:04"
+    },
+    {
+      "time": "Feb-25-2026 11:51:51:478 EST",
+      "flightTime": "374",
+      "eventType": "paste",
+      "fileEdit": "txtfile",
+      "fileView": "txtfile",
+      "pasteCharCount": 2,
+      "fileFocusCount": "00:00:05"
+    },
+    {
+      "time": "Feb-25-2026 11:51:51:726 EST",
+      "flightTime": "248",
+      "eventType": "paste",
+      "fileEdit": "txtfile",
+      "fileView": "txtfile",
+      "pasteCharCount": 31,
+      "fileFocusCount": "00:00:05"
+    },
+    {
+      "time": "Feb-25-2026 11:51:52:111 EST",
+      "flightTime": "385",
+      "eventType": "paste",
+      "fileEdit": "txtfile",
+      "fileView": "txtfile",
+      "pasteCharCount": 2,
+      "fileFocusCount": "00:00:05"
+    },
+    {
+      "time": "Feb-25-2026 11:51:52:360 EST",
+      "flightTime": "249",
+      "eventType": "paste",
+      "fileEdit": "txtfile",
+      "fileView": "txtfile",
+      "pasteCharCount": 31,
+      "fileFocusCount": "00:00:05"
+    },
+    {
+      "time": "Feb-25-2026 11:51:52:968 EST",
+      "flightTime": "608",
+      "eventType": "paste",
+      "fileEdit": "txtfile",
+      "fileView": "txtfile",
+      "pasteCharCount": 2,
+      "fileFocusCount": "00:00:06"
+    },
+    {
+      "time": "Feb-25-2026 11:51:53:172 EST",
+      "flightTime": "204",
+      "eventType": "paste",
+      "fileEdit": "txtfile",
+      "fileView": "txtfile",
+      "pasteCharCount": 31,
+      "fileFocusCount": "00:00:06"
+    }
+  ]
+}

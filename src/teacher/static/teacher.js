@@ -176,7 +176,9 @@
         inactivityThreshold: parseInt(
           $("inactivityInput")?.value || defaults.inactivity,
         ),
-        flightTimeThreshold: parseInt($("flightInput")?.value || defaults.flight),
+        flightTimeThreshold: parseInt(
+          $("flightInput")?.value || defaults.flight,
+        ),
         pasteLengthThreshold: parseInt(
           $("pasteLengthInput")?.value || defaults.pasteLength,
         ),
@@ -184,7 +186,8 @@
       post("saveSettings", { settings });
     });
     $("resetSettings")?.addEventListener("click", () => {
-      if ($("inactivityInput")) $("inactivityInput").value = defaults.inactivity;
+      if ($("inactivityInput"))
+        $("inactivityInput").value = defaults.inactivity;
       if ($("flightInput")) $("flightInput").value = defaults.flight;
       if ($("pasteLengthInput"))
         $("pasteLengthInput").value = defaults.pasteLength;
@@ -227,7 +230,9 @@
         if (dropdown) dropdown.classList.add("show");
       });
       searchInput.addEventListener("focus", () => {
-        renderSearchDropdown(filterLogs((searchInput.value || "").toLowerCase()));
+        renderSearchDropdown(
+          filterLogs((searchInput.value || "").toLowerCase()),
+        );
         if (dropdown) dropdown.classList.add("show");
       });
     }
@@ -320,32 +325,6 @@
       if (dashOut) {
         dashOut.innerHTML = `<pre style="white-space:pre-wrap; margin:0; padding:10px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">${summaryText}</pre>`;
       }
-
-      // 2) Logs view: add/update a card near top
-      try {
-        const logsView = document.getElementById("logs-view");
-        if (logsView && currentTab === "logs") {
-          let card = document.getElementById("student-summary-card");
-          if (!card) {
-            card = document.createElement("div");
-            card.id = "student-summary-card";
-            card.className = "card";
-            card.style.borderLeft = "6px solid var(--accent)";
-            card.style.marginTop = "12px";
-            // Put it near the top
-            logsView.insertBefore(card, logsView.firstChild?.nextSibling || null);
-          }
-          card.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-              <div>
-                <div style="font-weight:800;">Student Transparency Summary</div>
-                <div class="meta">${filename || ""}</div>
-              </div>
-            </div>
-            <pre style="white-space:pre-wrap; margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">${summaryText}</pre>
-          `;
-        }
-      } catch (e) {}
     }
 
     // --- ROUTER (LISTEN FOR MESSAGES) ---
@@ -356,7 +335,9 @@
           logNamesCache = (msg.data || []).slice().sort().reverse();
           if ($("log-count"))
             $("log-count").textContent = logNamesCache.length + " logs found";
-          renderSearchDropdown(filterLogs((searchInput?.value || "").toLowerCase()));
+          renderSearchDropdown(
+            filterLogs((searchInput?.value || "").toLowerCase()),
+          );
           break;
 
         case "dashboardData":
@@ -385,11 +366,20 @@
             msg.filename === requestedDashboardFile &&
             currentTab === "dashboard"
           ) {
-            UI.renderDashboardFileDropdown(msg.data, msg.filename, currentSettings);
+            UI.renderDashboardFileDropdown(
+              msg.data,
+              msg.filename,
+              currentSettings,
+            );
             requestedDashboardFile = null;
             if (status) status.textContent = "Loaded " + msg.filename;
           } else {
-            UI.renderParsedInLogs(msg.data, msg.filename, currentSettings, handlers);
+            UI.renderParsedInLogs(
+              msg.data,
+              msg.filename,
+              currentSettings,
+              handlers,
+            );
             // Load notes for this log file
             post("loadLogNotes", { filename: msg.filename });
             if (status) status.textContent = "Loaded " + msg.filename;
@@ -400,7 +390,9 @@
         case "studentSummary": {
           const filename = msg.filename || currentLogFilename || "";
           const summaryText =
-            typeof msg.summary === "string" ? msg.summary : "No summary returned.";
+            typeof msg.summary === "string"
+              ? msg.summary
+              : "No summary returned.";
           renderStudentSummaryToUI(filename, summaryText);
           if (status) status.textContent = "Student summary ready.";
           break;
@@ -451,14 +443,16 @@
         case "loadSettings":
           if (msg.settings) {
             currentSettings = {
-              inactivity: msg.settings.inactivityThreshold || defaults.inactivity,
+              inactivity:
+                msg.settings.inactivityThreshold || defaults.inactivity,
               flight: msg.settings.flightTimeThreshold || defaults.flight,
               pasteLength:
                 msg.settings.pasteLengthThreshold || defaults.pasteLength,
             };
             if ($("inactivityInput"))
               $("inactivityInput").value = currentSettings.inactivity;
-            if ($("flightInput")) $("flightInput").value = currentSettings.flight;
+            if ($("flightInput"))
+              $("flightInput").value = currentSettings.flight;
             if ($("pasteLengthInput"))
               $("pasteLengthInput").value = currentSettings.pasteLength;
           }
@@ -518,12 +512,23 @@
                   const row = document.createElement("div");
                   row.className = "card deletion-row";
                   const inferActivityType = (entry) => {
-                    if (entry.activityType) return String(entry.activityType).toLowerCase();
-                    if (entry.deletedFile || entry.deletedAt || entry.lastKnownSize)
+                    if (entry.activityType)
+                      return String(entry.activityType).toLowerCase();
+                    if (
+                      entry.deletedFile ||
+                      entry.deletedAt ||
+                      entry.lastKnownSize
+                    )
                       return "deleted";
-                    if (entry.modifiedFile || entry.modifiedAt) return "modified";
-                    const lowerNote = String(entry.note || entry.reason || "").toLowerCase();
-                    if (lowerNote.includes("manual edit") || lowerNote.includes("modified"))
+                    if (entry.modifiedFile || entry.modifiedAt)
+                      return "modified";
+                    const lowerNote = String(
+                      entry.note || entry.reason || "",
+                    ).toLowerCase();
+                    if (
+                      lowerNote.includes("manual edit") ||
+                      lowerNote.includes("modified")
+                    )
                       return "modified";
                     if (lowerNote.includes("deleted")) return "deleted";
                     return "activity";
@@ -537,8 +542,13 @@
                         ? "Modified"
                         : "Activity";
                   const time =
-                    item.modifiedAt || item.deletedAt || item.time || item.timestamp || "";
-                  const who = item.user || item.startedBy || item.actor || "Unknown";
+                    item.modifiedAt ||
+                    item.deletedAt ||
+                    item.time ||
+                    item.timestamp ||
+                    "";
+                  const who =
+                    item.user || item.startedBy || item.actor || "Unknown";
                   const file =
                     item.modifiedFile ||
                     item.deletedFile ||
@@ -553,7 +563,9 @@
                     item.lastKnownSize ||
                     "";
                   const newSize =
-                    item.newSize || item.size || (activityType === "deleted" ? "0 KB" : "");
+                    item.newSize ||
+                    item.size ||
+                    (activityType === "deleted" ? "0 KB" : "");
                   const note = item.note || item.reason || "";
                   row.innerHTML = `<div style="display:flex; flex-direction:column; gap:6px;"><div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;"><div style="font-weight:700;">${file}</div><div class="meta">${actionLabel} by ${who} • ${time}</div></div><div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">${
                     prevSize ? `<div class="meta">Prev: ${prevSize}</div>` : ""

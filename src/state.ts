@@ -17,6 +17,8 @@ export const state = {
     currentFocusedFile: '',
     focusStartTime: Date.now(),
     isFlushing: false,
+    clipboardOnBlur: '', 
+    externalCopiedText: '',
 };
 
 export const CONSTANTS = {

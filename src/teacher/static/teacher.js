@@ -11,7 +11,12 @@
 
   // Application State
   let logNamesCache = [];
-  const defaults = { inactivity: 5, flight: 50, pasteLength: 50 };
+  const defaults = {
+    inactivity: 5,
+    flight: 50,
+    pasteLength: 50,
+    flagAiEvents: true,
+  };
   let currentSettings = { ...defaults };
   let currentTab = "dashboard";
   let requestedDashboardFile = null;
@@ -182,6 +187,9 @@
         pasteLengthThreshold: parseInt(
           $("pasteLengthInput")?.value || defaults.pasteLength,
         ),
+        flagAiEvents: $("flagAiEvents")
+          ? $("flagAiEvents").checked
+          : defaults.flagAiEvents,
       };
       post("saveSettings", { settings });
     });
@@ -191,6 +199,7 @@
       if ($("flightInput")) $("flightInput").value = defaults.flight;
       if ($("pasteLengthInput"))
         $("pasteLengthInput").value = defaults.pasteLength;
+      if ($("flagAiEvents")) $("flagAiEvents").checked = defaults.flagAiEvents;
       post("saveSettings", { settings: defaults });
     });
 
@@ -234,6 +243,18 @@
           filterLogs((searchInput.value || "").toLowerCase()),
         );
         if (dropdown) dropdown.classList.add("show");
+      });
+    }
+    const clearSearchBtn = $("clear-search");
+    if (clearSearchBtn) {
+      clearSearchBtn.addEventListener("click", () => {
+        if (searchInput) {
+          searchInput.value = "";
+          searchInput.focus();
+        }
+        if (dropdown) {
+          dropdown.classList.remove("show");
+        }
       });
     }
 
@@ -448,6 +469,10 @@
               flight: msg.settings.flightTimeThreshold || defaults.flight,
               pasteLength:
                 msg.settings.pasteLengthThreshold || defaults.pasteLength,
+              flagAiEvents:
+                typeof msg.settings.flagAiEvents === "boolean"
+                  ? msg.settings.flagAiEvents
+                  : defaults.flagAiEvents,
             };
             if ($("inactivityInput"))
               $("inactivityInput").value = currentSettings.inactivity;
@@ -455,6 +480,8 @@
               $("flightInput").value = currentSettings.flight;
             if ($("pasteLengthInput"))
               $("pasteLengthInput").value = currentSettings.pasteLength;
+            if ($("flagAiEvents"))
+              $("flagAiEvents").checked = currentSettings.flagAiEvents;
           }
           break;
 
@@ -465,6 +492,8 @@
             currentSettings.flight = parseInt($("flightInput").value);
           if ($("pasteLengthInput"))
             currentSettings.pasteLength = parseInt($("pasteLengthInput").value);
+          if ($("flagAiEvents"))
+            currentSettings.flagAiEvents = $("flagAiEvents").checked;
           if ($("settings-msg")) {
             $("settings-msg").textContent = "Settings saved successfully!";
             setTimeout(() => ($("settings-msg").textContent = ""), 3000);

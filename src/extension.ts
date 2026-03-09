@@ -189,4 +189,7 @@ export function deactivate() {
 
     const globalSb = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
     if (globalSb) { globalSb.dispose(); }
+    
+    // Close database connection
+    void storageManager.dispose();
 }

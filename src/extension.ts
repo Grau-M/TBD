@@ -182,7 +182,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Command: Test Database Connection — shows a detailed popup with connection status
     const testDbCommand = vscode.commands.registerCommand('tbd-logger.testDbConnection', async () => {
-        const { getPool, isConnected } = await import('./db');
+        const { getPool, isConnected } = await import('./db.js');
         const server = process.env.AZURE_SQL_SERVER || '(not set)';
         const database = process.env.AZURE_SQL_DATABASE || '(not set)';
         const user = process.env.AZURE_SQL_USER || '(not set)';
@@ -190,7 +190,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (isConnected()) {
             // Already connected — run a live query to confirm
             try {
-                const { executeQuery } = await import('./db');
+                const { executeQuery } = await import('./db.js');
                 const result = await executeQuery('SELECT COUNT(*) as cnt FROM Users');
                 vscode.window.showInformationMessage(
                     `✅ Database ONLINE\nServer: ${server}\nDB: ${database}\nUser: ${user}\nUsers in DB: ${result.recordset[0].cnt}`

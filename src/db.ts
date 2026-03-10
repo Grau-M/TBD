@@ -6,9 +6,11 @@
 
 import * as sql from 'mssql';
 import * as dotenv from 'dotenv';
+import * as path from 'path';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from the extension root.
+// __dirname is dist/ when bundled, so go up one level to find .env
+dotenv.config({ path: path.resolve(__dirname, '..', '.env'), quiet: true });
 
 // Database configuration from environment variables
 const config: sql.config = {
@@ -68,6 +70,14 @@ export async function getPool(): Promise<sql.ConnectionPool> {
     } finally {
         isConnecting = false;
     }
+}
+
+/**
+ * Check if the database is currently connected
+ * @returns boolean True if pool is connected, false otherwise
+ */
+export function isConnected(): boolean {
+    return !!(pool && pool.connected);
 }
 
 /**

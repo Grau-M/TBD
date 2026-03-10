@@ -3,7 +3,6 @@
 // persistent storage via the StorageManager. Ensures only one concurrent
 // flush runs and restores the buffer on error.
 import { state, storageManager, CONSTANTS } from './state';
-import { StorageManager } from './storageManager';
 
 // Function: flushBuffer
 // Purpose: Coordinate a single flush of the in-memory `state.sessionBuffer`

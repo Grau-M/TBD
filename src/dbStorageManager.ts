@@ -4,16 +4,24 @@
 // the same API interface as the original StorageManager for compatibility.
 
 import * as vscode from 'vscode';
-import * as crypto from 'crypto';
 import { getSessionInfo } from './sessionInfo';
 import { formatTimestamp } from './utils';
-import { executeQuery, getPool, closePool } from './db';
+import { executeQuery, getPool, closePool, isConnected } from './db';
 import type { StandardEvent } from './types';
 
 // SECURITY CONFIGURATION
 const SECRET_PASSPHRASE = 'password';
-const SALT = 'salty_buffer_tbd';
-const KEY = crypto.scryptSync(SECRET_PASSPHRASE, SALT, 32);
+
+interface QueuedBatch {
+    version: 1;
+    queuedAt: string;
+    session: {
+        sessionId: number | null;
+        user: string;
+        project: string;
+    };
+    events: StandardEvent[];
+}
 
 interface SessionData {
     sessionHeader: {
@@ -33,35 +41,88 @@ interface SessionData {
 export class DbStorageManager {
     private context!: vscode.ExtensionContext;
     private initialized = false;
+    private isConnectionInProgress = false;
+    private sessionInitPromise: Promise<void> | null = null;
     private currentSessionId: number | null = null;
     private currentUserId: number | null = null;
     private currentProjectId: number | null = null;
+    private currentUserName = '';
+    private currentProjectName = '';
+    private offlineQueueDir: vscode.Uri | null = null;
+    private syncTimer: NodeJS.Timeout | null = null;
+    private isSyncing = false;
 
     async init(context: vscode.ExtensionContext): Promise<void> {
         this.context = context;
-        
-        try {
-            // Initialize database connection
-            await getPool();
-            console.log('[TBD Logger DB] Database connection initialized');
 
-            // Get session info
-            const info = getSessionInfo();
-            
-            // Ensure user exists
-            this.currentUserId = await this.ensureUser(info.user);
-            
-            // Ensure project exists
-            this.currentProjectId = await this.ensureProject(info.project, info.user);
-            
-            // Create new session
-            this.currentSessionId = await this.createSession(info);
-            
-            this.initialized = true;
-            console.log(`[TBD Logger DB] Session initialized: User=${this.currentUserId}, Project=${this.currentProjectId}, Session=${this.currentSessionId}`);
+        const info = getSessionInfo();
+        this.currentUserName = info.user;
+        this.currentProjectName = info.project;
+
+        this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
+        await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
+
+        // Start connection in the background (don't await - let it connect while extension operates)
+        void this.initializeOnlineSessionInBackground();
+
+        this.syncTimer = setInterval(() => {
+            void this.syncOfflineQueue();
+        }, 30000);
+        context.subscriptions.push({
+            dispose: () => {
+                if (this.syncTimer) {
+                    clearInterval(this.syncTimer);
+                    this.syncTimer = null;
+                }
+            }
+        });
+
+        this.initialized = true;
+        void this.syncOfflineQueue();
+    }
+
+    /**
+     * Initialize database connection in the background without blocking
+     * Allows the extension to load while connection is being established
+     */
+    private async initializeOnlineSessionInBackground(): Promise<void> {
+        if (this.isConnectionInProgress) {
+            return; // Already connecting
+        }
+
+        try {
+            console.log('[TBD Logger DB] Starting background database connection...');
+            await this.initializeOnlineSession(this.currentUserName, this.currentProjectName);
+            console.log('[TBD Logger DB] Database connection established successfully');
         } catch (err) {
-            console.error('[TBD Logger DB] Failed to initialize database storage:', err);
-            throw err;
+            console.warn('[TBD Logger DB] Operating in offline mode. Events will be queued locally.', err);
+        }
+    }
+
+    private async initializeOnlineSession(username: string, projectName: string): Promise<void> {
+        if (this.currentSessionId && this.currentUserId && this.currentProjectId) {
+            return;
+        }
+
+        if (this.sessionInitPromise) {
+            await this.sessionInitPromise;
+            return;
+        }
+
+        this.isConnectionInProgress = true;
+        this.sessionInitPromise = (async () => {
+            await getPool();
+            this.currentUserId = await this.ensureUser(username);
+            this.currentProjectId = await this.ensureProject(projectName, username);
+            this.currentSessionId = await this.createSession(username, projectName);
+            console.log(`[TBD Logger DB] Session initialized: User=${this.currentUserId}, Project=${this.currentProjectId}, Session=${this.currentSessionId}`);
+        })();
+
+        try {
+            await this.sessionInitPromise;
+        } finally {
+            this.sessionInitPromise = null;
+            this.isConnectionInProgress = false;
         }
     }
 
@@ -100,26 +161,42 @@ export class DbStorageManager {
      */
     private async ensureProject(projectName: string, username: string): Promise<number> {
         try {
+            const workspacePath = projectName;
+
             // Check if project exists
             const result = await executeQuery(
-                `SELECT ProjectId FROM Projects WHERE Name = @name`,
-                { name: projectName }
+                `SELECT Id FROM Projects WHERE Name = @name AND WorkspacePath = @workspacePath`,
+                { name: projectName, workspacePath }
             );
 
             if (result.recordset.length > 0) {
-                return result.recordset[0].ProjectId;
+                return result.recordset[0].Id;
             }
 
-            // Create new project (using project name as path for now)
+            // Create new project (workspace path defaults to project name)
             const insertResult = await executeQuery(
-                `INSERT INTO Projects (Name, Path, CreatedBy) 
-                 OUTPUT INSERTED.ProjectId
-                 VALUES (@name, @path, @createdBy)`,
-                { name: projectName, path: projectName, createdBy: username }
+                `INSERT INTO Projects (Name, WorkspacePath)
+                 OUTPUT INSERTED.Id
+                 VALUES (@name, @workspacePath)`,
+                { name: projectName, workspacePath }
             );
 
-            return insertResult.recordset[0].ProjectId;
+            return insertResult.recordset[0].Id;
         } catch (err) {
+            // Another initialization path may have inserted the same project first.
+            // On duplicate key, re-read and return the existing project id.
+            const sqlErr = err as { number?: number; originalError?: { number?: number } };
+            const errNo = sqlErr.number ?? sqlErr.originalError?.number;
+            if (errNo === 2627 || errNo === 2601) {
+                const existing = await executeQuery(
+                    `SELECT Id FROM Projects WHERE Name = @name AND WorkspacePath = @workspacePath`,
+                    { name: projectName, workspacePath: projectName }
+                );
+                if (existing.recordset.length > 0) {
+                    return existing.recordset[0].Id;
+                }
+            }
+
             console.error('[TBD Logger DB] Error ensuring project:', err);
             throw err;
         }
@@ -128,7 +205,7 @@ export class DbStorageManager {
     /**
      * Create a new session in the database
      */
-    private async createSession(info: any): Promise<number> {
+    private async createSession(username: string, projectName: string): Promise<number> {
         try {
             if (!this.currentUserId || !this.currentProjectId) {
                 throw new Error('User or Project not initialized');
@@ -146,40 +223,68 @@ export class DbStorageManager {
             }
 
             const startTime = new Date();
-            const metadata = JSON.stringify({
-                vscodeVersion: vscode.version,
-                startTimestamp: formatTimestamp(startTime.getTime()),
-                extensionVersion
-            });
+            const startTimestampText = formatTimestamp(startTime.getTime());
+            let sessionId: number | null = null;
 
-            // Create session - using UserId and ProjectId as per schema
-            const insertResult = await executeQuery(
-                `INSERT INTO Sessions (UserId, ProjectId, StartTime, Metadata, Status) 
-                 OUTPUT INSERTED.SessionId
-                 VALUES (@userId, @projectId, @startTime, @metadata, @status)`,
-                {
-                    userId: this.currentUserId,
-                    projectId: this.currentProjectId,
-                    startTime,
-                    metadata,
-                    status: 'active'
+            // Retry a few times in case another concurrent writer grabs the same session number.
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const sessionNumberResult = await executeQuery(
+                    `SELECT ISNULL(MAX(SessionNumber), 0) + 1 AS NextSessionNumber
+                     FROM Sessions
+                     WHERE UserId = @userId AND ProjectId = @projectId`,
+                    { userId: this.currentUserId, projectId: this.currentProjectId }
+                );
+                const sessionNumber = sessionNumberResult.recordset[0].NextSessionNumber;
+
+                try {
+                    const insertResult = await executeQuery(
+                        `INSERT INTO Sessions (
+                            UserId, ProjectId, SessionNumber, StartedAt,
+                            VscodeVersion, ExtensionVersion, RawStartTimestampText, RecreationNotice
+                         )
+                         OUTPUT INSERTED.Id
+                         VALUES (
+                            @userId, @projectId, @sessionNumber, @startedAt,
+                            @vscodeVersion, @extensionVersion, @rawStartTimestampText, @recreationNotice
+                         )`,
+                        {
+                            userId: this.currentUserId,
+                            projectId: this.currentProjectId,
+                            sessionNumber,
+                            startedAt: startTime,
+                            vscodeVersion: vscode.version,
+                            extensionVersion,
+                            rawStartTimestampText: startTimestampText,
+                            recreationNotice: null
+                        }
+                    );
+                    sessionId = insertResult.recordset[0].Id;
+                    break;
+                } catch (insertErr) {
+                    const sqlErr = insertErr as { number?: number; originalError?: { number?: number } };
+                    const errNo = sqlErr.number ?? sqlErr.originalError?.number;
+                    if (errNo === 2627 || errNo === 2601) {
+                        continue;
+                    }
+                    throw insertErr;
                 }
-            );
+            }
 
-            const sessionId = insertResult.recordset[0].SessionId;
+            if (!sessionId) {
+                throw new Error('Failed to allocate a unique session number after retries');
+            }
 
             // Create corresponding SessionLogFiles entry for compatibility
-            const formattedStart = formatTimestamp(startTime.getTime());
-            const filename = `${info.user}-${info.project}-Session${sessionId}-integrity.log`;
+            const filename = `${username}-${projectName}-Session${sessionId}-integrity.log`;
             
             await executeQuery(
-                `INSERT INTO SessionLogFiles (SessionId, FileName, Format, CreatedAt) 
-                 VALUES (@sessionId, @fileName, @format, @createdAt)`,
+                `INSERT INTO SessionLogFiles (SessionId, OriginalFilename, StorageUri, IsActive)
+                 VALUES (@sessionId, @originalFilename, @storageUri, @isActive)`,
                 {
                     sessionId,
-                    fileName: filename,
-                    format: 'json',
-                    createdAt: startTime
+                    originalFilename: filename,
+                    storageUri: null,
+                    isActive: true
                 }
             );
 
@@ -195,8 +300,10 @@ export class DbStorageManager {
      */
     async flush(newEvents: StandardEvent[]): Promise<void> {
         if (!this.initialized || !this.currentSessionId) {
-            console.warn('[TBD Logger DB] Flush called but not initialized');
-            return;
+            if (!this.initialized) {
+                console.warn('[TBD Logger DB] Flush called but not initialized');
+                return;
+            }
         }
 
         if (newEvents.length === 0) {
@@ -204,67 +311,148 @@ export class DbStorageManager {
         }
 
         try {
-            const pool = await getPool();
-            const transaction = pool.transaction();
-            await transaction.begin();
+            if (!this.currentSessionId) {
+                await this.initializeOnlineSession(this.currentUserName, this.currentProjectName);
+            }
+            if (!this.currentSessionId) {
+                throw new Error('No active database session');
+            }
 
-            try {
-                for (const event of newEvents) {
-                    const request = transaction.request();
-                    
-                    // Parse timestamp - handle the formatTimestamp output
-                    let eventTime: Date;
-                    try {
-                        eventTime = new Date(event.time);
-                        if (isNaN(eventTime.getTime())) {
-                            eventTime = new Date();
-                        }
-                    } catch {
+            await this.insertEventsForSession(this.currentSessionId, newEvents);
+            console.log(`[TBD Logger DB] Flushed ${newEvents.length} events to database`);
+            void this.syncOfflineQueue();
+        } catch (err) {
+            console.warn('[TBD Logger DB] Database write failed, queueing events for offline sync:', err);
+            await this.enqueueOfflineBatch({
+                version: 1,
+                queuedAt: new Date().toISOString(),
+                session: {
+                    sessionId: this.currentSessionId,
+                    user: this.currentUserName,
+                    project: this.currentProjectName
+                },
+                events: newEvents
+            });
+        }
+    }
+
+    private async insertEventsForSession(sessionId: number, events: StandardEvent[]): Promise<void> {
+        const pool = await getPool();
+        const transaction = pool.transaction();
+        await transaction.begin();
+
+        try {
+            for (const event of events) {
+                const request = transaction.request();
+
+                let eventTime: Date;
+                try {
+                    eventTime = new Date(event.time);
+                    if (isNaN(eventTime.getTime())) {
                         eventTime = new Date();
                     }
-
-                    request.input('sessionId', this.currentSessionId);
-                    request.input('sessionTime', eventTime);
-                    request.input('eventType', event.eventType);
-                    request.input('flightTime', event.flightTime || '0');
-                    request.input('fileEdit', event.fileEdit || '');
-                    request.input('fileView', event.fileView || '');
-                    request.input('possibleAiDetection', event.possibleAiDetection || null);
-                    request.input('fileFocusCount', event.fileFocusCount || null);
-                    request.input('pasteCharCount', event.pasteCharCount || null);
-
-                    // Store any additional fields as JSON
-                    const additionalData: any = {};
-                    for (const key in event) {
-                        if (!['time', 'flightTime', 'eventType', 'fileEdit', 'fileView', 
-                              'possibleAiDetection', 'fileFocusCount', 'pasteCharCount'].includes(key)) {
-                            additionalData[key] = (event as any)[key];
-                        }
-                    }
-                    const additionalDataJson = Object.keys(additionalData).length > 0 
-                        ? JSON.stringify(additionalData) 
-                        : null;
-                    request.input('additionalData', additionalDataJson);
-
-                    await request.query(`
-                        INSERT INTO SessionEvents 
-                        (SessionId, SessionTime, EventType, FlightTime, FileEdit, FileView, 
-                         PossibleAiDetection, FileFocusCount, PasteCharCount, AdditionalData)
-                        VALUES 
-                        (@sessionId, @sessionTime, @eventType, @flightTime, @fileEdit, @fileView,
-                         @possibleAiDetection, @fileFocusCount, @pasteCharCount, @additionalData)
-                    `);
+                } catch {
+                    eventTime = new Date();
                 }
 
-                await transaction.commit();
-                console.log(`[TBD Logger DB] Flushed ${newEvents.length} events to database`);
-            } catch (err) {
-                await transaction.rollback();
-                throw err;
+                request.input('sessionId', sessionId);
+                request.input('occurredAt', eventTime);
+                request.input('rawTimeText', event.time || formatTimestamp(Date.now()));
+                request.input('eventType', event.eventType);
+                request.input('flightTimeMs', parseInt(event.flightTime || '0', 10) || 0);
+                request.input('fileEditPath', event.fileEdit || '');
+                request.input('fileViewPath', event.fileView || '');
+                request.input('fileFocusDurationText', event.fileFocusCount || null);
+                request.input('possibleAiDetection', event.possibleAiDetection || null);
+                request.input('pasteCharCount', event.pasteCharCount || null);
+
+                const additionalData: Record<string, unknown> = {};
+                for (const key in event) {
+                    if (!['time', 'flightTime', 'eventType', 'fileEdit', 'fileView', 'possibleAiDetection', 'fileFocusCount', 'pasteCharCount'].includes(key)) {
+                        additionalData[key] = (event as unknown as Record<string, unknown>)[key];
+                    }
+                }
+                // MetadataJson is non-nullable in the current schema.
+                const additionalDataJson = Object.keys(additionalData).length > 0 ? JSON.stringify(additionalData) : '{}';
+                request.input('metadataJson', additionalDataJson);
+
+                await request.query(`
+                    INSERT INTO SessionEvents
+                    (SessionId, OccurredAt, RawTimeText, FlightTimeMs, EventType,
+                     FileEditPath, FileViewPath, FileFocusDurationText,
+                     PossibleAiDetection, PasteCharCount, MetadataJson)
+                    VALUES
+                    (@sessionId, @occurredAt, @rawTimeText, @flightTimeMs, @eventType,
+                     @fileEditPath, @fileViewPath, @fileFocusDurationText,
+                     @possibleAiDetection, @pasteCharCount, @metadataJson)
+                `);
+            }
+
+            await transaction.commit();
+        } catch (err) {
+            await transaction.rollback();
+            throw err;
+        }
+    }
+
+    private async enqueueOfflineBatch(batch: QueuedBatch): Promise<void> {
+        if (!this.offlineQueueDir) {
+            return;
+        }
+        const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
+        const uri = vscode.Uri.joinPath(this.offlineQueueDir, name);
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(batch), 'utf8'));
+    }
+
+    private async syncOfflineQueue(): Promise<void> {
+        if (this.isSyncing || !this.offlineQueueDir) {
+            return;
+        }
+
+        this.isSyncing = true;
+        try {
+            const files = await vscode.workspace.fs.readDirectory(this.offlineQueueDir);
+            const queueFiles = files
+                .map(([name]) => name)
+                .filter(name => name.endsWith('.json'))
+                .sort();
+
+            if (queueFiles.length === 0) {
+                return;
+            }
+
+            await getPool();
+
+            for (const fileName of queueFiles) {
+                const fileUri = vscode.Uri.joinPath(this.offlineQueueDir, fileName);
+                try {
+                    const raw = await vscode.workspace.fs.readFile(fileUri);
+                    const batch = JSON.parse(Buffer.from(raw).toString('utf8')) as QueuedBatch;
+                    if (!batch.events || batch.events.length === 0) {
+                        await vscode.workspace.fs.delete(fileUri);
+                        continue;
+                    }
+
+                    let targetSessionId = batch.session.sessionId;
+                    if (!targetSessionId) {
+                        const userId = await this.ensureUser(batch.session.user);
+                        const projectId = await this.ensureProject(batch.session.project, batch.session.user);
+                        this.currentUserId = userId;
+                        this.currentProjectId = projectId;
+                        targetSessionId = await this.createSession(batch.session.user, batch.session.project);
+                    }
+
+                    await this.insertEventsForSession(targetSessionId, batch.events);
+                    await vscode.workspace.fs.delete(fileUri);
+                } catch (err) {
+                    console.warn('[TBD Logger DB] Offline sync paused due to error:', err);
+                    break;
+                }
             }
         } catch (err) {
-            console.error('[TBD Logger DB] Error flushing events:', err);
-            // Don't throw - match original behavior of logging but not throwing
+            // Database likely still unavailable, keep queue for next sync attempt.
+        } finally {
+            this.isSyncing = false;
         }
     }
 
@@ -275,16 +463,16 @@ export class DbStorageManager {
         try {
             const result = await executeQuery(`
                 SELECT 
-                    s.SessionId,
-                    slf.FileName,
+                    s.Id AS SessionId,
+                    slf.OriginalFilename AS FileName,
                     u.Username,
                     p.Name as ProjectName,
-                    s.StartTime
+                    s.StartedAt
                 FROM Sessions s
-                INNER JOIN SessionLogFiles slf ON s.SessionId = slf.SessionId
-                INNER JOIN Users u ON s.UserId = u.UserId
-                INNER JOIN Projects p ON s.ProjectId = p.ProjectId
-                ORDER BY s.SessionId ASC
+                INNER JOIN SessionLogFiles slf ON s.Id = slf.SessionId
+                INNER JOIN Users u ON s.UserId = u.Id
+                INNER JOIN Projects p ON s.ProjectId = p.Id
+                ORDER BY s.Id ASC
             `);
 
             return result.recordset.map((row: any) => ({
@@ -313,15 +501,17 @@ export class DbStorageManager {
             // Get session header
             const headerResult = await executeQuery(`
                 SELECT 
-                    s.SessionId,
-                    s.StartTime,
-                    s.Metadata,
+                    s.Id AS SessionId,
+                    s.StartedAt,
+                    s.VscodeVersion,
+                    s.ExtensionVersion,
+                    s.RawStartTimestampText,
                     u.Username,
                     p.Name as ProjectName
                 FROM Sessions s
-                INNER JOIN Users u ON s.UserId = u.UserId
-                INNER JOIN Projects p ON s.ProjectId = p.ProjectId
-                WHERE s.SessionId = @sessionId
+                INNER JOIN Users u ON s.UserId = u.Id
+                INNER JOIN Projects p ON s.ProjectId = p.Id
+                WHERE s.Id = @sessionId
             `, { sessionId });
 
             if (headerResult.recordset.length === 0) {
@@ -329,51 +519,51 @@ export class DbStorageManager {
             }
 
             const session = headerResult.recordset[0];
-            let metadata: any = {};
-            try {
-                metadata = JSON.parse(session.Metadata || '{}');
-            } catch {
-                metadata = {};
-            }
+            const metadata: any = {
+                vscodeVersion: session.VscodeVersion || '',
+                extensionVersion: session.ExtensionVersion || '',
+                startTimestamp: session.RawStartTimestampText || ''
+            };
 
             // Get all events for this session
             const eventsResult = await executeQuery(`
                 SELECT 
-                    SessionTime,
+                    OccurredAt,
+                    RawTimeText,
                     EventType,
-                    FlightTime,
-                    FileEdit,
-                    FileView,
+                    FlightTimeMs,
+                    FileEditPath,
+                    FileViewPath,
                     PossibleAiDetection,
-                    FileFocusCount,
+                    FileFocusDurationText,
                     PasteCharCount,
-                    AdditionalData
+                    MetadataJson
                 FROM SessionEvents
                 WHERE SessionId = @sessionId
-                ORDER BY EventId ASC
+                ORDER BY Id ASC
             `, { sessionId });
 
             const events = eventsResult.recordset.map((row: any) => {
                 const event: any = {
-                    time: formatTimestamp(new Date(row.SessionTime).getTime()),
-                    flightTime: row.FlightTime || '0',
+                    time: row.RawTimeText || formatTimestamp(new Date(row.OccurredAt).getTime()),
+                    flightTime: String(row.FlightTimeMs || 0),
                     eventType: row.EventType,
-                    fileEdit: row.FileEdit || '',
-                    fileView: row.FileView || ''
+                    fileEdit: row.FileEditPath || '',
+                    fileView: row.FileViewPath || ''
                 };
 
                 if (row.PossibleAiDetection) {
                     event.possibleAiDetection = row.PossibleAiDetection;
                 }
-                if (row.FileFocusCount) {
-                    event.fileFocusCount = row.FileFocusCount;
+                if (row.FileFocusDurationText) {
+                    event.fileFocusCount = row.FileFocusDurationText;
                 }
                 if (row.PasteCharCount !== null) {
                     event.pasteCharCount = row.PasteCharCount;
                 }
-                if (row.AdditionalData) {
+                if (row.MetadataJson) {
                     try {
-                        const additional = JSON.parse(row.AdditionalData);
+                        const additional = JSON.parse(row.MetadataJson);
                         Object.assign(event, additional);
                     } catch {
                         // ignore invalid JSON
@@ -388,7 +578,7 @@ export class DbStorageManager {
                     sessionNumber: sessionId,
                     startedBy: session.Username,
                     project: session.ProjectName,
-                    startTime: formatTimestamp(new Date(session.StartTime).getTime()),
+                    startTime: formatTimestamp(new Date(session.StartedAt).getTime()),
                     metadata
                 },
                 events
@@ -443,12 +633,12 @@ export class DbStorageManager {
                         }
 
                         request.input('sessionId', sessionId);
-                        request.input('noteTime', noteTime);
+                        request.input('eventTimestampText', note.timestamp || formatTimestamp(noteTime.getTime()));
                         request.input('noteText', note.text);
 
                         await request.query(`
-                            INSERT INTO InstructorNotes (SessionId, NoteTime, NoteText)
-                            VALUES (@sessionId, @noteTime, @noteText)
+                            INSERT INTO InstructorNotes (SessionId, EventTimestampText, NoteText)
+                            VALUES (@sessionId, @eventTimestampText, @noteText)
                         `);
                     }
 
@@ -478,14 +668,14 @@ export class DbStorageManager {
             const sessionId = this.extractSessionIdFromFilename(filename);
 
             const result = await executeQuery(`
-                SELECT NoteTime, NoteText
+                SELECT EventTimestampText, NoteText
                 FROM InstructorNotes
                 WHERE SessionId = @sessionId
-                ORDER BY NoteId ASC
+                ORDER BY Id ASC
             `, { sessionId });
 
             return result.recordset.map((row: any) => ({
-                timestamp: formatTimestamp(new Date(row.NoteTime).getTime()),
+                timestamp: row.EventTimestampText || '',
                 text: row.NoteText
             }));
         } catch (err) {
@@ -535,7 +725,7 @@ export class DbStorageManager {
                     ii.Details,
                     p.Name as ProjectName
                 FROM IntegrityIncidents ii
-                INNER JOIN Projects p ON ii.ProjectId = p.ProjectId
+                INNER JOIN Projects p ON ii.ProjectId = p.Id
                 ORDER BY ii.IncidentTime DESC
             `);
 
@@ -557,6 +747,10 @@ export class DbStorageManager {
      * Cleanup on extension deactivation
      */
     async dispose(): Promise<void> {
+        if (this.syncTimer) {
+            clearInterval(this.syncTimer);
+            this.syncTimer = null;
+        }
         // Close database connection
         await closePool();
         this.initialized = false;
@@ -580,5 +774,19 @@ export class DbStorageManager {
             return null;
         }
         return vscode.Uri.parse(`tbd-db://session/${this.currentSessionId}`);
+    }
+
+    /**
+     * Check if database connection is currently active
+     */
+    isOnline(): boolean {
+        return isConnected();
+    }
+
+    /**
+     * Check if database connection is currently being established
+     */
+    isConnecting(): boolean {
+        return this.isConnectionInProgress;
     }
 }

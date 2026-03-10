@@ -26,6 +26,15 @@ export function createStatusBar(context: vscode.ExtensionContext, commandId = 't
     item.show();
     context.subscriptions.push(item);
 
+    // Create connection status indicator (database online/offline)
+    const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 9999);
+    statusItem.text = '$(database) Offline';
+    statusItem.tooltip = 'Database connection status. Click to refresh';
+    statusItem.command = 'tbd-logger.checkDbStatus';
+    statusItem.show();
+    context.subscriptions.push(statusItem);
+    (global as any).dbStatusBarItem = statusItem;
+
     // Optional small secondary item to open the Teacher Dashboard (click the lock to open teacher dashboard)
     // The `hiddenCommandId` should point to the command that opens the Teacher view/webview.
     if (hiddenCommandId) {

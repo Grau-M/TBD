@@ -19,6 +19,24 @@ import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
 
 import * as path from 'path';
+
+// Function to update database status bar item
+async function updateDbStatusBar(): Promise<void> {
+    const statusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
+    if (!statusItem) return;
+
+    if (storageManager.isConnecting()) {
+        statusItem.text = '$(loading~spin) Connecting...';
+        statusItem.tooltip = 'Connecting to database...';
+    } else if (storageManager.isOnline()) {
+        statusItem.text = '$(database) Online';
+        statusItem.tooltip = 'Database connection is active';
+    } else {
+        statusItem.text = '$(database) Offline';
+        statusItem.tooltip = 'Database offline. Events queued for sync when connection restored.';
+    }
+}
+
 // define api for testing purposes
 export interface ExtensionApi {
     state: typeof state;
@@ -156,9 +174,67 @@ export async function activate(context: vscode.ExtensionContext) {
     const saveListener = createSaveListener();
     context.subscriptions.push(saveListener);
 
+    // Command to manually refresh database status
+    const checkDbStatusCommand = vscode.commands.registerCommand('tbd-logger.checkDbStatus', () => {
+        void updateDbStatusBar();
+    });
+    context.subscriptions.push(checkDbStatusCommand);
+
+    // Command: Test Database Connection — shows a detailed popup with connection status
+    const testDbCommand = vscode.commands.registerCommand('tbd-logger.testDbConnection', async () => {
+        const { getPool, isConnected } = await import('./db');
+        const server = process.env.AZURE_SQL_SERVER || '(not set)';
+        const database = process.env.AZURE_SQL_DATABASE || '(not set)';
+        const user = process.env.AZURE_SQL_USER || '(not set)';
+
+        if (isConnected()) {
+            // Already connected — run a live query to confirm
+            try {
+                const { executeQuery } = await import('./db');
+                const result = await executeQuery('SELECT COUNT(*) as cnt FROM Users');
+                vscode.window.showInformationMessage(
+                    `✅ Database ONLINE\nServer: ${server}\nDB: ${database}\nUser: ${user}\nUsers in DB: ${result.recordset[0].cnt}`
+                );
+            } catch (err: any) {
+                vscode.window.showWarningMessage(`Pool says connected but query failed: ${err.message}`);
+            }
+            return;
+        }
+
+        if (storageManager.isConnecting()) {
+            vscode.window.showInformationMessage(
+                `⏳ Still connecting to database...\nServer: ${server}\nDB: ${database}\nUser: ${user}\nPlease wait and try again in a moment.`
+            );
+            return;
+        }
+
+        // Not connected — try a fresh connection now
+        vscode.window.showInformationMessage(`🔄 Attempting connection to ${server}...`);
+        try {
+            await getPool();
+            vscode.window.showInformationMessage(`✅ Connection succeeded!\nServer: ${server}\nDB: ${database}\nUser: ${user}`);
+        } catch (err: any) {
+            vscode.window.showErrorMessage(
+                `❌ Connection failed!\nServer: ${server}\nDB: ${database}\nUser: ${user}\nError: ${err.message}`
+            );
+        }
+        void updateDbStatusBar();
+    });
+    context.subscriptions.push(testDbCommand);
+
     // Periodic flush timer
     const flushTimer = setInterval(() => void flushBuffer(), CONSTANTS.FLUSH_INTERVAL_MS);
     context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
+
+    // Periodic database status update (every 10 seconds)
+    const statusUpdateTimer = setInterval(() => {
+        void updateDbStatusBar();
+    }, 10000);
+    context.subscriptions.push({ dispose: () => clearInterval(statusUpdateTimer) });
+
+    // Initial status update
+    void updateDbStatusBar();
+
     //Return the internals so the Test Suite can see them
     return { state, storageManager };
 }
@@ -192,4 +268,10 @@ export function deactivate() {
     
     // Close database connection
     void storageManager.dispose();
+    
+    // Clear status bar items
+    const dbStatusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
+    if (dbStatusItem) {
+        dbStatusItem.dispose();
+    }
 }

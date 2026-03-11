@@ -58,7 +58,7 @@ suite('Code Coverage: UI Components', () => {
             
             assert.ok(item, 'Should create status bar item');
             assert.ok(item.text.includes('TBD Logger'), 'Should set text');
-            assert.ok(item.command === 'tbd-logger.openLogs', 'Should set command');
+            assert.strictEqual(item.command, undefined, 'Primary timer should be display-only (no command)');
             
             disposables.push(item);
         });
@@ -82,7 +82,7 @@ suite('Code Coverage: UI Components', () => {
         });
 
         test('createStatusBar creates hidden item when hiddenCommandId provided', () => {
-            const item = createStatusBar(context, 'tbd-logger.openLogs', 'tbd-logger.openTeacherView');
+            const item = createStatusBar(context, 'tbd-logger.openTeacherView');
             
             assert.ok((global as any).hiddenStatusBarItem, 'Should create hidden status bar item');
             assert.ok(context.subscriptions.length >= 2, 'Should register both items');
@@ -95,7 +95,7 @@ suite('Code Coverage: UI Components', () => {
         });
 
         test('createStatusBar without hiddenCommandId does not create hidden item', () => {
-            const item = createStatusBar(context, 'tbd-logger.openLogs');
+            const item = createStatusBar(context);
             
             assert.strictEqual((global as any).hiddenStatusBarItem, undefined, 'Should not create hidden item');
             

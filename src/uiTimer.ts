@@ -24,7 +24,7 @@ export function startUiTimer(statusBarItem: vscode.StatusBarItem): vscode.Dispos
             const sessionDuration = now - state.sessionStartTime;
             statusBarItem.text = `$(circle-filled) REC ${formatDuration(sessionDuration)}`;
             statusBarItem.color = new vscode.ThemeColor('errorForeground');
-            statusBarItem.tooltip = "TBD Extension: Session Recording in Progress (Click for info)";
+            statusBarItem.tooltip = "TBD Extension: Session Recording in Progress.";
         }
     }, 1000);
 

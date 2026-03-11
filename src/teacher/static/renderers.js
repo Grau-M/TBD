@@ -881,27 +881,26 @@ window.TeacherUI = {
             filterCat = "flagged-fast";
           }
 
-          // NEW: Highlight AI events
           let isAiEvent = et.startsWith("ai-") || et === "ai";
           if (isAiEvent) {
             if (currentSettings.flagAiEvents !== false) {
               filterCat = "flagged-ai";
-              flagReason += ` <span style="color:#f97316; font-weight:bold;">(AI Detected)</span>`;
             }
+            flagReason += ` <span style="background-color:#ea580c; color:white; padding:2px 6px; border-radius:4px; font-size:0.8rem; margin-left:8px; font-weight:bold;">🤖 AI Detected</span>`;
           }
 
           row.className = className;
           row.dataset.filterCategory = filterCat;
           row.dataset.eventTime = e.time || "";
 
-          // NEW: Apply the orange border and background
+          // Forced css to ensure dark mode doesn't swallow the styles
           if (isAiEvent) {
-            row.style.borderLeft = "4px solid #f97316";
-            row.style.backgroundColor = "rgba(249, 115, 22, 0.08)"; // light orange tint
+            row.style.cssText +=
+              "border-left: 4px solid #ea580c !important; background-color: rgba(234, 88, 12, 0.15) !important;";
           }
-          // === END OF REPLACEMENT ===
 
-          let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="display:flex; gap:8px; align-items:center;"><strong>${e.eventType || "Unknown"}</strong> ${flagReason}<button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes"><span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span></button></div><span class="meta">${e.time || ""}</span></div>`;
+          let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="display:flex; gap:8px; align-items:center;"><strong>${e.eventType || "Unknown"}</strong>${flagReason}<button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes"><span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span></button></div><span class="meta">${e.time || ""}</span></div>`;
+
           Object.keys(e).forEach((k) => {
             if (["eventType", "time"].includes(k)) {
               return;

@@ -5,7 +5,7 @@
 // and periodic background flush. It also exposes a minimal API for
 // tests and marks clean shutdown on deactivate.
 import * as vscode from 'vscode';
-import { printSessionInfo } from './sessionInfo';
+import { getSessionInfo, printSessionInfo } from './sessionInfo';
 import { createStatusBar } from './statusBar';
 import { createEditListener } from './listeners/editListener';
 import { createFocusListener } from './listeners/focusListener';
@@ -17,6 +17,7 @@ import { storageManager, state, CONSTANTS } from './state';
 import { isIgnoredPath, formatTimestamp } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
+import { clearWorkspaceAuthSession, getWorkspaceAuthSession, initializeWorkspaceAccess, manageClassActivities, requireRoleAccess } from './auth';
 
 import * as path from 'path';
 
@@ -37,6 +38,53 @@ async function updateDbStatusBar(): Promise<void> {
     }
 }
 
+function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
+    const session = getWorkspaceAuthSession(context);
+    const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin'));
+    const hiddenItem = (global as any).hiddenStatusBarItem as vscode.StatusBarItem | undefined;
+
+    if (shouldShowLock) {
+        if (!hiddenItem) {
+            const newHiddenItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10001);
+            newHiddenItem.text = '$(lock)';
+            newHiddenItem.tooltip = 'Show Teacher Dashboard';
+            newHiddenItem.command = 'tbd-logger.openTeacherView';
+            newHiddenItem.show();
+            context.subscriptions.push(newHiddenItem);
+            (global as any).hiddenStatusBarItem = newHiddenItem;
+        }
+        return;
+    }
+
+    if (hiddenItem) {
+        hiddenItem.dispose();
+        delete (global as any).hiddenStatusBarItem;
+    }
+}
+
+function updateAuthStatusBar(context: vscode.ExtensionContext): void {
+    const authItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
+    if (!authItem) {
+        return;
+    }
+
+    const session = getWorkspaceAuthSession(context);
+    if (session?.authenticated) {
+        authItem.text = `$(account) ${session.role}`;
+        authItem.tooltip = `Logged in as ${session.role}. Click to view account details.`;
+        authItem.backgroundColor = undefined;
+        authItem.color = new vscode.ThemeColor('terminal.ansiBrightBlue');
+        syncTeacherDashboardLock(context);
+        return;
+    }
+
+    authItem.text = '$(account) Not Logged In';
+    authItem.tooltip = 'Click to open Login/Register';
+    authItem.backgroundColor = undefined;
+    authItem.color = undefined;
+    syncTeacherDashboardLock(context);
+}
+
 // define api for testing purposes
 export interface ExtensionApi {
     state: typeof state;
@@ -54,6 +102,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Initialize storage manager (creates/ensures encrypted file)
     await storageManager.init(context);
+
+    // Unified workspace authentication + role assignment + student activity mapping.
+    await initializeWorkspaceAccess(context, storageManager);
 
     // NEW FEATURE: Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
@@ -79,6 +130,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // UPDATED: Open Logs Command with Password Prompt
     const openLogs = async () => {
+        const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Log access');
+        if (!allowed) {
+            return;
+        }
+
         try {
             // Determine if the active editor is focused on an integrity log
             const active = vscode.window.activeTextEditor;
@@ -135,6 +191,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Command: Show Hidden Deletions — open the single deletion activity file after password
     const showHidden = async () => {
+        const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Deletion activity log');
+        if (!allowed) {
+            return;
+        }
+
         try {
             const password = await vscode.window.showInputBox({
                 prompt: 'Enter Administrator Password to view deletion activity log',
@@ -153,13 +214,69 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(showHiddenCommand);
 
     // Command: Open Teacher Dashboard (Webview)
-    const openTeacherCommand = vscode.commands.registerCommand('tbd-logger.openTeacherView', () => openTeacherView(context));
+    const openTeacherCommand = vscode.commands.registerCommand('tbd-logger.openTeacherView', async () => {
+        const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Teacher Dashboard');
+        if (!allowed) {
+            return;
+        }
+        await openTeacherView(context);
+    });
     context.subscriptions.push(openTeacherCommand);
 
-    // Create status bar and start UI timer (REC/AWAY timer is display-only; lock icon still opens Teacher Dashboard)
-    const statusBarItem = createStatusBar(context, 'tbd-logger.openTeacherView');
+    // Command: Teacher/Admin class-activity management for student workspace mapping.
+    const manageActivitiesCommand = vscode.commands.registerCommand('tbd-logger.manageClassActivities', async () => {
+        await manageClassActivities(context, storageManager);
+    });
+    context.subscriptions.push(manageActivitiesCommand);
+
+    // Command: Re-open login/register flow from status bar.
+    const authSignInCommand = vscode.commands.registerCommand('tbd-logger.authSignIn', async () => {
+        const session = getWorkspaceAuthSession(context);
+        if (session?.authenticated) {
+            const ideIdentity = getSessionInfo().user;
+            const workspaceName = vscode.workspace.name || 'Unknown Workspace';
+
+            vscode.window.showInformationMessage(
+                `Name: ${session.displayName}\nIDE User: ${ideIdentity}\nEmail: ${session.email}\nWorkspace: ${workspaceName}\nRole: ${session.role}`,
+                { modal: true }
+            );
+            updateAuthStatusBar(context);
+            return;
+        }
+
+        await initializeWorkspaceAccess(context, storageManager, true);
+        updateAuthStatusBar(context);
+    });
+    context.subscriptions.push(authSignInCommand);
+
+    // Command: Sign out (triggered via right-click context menu on the auth status bar item).
+    const signOutCommand = vscode.commands.registerCommand('tbd-logger.signOut', async () => {
+        const session = getWorkspaceAuthSession(context);
+        if (!session?.authenticated) {
+            vscode.window.showInformationMessage('You are not currently logged in.');
+            return;
+        }
+
+        const answer = await vscode.window.showWarningMessage(
+            `Are you sure you want to log out? (${session.displayName} — ${session.role})`,
+            { modal: true },
+            'Log Out'
+        );
+
+        if (answer === 'Log Out') {
+            await clearWorkspaceAuthSession(context);
+            updateAuthStatusBar(context);
+            vscode.window.showInformationMessage('You have been logged out.');
+        }
+    });
+    context.subscriptions.push(signOutCommand);
+
+    // Create status bar and start UI timer (REC/AWAY timer is display-only).
+    // Teacher dashboard lock is role-gated and managed dynamically after auth state is known.
+    const statusBarItem = createStatusBar(context);
     const uiTimerDisposable = startUiTimer(statusBarItem);
     context.subscriptions.push(uiTimerDisposable);
+    updateAuthStatusBar(context);
 
     // Register listeners
     const editListener = createEditListener();
@@ -234,6 +351,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Initial status update
     void updateDbStatusBar();
+    updateAuthStatusBar(context);
 
     //Return the internals so the Test Suite can see them
     return { state, storageManager };
@@ -273,5 +391,10 @@ export function deactivate() {
     const dbStatusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
     if (dbStatusItem) {
         dbStatusItem.dispose();
+    }
+
+    const authStatusItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
+    if (authStatusItem) {
+        authStatusItem.dispose();
     }
 }

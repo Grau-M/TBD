@@ -38,6 +38,38 @@ interface SessionData {
     events: StandardEvent[];
 }
 
+export type UserRole = 'Student' | 'Teacher' | 'Admin';
+
+export interface AuthIdentityInput {
+    provider: string;
+    subjectId: string;
+    email: string;
+    displayName: string;
+}
+
+export interface UpsertAuthUserResult {
+    authUserId: number;
+    role: UserRole;
+    isNew: boolean;
+}
+
+export interface ClassActivityRecord {
+    id: number;
+    name: string;
+    description: string;
+    teacherAuthUserId: number;
+    teacherDisplayName: string;
+}
+
+export interface WorkspaceActivityLinkInput {
+    studentAuthUserId: number;
+    teacherAuthUserId: number;
+    activityId: number;
+    workspaceName: string;
+    workspaceRootPath: string;
+    workspaceFoldersJson: string;
+}
+
 export class DbStorageManager {
     private context!: vscode.ExtensionContext;
     private initialized = false;
@@ -51,6 +83,7 @@ export class DbStorageManager {
     private offlineQueueDir: vscode.Uri | null = null;
     private syncTimer: NodeJS.Timeout | null = null;
     private isSyncing = false;
+    private authSchemaReady = false;
 
     async init(context: vscode.ExtensionContext): Promise<void> {
         this.context = context;
@@ -788,5 +821,227 @@ export class DbStorageManager {
      */
     isConnecting(): boolean {
         return this.isConnectionInProgress;
+    }
+
+    private async ensureAuthSchema(): Promise<void> {
+        if (this.authSchemaReady) {
+            return;
+        }
+
+        await executeQuery(`
+            IF OBJECT_ID('dbo.ExtensionAuthUsers', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.ExtensionAuthUsers (
+                    Id INT IDENTITY(1,1) PRIMARY KEY,
+                    Provider NVARCHAR(50) NOT NULL,
+                    SubjectId NVARCHAR(255) NOT NULL,
+                    Email NVARCHAR(255) NOT NULL,
+                    DisplayName NVARCHAR(255) NOT NULL,
+                    AssignedRole NVARCHAR(20) NOT NULL,
+                    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT UQ_ExtensionAuthUsers_Provider_Subject UNIQUE (Provider, SubjectId)
+                );
+            END
+
+            IF OBJECT_ID('dbo.ClassActivities', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.ClassActivities (
+                    Id INT IDENTITY(1,1) PRIMARY KEY,
+                    TeacherAuthUserId INT NOT NULL,
+                    Name NVARCHAR(200) NOT NULL,
+                    Description NVARCHAR(1000) NULL,
+                    IsActive BIT NOT NULL DEFAULT 1,
+                    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT FK_ClassActivities_TeacherAuthUser FOREIGN KEY (TeacherAuthUserId) REFERENCES dbo.ExtensionAuthUsers(Id)
+                );
+            END
+
+            IF OBJECT_ID('dbo.WorkspaceActivityLinks', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.WorkspaceActivityLinks (
+                    Id INT IDENTITY(1,1) PRIMARY KEY,
+                    StudentAuthUserId INT NOT NULL,
+                    TeacherAuthUserId INT NOT NULL,
+                    ActivityId INT NOT NULL,
+                    WorkspaceName NVARCHAR(255) NOT NULL,
+                    WorkspaceRootPath NVARCHAR(1024) NOT NULL,
+                    WorkspaceFoldersJson NVARCHAR(MAX) NOT NULL,
+                    LinkedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT FK_WorkspaceActivityLinks_StudentAuthUser FOREIGN KEY (StudentAuthUserId) REFERENCES dbo.ExtensionAuthUsers(Id),
+                    CONSTRAINT FK_WorkspaceActivityLinks_TeacherAuthUser FOREIGN KEY (TeacherAuthUserId) REFERENCES dbo.ExtensionAuthUsers(Id),
+                    CONSTRAINT FK_WorkspaceActivityLinks_ClassActivity FOREIGN KEY (ActivityId) REFERENCES dbo.ClassActivities(Id),
+                    CONSTRAINT UQ_WorkspaceActivityLinks_StudentWorkspace UNIQUE (StudentAuthUserId, WorkspaceRootPath)
+                );
+            END
+        `);
+
+        this.authSchemaReady = true;
+    }
+
+    async upsertAuthUser(identity: AuthIdentityInput): Promise<UpsertAuthUserResult> {
+        await this.ensureAuthSchema();
+
+        const existing = await executeQuery(
+            `SELECT Id, AssignedRole FROM dbo.ExtensionAuthUsers WHERE Provider = @provider AND SubjectId = @subjectId`,
+            { provider: identity.provider, subjectId: identity.subjectId }
+        );
+
+        if (existing.recordset.length > 0) {
+            const row = existing.recordset[0];
+            await executeQuery(
+                `UPDATE dbo.ExtensionAuthUsers
+                 SET Email = @email,
+                     DisplayName = @displayName,
+                     UpdatedAt = SYSUTCDATETIME()
+                 WHERE Id = @id`,
+                {
+                    id: row.Id,
+                    email: identity.email,
+                    displayName: identity.displayName
+                }
+            );
+
+            return {
+                authUserId: row.Id,
+                role: row.AssignedRole as UserRole,
+                isNew: false
+            };
+        }
+
+        const inserted = await executeQuery(
+            `INSERT INTO dbo.ExtensionAuthUsers (Provider, SubjectId, Email, DisplayName, AssignedRole)
+             OUTPUT INSERTED.Id, INSERTED.AssignedRole
+             VALUES (@provider, @subjectId, @email, @displayName, @assignedRole)`,
+            {
+                provider: identity.provider,
+                subjectId: identity.subjectId,
+                email: identity.email,
+                displayName: identity.displayName,
+                assignedRole: 'Student'
+            }
+        );
+
+        return {
+            authUserId: inserted.recordset[0].Id,
+            role: inserted.recordset[0].AssignedRole as UserRole,
+            isNew: true
+        };
+    }
+
+    async updateAuthUserRole(authUserId: number, role: UserRole): Promise<void> {
+        await this.ensureAuthSchema();
+        await executeQuery(
+            `UPDATE dbo.ExtensionAuthUsers
+             SET AssignedRole = @role,
+                 UpdatedAt = SYSUTCDATETIME()
+             WHERE Id = @authUserId`,
+            { authUserId, role }
+        );
+    }
+
+    async createClassActivity(teacherAuthUserId: number, name: string, description: string): Promise<number> {
+        await this.ensureAuthSchema();
+
+        const inserted = await executeQuery(
+            `INSERT INTO dbo.ClassActivities (TeacherAuthUserId, Name, Description)
+             OUTPUT INSERTED.Id
+             VALUES (@teacherAuthUserId, @name, @description)`,
+            {
+                teacherAuthUserId,
+                name,
+                description: description || null
+            }
+        );
+
+        return inserted.recordset[0].Id;
+    }
+
+    async listClassActivities(): Promise<ClassActivityRecord[]> {
+        await this.ensureAuthSchema();
+
+        const result = await executeQuery(`
+            SELECT
+                ca.Id,
+                ca.Name,
+                ISNULL(ca.Description, '') AS Description,
+                ca.TeacherAuthUserId,
+                eau.DisplayName AS TeacherDisplayName
+            FROM dbo.ClassActivities ca
+            INNER JOIN dbo.ExtensionAuthUsers eau ON eau.Id = ca.TeacherAuthUserId
+            WHERE ca.IsActive = 1
+            ORDER BY ca.CreatedAt DESC
+        `);
+
+        return result.recordset.map((row: any) => ({
+            id: row.Id,
+            name: row.Name,
+            description: row.Description || '',
+            teacherAuthUserId: row.TeacherAuthUserId,
+            teacherDisplayName: row.TeacherDisplayName || 'Unknown Teacher'
+        }));
+    }
+
+    async linkWorkspaceToActivity(input: WorkspaceActivityLinkInput): Promise<void> {
+        await this.ensureAuthSchema();
+
+        const existing = await executeQuery(
+            `SELECT Id
+             FROM dbo.WorkspaceActivityLinks
+             WHERE StudentAuthUserId = @studentAuthUserId AND WorkspaceRootPath = @workspaceRootPath`,
+            {
+                studentAuthUserId: input.studentAuthUserId,
+                workspaceRootPath: input.workspaceRootPath
+            }
+        );
+
+        if (existing.recordset.length > 0) {
+            await executeQuery(
+                `UPDATE dbo.WorkspaceActivityLinks
+                 SET TeacherAuthUserId = @teacherAuthUserId,
+                     ActivityId = @activityId,
+                     WorkspaceName = @workspaceName,
+                     WorkspaceFoldersJson = @workspaceFoldersJson,
+                     UpdatedAt = SYSUTCDATETIME()
+                 WHERE Id = @id`,
+                {
+                    id: existing.recordset[0].Id,
+                    teacherAuthUserId: input.teacherAuthUserId,
+                    activityId: input.activityId,
+                    workspaceName: input.workspaceName,
+                    workspaceFoldersJson: input.workspaceFoldersJson
+                }
+            );
+            return;
+        }
+
+        await executeQuery(
+            `INSERT INTO dbo.WorkspaceActivityLinks (
+                StudentAuthUserId,
+                TeacherAuthUserId,
+                ActivityId,
+                WorkspaceName,
+                WorkspaceRootPath,
+                WorkspaceFoldersJson
+            )
+            VALUES (
+                @studentAuthUserId,
+                @teacherAuthUserId,
+                @activityId,
+                @workspaceName,
+                @workspaceRootPath,
+                @workspaceFoldersJson
+            )`,
+            {
+                studentAuthUserId: input.studentAuthUserId,
+                teacherAuthUserId: input.teacherAuthUserId,
+                activityId: input.activityId,
+                workspaceName: input.workspaceName,
+                workspaceRootPath: input.workspaceRootPath,
+                workspaceFoldersJson: input.workspaceFoldersJson
+            }
+        );
     }
 }

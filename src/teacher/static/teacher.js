@@ -251,13 +251,13 @@
         if (searchInput) {
           searchInput.value = "";
           searchInput.focus();
+          renderSearchDropdown(filterLogs(""));
         }
         if (dropdown) {
           dropdown.classList.remove("show");
         }
       });
     }
-
     document.addEventListener("click", (e) => {
       if (
         searchInput &&
@@ -470,7 +470,7 @@
               pasteLength:
                 msg.settings.pasteLengthThreshold || defaults.pasteLength,
               flagAiEvents:
-                typeof msg.settings.flagAiEvents === "boolean"
+                msg.settings.flagAiEvents !== undefined
                   ? msg.settings.flagAiEvents
                   : defaults.flagAiEvents,
             };

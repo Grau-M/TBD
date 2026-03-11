@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { storageManager } from '../state';
 import { getHtml } from './getHtml';
+import { requireRoleAccess } from '../auth';
 import { handleAnalyzeLogs, handleGenerateProfile, handleGenerateTimeline } from './services/dashboardService';
 import {
   handleOpenLog,
@@ -15,6 +16,11 @@ let panel: vscode.WebviewPanel | undefined;
 let sessionPassword: string | undefined;
 
 export async function openTeacherView(context: vscode.ExtensionContext) {
+  const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Teacher Dashboard');
+  if (!allowed) {
+    return;
+  }
+
   if (panel) {
     panel.reveal(vscode.ViewColumn.One);
     return;

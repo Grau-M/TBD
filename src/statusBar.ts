@@ -33,6 +33,16 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
     context.subscriptions.push(statusItem);
     (global as any).dbStatusBarItem = statusItem;
 
+    // Authentication indicator: always clickable so users can reopen login/register flow.
+    // The string ID 'tbd-logger.authStatus' enables right-click context menus via package.json menus contribution.
+    const authItem = vscode.window.createStatusBarItem('tbd-logger.authStatus', vscode.StatusBarAlignment.Left, 9998);
+    authItem.text = '$(account) Not Logged In';
+    authItem.tooltip = 'Click to Login/Register';
+    authItem.command = 'tbd-logger.authSignIn';
+    authItem.show();
+    context.subscriptions.push(authItem);
+    (global as any).authStatusBarItem = authItem;
+
     // Optional small secondary item to open the Teacher Dashboard (click the lock to open teacher dashboard)
     // The `hiddenCommandId` should point to the command that opens the Teacher view/webview.
     if (hiddenCommandId) {

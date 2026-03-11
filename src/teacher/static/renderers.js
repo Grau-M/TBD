@@ -434,7 +434,8 @@ window.TeacherUI = {
           const out = dropdown.querySelector(
             `#student-summary-output-${safeId}`,
           );
-          if (out) out.innerHTML = `<div class="meta">Generating summary...</div>`;
+          if (out)
+            out.innerHTML = `<div class="meta">Generating summary...</div>`;
 
           if (window.postTeacherMessage) {
             window.postTeacherMessage("generateStudentSummary", { filename });
@@ -544,14 +545,24 @@ window.TeacherUI = {
         let flagged = false;
         const et = (e.eventType || "").toLowerCase();
 
-        if (et === "delete" || et === "backspace") {
+        // 1. Count Deletions (including AI)
+        if (et === "delete" || et === "backspace" || et === "ai-delete") {
           deleteCount++;
         }
-        if (et === "replace") {
+
+        // 2. Count Replacements (including AI)
+        if (et === "replace" || et === "ai-replace") {
           replaceCount++;
         }
 
-        if (et === "paste" || et === "clipboard" || et === "pasteevent") {
+        // 3. Count & Flag Pastes (including AI and External)
+        if (
+          et === "paste" ||
+          et === "clipboard" ||
+          et === "pasteevent" ||
+          et === "external-paste" ||
+          et === "ai-paste"
+        ) {
           const len =
             typeof e.length === "number"
               ? e.length
@@ -570,6 +581,8 @@ window.TeacherUI = {
             largePasteCount++;
           }
         }
+
+        // 4. Flag Fast Inputs
         if (
           et === "input" &&
           e.flightTime &&
@@ -578,6 +591,16 @@ window.TeacherUI = {
           flagged = true;
           fastInputCount++;
         }
+
+        // 5. NEW: Flag AI events globally if the setting is enabled
+        if (
+          currentSettings.flagAiEvents !== false &&
+          (et.startsWith("ai-") || et === "ai")
+        ) {
+          flagged = true;
+        }
+
+        // 6. Tally the flag
         if (flagged) {
           flaggedEvents++;
         }
@@ -646,15 +669,15 @@ window.TeacherUI = {
       } catch (e) {}
 
       // === Student Transparency Summary (LOGS VIEW) ===
-try {
-  const safeId = String(filename || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+      try {
+        const safeId = String(filename || "").replace(/[^a-zA-Z0-9_-]/g, "_");
 
-  const summaryCard = document.createElement("div");
-  summaryCard.className = "card";
-  summaryCard.style.marginTop = "12px";
-  summaryCard.style.borderLeft = "6px solid var(--accent)";
+        const summaryCard = document.createElement("div");
+        summaryCard.className = "card";
+        summaryCard.style.marginTop = "12px";
+        summaryCard.style.borderLeft = "6px solid var(--accent)";
 
-  summaryCard.innerHTML = `
+        summaryCard.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
       <div>
         <div style="font-weight:800;">Student Transparency Summary</div>
@@ -667,32 +690,36 @@ try {
     <div id="student-summary-output-${safeId}" style="margin-top:10px;"></div>
   `;
 
-  logsView.appendChild(summaryCard);
+        logsView.appendChild(summaryCard);
 
-  // Hook button click
-  setTimeout(() => {
-    const btn = document.getElementById(
-      `btn-generate-student-summary-logs-${safeId}`,
-    );
-    if (btn) {
-      btn.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
+        // Hook button click
+        setTimeout(() => {
+          const btn = document.getElementById(
+            `btn-generate-student-summary-logs-${safeId}`,
+          );
+          if (btn) {
+            btn.addEventListener("click", (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
 
-        // optional: show loading text immediately
-        const out = document.getElementById(`student-summary-output-${safeId}`);
-        if (out) {
-          out.innerHTML =
-            '<div class="meta">Generating student summary...</div>';
-        }
+              // optional: show loading text immediately
+              const out = document.getElementById(
+                `student-summary-output-${safeId}`,
+              );
+              if (out) {
+                out.innerHTML =
+                  '<div class="meta">Generating student summary...</div>';
+              }
 
-        if (window.postTeacherMessage) {
-          window.postTeacherMessage("generateStudentSummary", { filename });
-        }
-      });
-    }
-  }, 0);
-} catch (e) {}
+              if (window.postTeacherMessage) {
+                window.postTeacherMessage("generateStudentSummary", {
+                  filename,
+                });
+              }
+            });
+          }
+        }, 0);
+      } catch (e) {}
 
       if (parsed.sessionHeader) {
         const h = parsed.sessionHeader;
@@ -737,6 +764,9 @@ try {
                             <option value="input">Normal Inputs</option>
                             <option value="delete">Deletions</option>
                             <option value="replace">Replacements</option>
+                            <option value="flagged-ai">AI Events</option> 
+                            <option value="focus-away">Focus Away Times</option>
+                            
                         </select>
                     </div>
                 </div>
@@ -805,14 +835,20 @@ try {
           if (et === "input" || et === "key" || et === "keystroke") {
             filterCat = "input";
           }
-          if (et === "delete" || et === "backspace") {
+          if (et === "delete" || et === "backspace" || et === "ai-delete") {
             filterCat = "delete";
           }
-          if (et === "replace") {
+          if (et === "replace" || et === "ai-replace") {
             filterCat = "replace";
           }
 
-          if (et === "paste" || et === "clipboard" || et === "pasteevent") {
+          if (
+            et === "paste" ||
+            et === "clipboard" ||
+            et === "pasteevent" ||
+            et === "external-paste" ||
+            et === "ai-paste"
+          ) {
             const len =
               typeof e.length === "number"
                 ? e.length
@@ -845,11 +881,27 @@ try {
             filterCat = "flagged-fast";
           }
 
+          // NEW: Highlight AI events
+          let isAiEvent = et.startsWith("ai-") || et === "ai";
+          if (isAiEvent) {
+            if (currentSettings.flagAiEvents !== false) {
+              filterCat = "flagged-ai";
+              flagReason += ` <span style="color:#f97316; font-weight:bold;">(AI Detected)</span>`;
+            }
+          }
+
           row.className = className;
           row.dataset.filterCategory = filterCat;
           row.dataset.eventTime = e.time || "";
-          let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="display:flex; gap:8px; align-items:center;"><strong>${e.eventType || "Unknown"}</strong> ${flagReason}<button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes"><span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span></button></div><span class="meta">${e.time || ""}</span></div>`;
 
+          // NEW: Apply the orange border and background
+          if (isAiEvent) {
+            row.style.borderLeft = "4px solid #f97316";
+            row.style.backgroundColor = "rgba(249, 115, 22, 0.08)"; // light orange tint
+          }
+          // === END OF REPLACEMENT ===
+
+          let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="display:flex; gap:8px; align-items:center;"><strong>${e.eventType || "Unknown"}</strong> ${flagReason}<button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes"><span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span></button></div><span class="meta">${e.time || ""}</span></div>`;
           Object.keys(e).forEach((k) => {
             if (["eventType", "time"].includes(k)) {
               return;

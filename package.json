@@ -52,6 +52,10 @@
       {
         "command": "tbd-logger.flush",
         "title": "TBD Logger: Flush Events to Disk"
+      },
+      {
+        "command": "tbd-logger.testDbConnection",
+        "title": "TBD Logger: Test Database Connection"
       }
     ]
   },
@@ -71,6 +75,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
+    "@types/mssql": "^9.1.9",
     "@types/node": "22.x",
     "@types/sinon": "^21.0.0",
     "@types/vscode": "^1.108.1",
@@ -86,5 +91,9 @@
     "typescript-eslint": "^8.52.0",
     "webpack": "^5.104.1",
     "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "mssql": "^12.2.0"
   }
 }

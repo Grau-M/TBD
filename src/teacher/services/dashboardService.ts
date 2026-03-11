@@ -48,9 +48,9 @@ export async function handleAnalyzeLogs(panel: vscode.WebviewPanel, password: st
                 for (const e of events) {
                     const t = (e.eventType || '').toString().toLowerCase();
                     
-                    if (t === 'paste' || t === 'clipboard' || t === 'pasteevent') {
+                    if (t === 'paste' || t === 'clipboard' || t === 'pasteevent' || t === 'external-paste') {
                         fileStats.paste++;
-                        const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : (typeof e.text === 'string' ? e.text.length : 0));
+                        const len = (typeof e.length === 'number') ? e.length : (typeof e.pasteLength === 'number' ? e.pasteLength : (typeof e.pasteCharCount === 'number' ? e.pasteCharCount : (typeof e.text === 'string' ? e.text.length : 0)));
                         if (len && len > 0) {aggregate.pasteLengths.push(len);}
                         if (!len || len === 0 || len > thresholds.pasteLength) { fileStats.flagged++; aggregate.flaggedCount++; }
                     }
@@ -189,9 +189,11 @@ export async function handleGenerateProfile(panel: vscode.WebviewPanel, password
                 if (evType === 'input' || evType === 'key' || evType === 'keystroke') {keystrokes++;}
                 if (evType === 'replace' || evType === 'delete' || evType === 'backspace') {edits++;}
                 if (evType === 'terminal' || evType === 'debug' || evType === 'run' || evType === 'terminalcommand') {terminalRuns++;}
-                if (evType === 'paste' || evType === 'clipboard' || evType === 'pasteevent' || evType === 'ai-paste') {
+                if (evType === 'paste' || evType === 'clipboard' || evType === 'pasteevent' || evType === 'ai-paste' || evType === 'external-paste') {
                     pastes++;
-                    if (e.source === 'external' || e.pastedFrom === 'external' || evType === 'ai-paste' || e.internal === false) {externalPastes++;}
+                    if (e.source === 'external' || e.pastedFrom === 'external' || evType === 'ai-paste' || evType === 'external-paste' || e.internal === false) {
+                        externalPastes++;
+                    }
                 }
             }
         }

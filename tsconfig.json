@@ -1,6 +1,6 @@
 {
 	"compilerOptions": {
-		"module": "Node16",
+		"module": "nodenext",
 		"target": "ES2022",
 		"lib": [
 			"ES2022"
@@ -11,7 +11,7 @@
 		"esModuleInterop": true,  /* <-- THIS IS THE CRITICAL FIX */
         "skipLibCheck": true,
         "skipDefaultLibCheck": true,
-        "moduleResolution": "node16" /* Good practice when module is Node16 */
+        "moduleResolution": "nodenext" /* Good practice when module is Node16 */
 		/* Additional Checks */
 		// "noImplicitReturns": true, /* Report error when not all code paths in function return a value. */
 		// "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */

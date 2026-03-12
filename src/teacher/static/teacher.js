@@ -1168,6 +1168,10 @@
     $("class-detail-tab-students")?.addEventListener("click", () => switchClassDetailTab("students"));
     $("class-detail-tab-assignments")?.addEventListener("click", () => switchClassDetailTab("assignments"));
 
+    $("btn-refresh-students")?.addEventListener("click", () => {
+      if (currentClassId) { post("openClass", { classId: currentClassId }); }
+    });
+
     $("btn-create-assignment")?.addEventListener("click", () => {
       if (!currentClassId) {
         if (status) { status.textContent = "Open a class first."; }

@@ -1535,29 +1535,19 @@ export class DbStorageManager {
         await this.ensureClassesSchema();
 
         const result = await executeQuery(
-            `WITH ranked AS (
-                SELECT
-                    eau.Id AS AuthUserId,
-                    eau.DisplayName AS StudentName,
-                    eau.Email AS StudentEmail,
-                    eau.AssignedRole AS AssignedRole,
-                    swa.LinkedAt,
-                    ROW_NUMBER() OVER (PARTITION BY eau.Id ORDER BY swa.LinkedAt DESC) AS rn
-                 FROM dbo.StudentWorkspaceAssignments swa
-                 INNER JOIN dbo.ExtensionAuthUsers eau ON eau.Id = swa.StudentAuthUserId
-                 INNER JOIN dbo.Classes c ON c.Id = swa.ClassId
-                 WHERE swa.ClassId = @classId
-                   AND c.TeacherAuthUserId = @teacherAuthUserId
-            )
-            SELECT
-                AuthUserId,
-                StudentName,
-                StudentEmail,
-                AssignedRole,
-                CONVERT(VARCHAR, LinkedAt, 126) AS LinkedAt
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY StudentName ASC`,
+            `SELECT
+                eau.Id AS AuthUserId,
+                eau.DisplayName AS StudentName,
+                eau.Email AS StudentEmail,
+                eau.AssignedRole AS AssignedRole,
+                CONVERT(VARCHAR, sce.CreatedAt, 126) AS LinkedAt
+             FROM dbo.StudentClassEnrollments sce
+             INNER JOIN dbo.ExtensionAuthUsers eau ON eau.Id = sce.StudentAuthUserId
+             INNER JOIN dbo.Classes c ON c.Id = sce.ClassId
+             WHERE sce.ClassId = @classId
+               AND c.TeacherAuthUserId = @teacherAuthUserId
+               AND sce.IsActive = 1
+             ORDER BY eau.DisplayName ASC`,
             { classId, teacherAuthUserId }
         );
 

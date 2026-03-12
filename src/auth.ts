@@ -18,6 +18,8 @@ export interface WorkspaceAuthSession {
     displayName: string;
     email: string;
     workspaceLinkedActivityId?: number;
+    workspaceLinkedClassId?: number;
+    workspaceLinkedAssignmentId?: number;
 }
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
@@ -145,29 +147,45 @@ async function runSignInFlow(): Promise<AuthIdentity | undefined> {
     return authenticateWithEmailPassword();
 }
 
-async function promptStudentActivityLink(
+async function promptStudentAssignmentLink(
     storageManager: DbStorageManager,
     authUserId: number
-): Promise<number | undefined> {
-    const activities = await storageManager.listClassActivities();
+): Promise<{ classId: number; assignmentId: number } | undefined> {
+    const joinCode = await vscode.window.showInputBox({
+        title: 'Join Class',
+        prompt: 'Enter your class join code provided by your teacher',
+        placeHolder: 'Example: TBD-A1B2C3',
+        ignoreFocusOut: true
+    });
 
-    if (activities.length === 0) {
+    if (!joinCode) {
+        return undefined;
+    }
+
+    const linkedClass = await storageManager.findClassByJoinCode(joinCode.trim());
+    if (!linkedClass) {
+        vscode.window.showErrorMessage('Class join code not found. Please verify the code with your teacher.');
+        return undefined;
+    }
+
+    const assignments = await storageManager.listAssignmentsForClass(linkedClass.id);
+    if (assignments.length === 0) {
         vscode.window.showErrorMessage(
-            'No class activities are available yet. Ask your teacher to create a class activity first.'
+            'This class does not have assignments yet. Ask your teacher to create an assignment first.'
         );
         return undefined;
     }
 
     const pick = await vscode.window.showQuickPick(
-        activities.map(a => ({
+        assignments.map(a => ({
             label: a.name,
-            description: `Teacher: ${a.teacherDisplayName}`,
-            detail: a.description || 'No description',
-            activity: a
+            description: `${linkedClass.courseCode} • ${linkedClass.teacherName}`,
+            detail: a.dueDate ? `Due: ${a.dueDate}` : 'No due date',
+            assignment: a
         })),
         {
-            title: 'Link Workspace to Class Activity',
-            placeHolder: 'Select the class activity for this workspace'
+            title: `Link Workspace to Assignment (${linkedClass.courseName})`,
+            placeHolder: 'Select the assignment/project for this workspace'
         }
     );
 
@@ -176,16 +194,20 @@ async function promptStudentActivityLink(
     }
 
     const metadata = extractWorkspaceMetadata();
-    await storageManager.linkWorkspaceToActivity({
+    await storageManager.linkStudentWorkspaceToAssignment({
         studentAuthUserId: authUserId,
-        teacherAuthUserId: pick.activity.teacherAuthUserId,
-        activityId: pick.activity.id,
+        teacherAuthUserId: linkedClass.teacherAuthUserId,
+        classId: linkedClass.id,
+        assignmentId: pick.assignment.id,
         workspaceName: metadata.workspaceName,
         workspaceRootPath: metadata.workspaceRootPath,
         workspaceFoldersJson: metadata.workspaceFoldersJson
     });
 
-    return pick.activity.id;
+    return {
+        classId: linkedClass.id,
+        assignmentId: pick.assignment.id
+    };
 }
 
 export async function initializeWorkspaceAccess(
@@ -237,8 +259,13 @@ export async function initializeWorkspaceAccess(
     }
 
     let workspaceLinkedActivityId: number | undefined;
+    let workspaceLinkedClassId: number | undefined;
+    let workspaceLinkedAssignmentId: number | undefined;
     if (resolvedRole === 'Student') {
-        workspaceLinkedActivityId = await promptStudentActivityLink(storageManager, upserted.authUserId);
+        const linked = await promptStudentAssignmentLink(storageManager, upserted.authUserId);
+        workspaceLinkedClassId = linked?.classId;
+        workspaceLinkedAssignmentId = linked?.assignmentId;
+        workspaceLinkedActivityId = linked?.assignmentId;
     }
 
     const session: WorkspaceAuthSession = {
@@ -248,7 +275,9 @@ export async function initializeWorkspaceAccess(
         provider: identity.provider,
         displayName: identity.displayName,
         email: identity.email,
-        workspaceLinkedActivityId
+        workspaceLinkedActivityId,
+        workspaceLinkedClassId,
+        workspaceLinkedAssignmentId
     };
 
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);

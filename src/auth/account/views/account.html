@@ -1,0 +1,50 @@
+<div class="account-container">
+  <button id="account-theme-toggle" class="top-theme-btn" title="Toggle theme">🌓</button>
+
+  <div class="account-card">
+    <div class="account-header">
+      <div class="account-logo">👤</div>
+      <h1 class="account-title">Account Information</h1>
+      <p class="account-subtitle">Review your account details. Only your display name can be edited.</p>
+    </div>
+
+    <div class="form-group">
+      <label for="account-display-name">Display Name</label>
+      <input type="text" id="account-display-name" placeholder="Your display name" />
+    </div>
+
+    <div class="grid-2">
+      <div class="form-group">
+        <label for="account-role">Role (Read Only)</label>
+        <input type="text" id="account-role" readonly />
+      </div>
+      <div class="form-group">
+        <label for="account-provider">Provider</label>
+        <input type="text" id="account-provider" readonly />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="account-email">Email</label>
+      <input type="text" id="account-email" readonly />
+    </div>
+
+    <div class="grid-2">
+      <div class="form-group">
+        <label for="account-ide-user">IDE User</label>
+        <input type="text" id="account-ide-user" readonly />
+      </div>
+      <div class="form-group">
+        <label for="account-workspace">Workspace</label>
+        <input type="text" id="account-workspace" readonly />
+      </div>
+    </div>
+
+    <div id="account-error" class="account-error hidden"></div>
+    <div id="account-success" class="account-success hidden"></div>
+
+    <div class="actions">
+      <button id="btn-save-account" class="btn-primary">Save Display Name</button>
+    </div>
+  </div>
+</div>

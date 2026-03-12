@@ -43,7 +43,8 @@
       },
       {
         "command": "tbd-logger.openTeacherView",
-        "title": "TBD Logger: Open Teacher Dashboard"
+        "title": "TBD Logger: Open Teacher Dashboard",
+        "enablement": "tbd.hasTeacherDashboardAccess"
       },
       {
         "command": "tbd-logger.showHiddenDeletions",
@@ -71,6 +72,12 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "tbd-logger.openTeacherView",
+          "when": "tbd.hasTeacherDashboardAccess"
+        }
+      ],
       "statusBar/item/context": [
         {
           "command": "tbd-logger.signOut",

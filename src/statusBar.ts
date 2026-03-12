@@ -70,7 +70,7 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
  */
 export function updateSyncStatus(isSyncing: boolean) {
     const dbItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
-    if (!dbItem) return;
+    if (!dbItem) {return;}
 
     if (isSyncing) {
         // Change the existing "Online" icon to a spinning sync icon

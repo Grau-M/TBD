@@ -157,6 +157,29 @@ export interface AssignmentStudentSessionRecord {
     workspaceName: string;
 }
 
+export interface StudentClassRecord {
+    id: number;
+    courseName: string;
+    courseCode: string;
+    teacherName: string;
+    meetingTime: string;
+    startDate: string;
+    endDate: string;
+    joinCode: string;
+    linkedAt: string;
+}
+
+export interface StudentClassAssignmentRecord {
+    assignmentId: number;
+    classId: number;
+    assignmentName: string;
+    description: string;
+    dueDate: string;
+    workspaceName: string;
+    workspaceRootPath: string;
+    linkedAt: string;
+}
+
 export interface StudentAssignmentLinkInput {
     studentAuthUserId: number;
     teacherAuthUserId: number;
@@ -1213,6 +1236,23 @@ export class DbStorageManager {
                 );
             END
 
+            IF OBJECT_ID('dbo.StudentClassEnrollments', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.StudentClassEnrollments (
+                    Id INT IDENTITY(1,1) PRIMARY KEY,
+                    StudentAuthUserId INT NOT NULL,
+                    TeacherAuthUserId INT NOT NULL,
+                    ClassId INT NOT NULL,
+                    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    IsActive BIT NOT NULL DEFAULT 1,
+                    CONSTRAINT FK_StudentClassEnrollments_Student FOREIGN KEY (StudentAuthUserId) REFERENCES dbo.ExtensionAuthUsers(Id),
+                    CONSTRAINT FK_StudentClassEnrollments_Teacher FOREIGN KEY (TeacherAuthUserId) REFERENCES dbo.ExtensionAuthUsers(Id),
+                    CONSTRAINT FK_StudentClassEnrollments_Class FOREIGN KEY (ClassId) REFERENCES dbo.Classes(Id),
+                    CONSTRAINT UQ_StudentClassEnrollments_StudentClass UNIQUE (StudentAuthUserId, ClassId)
+                );
+            END
+
             IF OBJECT_ID('dbo.StudentWorkspaceAssignments', 'U') IS NULL
             BEGIN
                 CREATE TABLE dbo.StudentWorkspaceAssignments (
@@ -1233,6 +1273,14 @@ export class DbStorageManager {
                     CONSTRAINT UQ_StudentWorkspaceAssignments_StudentWorkspace UNIQUE (StudentAuthUserId, WorkspaceRootPath)
                 );
             END
+
+            INSERT INTO dbo.StudentClassEnrollments (StudentAuthUserId, TeacherAuthUserId, ClassId)
+            SELECT DISTINCT swa.StudentAuthUserId, swa.TeacherAuthUserId, swa.ClassId
+            FROM dbo.StudentWorkspaceAssignments swa
+            LEFT JOIN dbo.StudentClassEnrollments sce
+                ON sce.StudentAuthUserId = swa.StudentAuthUserId
+               AND sce.ClassId = swa.ClassId
+            WHERE sce.Id IS NULL;
         `);
         this.classesSchemaReady = true;
     }
@@ -1628,6 +1676,152 @@ export class DbStorageManager {
         };
     }
 
+    async enrollStudentInClass(studentAuthUserId: number, classInfo: ClassLookupRecord): Promise<void> {
+        await this.ensureClassesSchema();
+
+        const existing = await executeQuery(
+            `SELECT Id
+             FROM dbo.StudentClassEnrollments
+             WHERE StudentAuthUserId = @studentAuthUserId
+               AND ClassId = @classId`,
+            {
+                studentAuthUserId,
+                classId: classInfo.id
+            }
+        );
+
+        if (existing.recordset.length > 0) {
+            await executeQuery(
+                `UPDATE dbo.StudentClassEnrollments
+                 SET TeacherAuthUserId = @teacherAuthUserId,
+                     IsActive = 1,
+                     UpdatedAt = SYSUTCDATETIME()
+                 WHERE Id = @id`,
+                {
+                    id: existing.recordset[0].Id,
+                    teacherAuthUserId: classInfo.teacherAuthUserId
+                }
+            );
+            return;
+        }
+
+        await executeQuery(
+            `INSERT INTO dbo.StudentClassEnrollments (StudentAuthUserId, TeacherAuthUserId, ClassId)
+             VALUES (@studentAuthUserId, @teacherAuthUserId, @classId)`,
+            {
+                studentAuthUserId,
+                teacherAuthUserId: classInfo.teacherAuthUserId,
+                classId: classInfo.id
+            }
+        );
+    }
+
+    async listStudentClasses(studentAuthUserId: number): Promise<StudentClassRecord[]> {
+        await this.ensureClassesSchema();
+
+        const result = await executeQuery(
+            `SELECT
+                c.Id,
+                c.CourseName,
+                c.CourseCode,
+                c.TeacherName,
+                c.MeetingTime,
+                CONVERT(VARCHAR(10), c.StartDate, 23) AS StartDate,
+                CONVERT(VARCHAR(10), c.EndDate, 23) AS EndDate,
+                c.JoinCode,
+                                CONVERT(VARCHAR, MAX(sce.CreatedAt), 126) AS LinkedAt
+                         FROM dbo.StudentClassEnrollments sce
+                         INNER JOIN dbo.Classes c ON c.Id = sce.ClassId
+                         WHERE sce.StudentAuthUserId = @studentAuthUserId
+                             AND sce.IsActive = 1
+               AND c.IsActive = 1
+             GROUP BY
+                c.Id,
+                c.CourseName,
+                c.CourseCode,
+                c.TeacherName,
+                c.MeetingTime,
+                c.StartDate,
+                c.EndDate,
+                c.JoinCode
+             ORDER BY c.CourseName ASC, c.CourseCode ASC`,
+            { studentAuthUserId }
+        );
+
+        return result.recordset.map((row: any) => ({
+            id: row.Id,
+            courseName: row.CourseName || '',
+            courseCode: row.CourseCode || '',
+            teacherName: row.TeacherName || '',
+            meetingTime: row.MeetingTime || '',
+            startDate: row.StartDate || '',
+            endDate: row.EndDate || '',
+            joinCode: row.JoinCode || '',
+            linkedAt: row.LinkedAt || ''
+        }));
+    }
+
+    async listStudentAssignmentsForClass(
+        studentAuthUserId: number,
+        classId: number
+    ): Promise<StudentClassAssignmentRecord[]> {
+        await this.ensureClassesSchema();
+
+        const membership = await executeQuery(
+            `SELECT TOP 1 1 AS HasMembership
+                         FROM dbo.StudentClassEnrollments
+             WHERE StudentAuthUserId = @studentAuthUserId
+                             AND ClassId = @classId
+                             AND IsActive = 1`,
+            { studentAuthUserId, classId }
+        );
+
+        if (membership.recordset.length === 0) {
+            return [];
+        }
+
+        const result = await executeQuery(
+            `SELECT
+                ca.Id AS AssignmentId,
+                ca.ClassId,
+                ca.Name AS AssignmentName,
+                ISNULL(ca.Description, '') AS Description,
+                CONVERT(VARCHAR(10), ca.DueDate, 23) AS DueDate,
+                ISNULL(linked.WorkspaceName, '') AS WorkspaceName,
+                ISNULL(linked.WorkspaceRootPath, '') AS WorkspaceRootPath,
+                ISNULL(linked.LinkedAt, '') AS LinkedAt
+             FROM dbo.ClassAssignments ca
+             INNER JOIN dbo.Classes c ON c.Id = ca.ClassId
+             OUTER APPLY (
+                SELECT TOP 1
+                    swa.WorkspaceName,
+                    swa.WorkspaceRootPath,
+                    CONVERT(VARCHAR, swa.LinkedAt, 126) AS LinkedAt
+                FROM dbo.StudentWorkspaceAssignments swa
+                WHERE swa.StudentAuthUserId = @studentAuthUserId
+                  AND swa.ClassId = ca.ClassId
+                  AND swa.AssignmentId = ca.Id
+                ORDER BY swa.UpdatedAt DESC, swa.LinkedAt DESC, swa.Id DESC
+             ) linked
+             WHERE ca.ClassId = @classId
+               AND ca.IsActive = 1
+               AND c.IsActive = 1
+             ORDER BY ca.CreatedAt DESC, ca.Id DESC`,
+            { studentAuthUserId, classId }
+        );
+
+        return result.recordset.map((row: any) => ({
+            assignmentId: row.AssignmentId,
+            classId: row.ClassId,
+            assignmentName: row.AssignmentName || '',
+            description: row.Description || '',
+            dueDate: row.DueDate || '',
+            workspaceName: row.WorkspaceName || '',
+            workspaceRootPath: row.WorkspaceRootPath || '',
+            linkedAt: row.LinkedAt || ''
+        }));
+    }
+
     async listAssignmentsForClass(classId: number): Promise<ClassAssignmentRecord[]> {
         await this.ensureClassesSchema();
 
@@ -1657,6 +1851,15 @@ export class DbStorageManager {
 
     async linkStudentWorkspaceToAssignment(input: StudentAssignmentLinkInput): Promise<void> {
         await this.ensureClassesSchema();
+
+        await this.enrollStudentInClass(input.studentAuthUserId, {
+            id: input.classId,
+            teacherAuthUserId: input.teacherAuthUserId,
+            teacherName: '',
+            courseName: '',
+            courseCode: '',
+            joinCode: ''
+        });
 
         const existing = await executeQuery(
             `SELECT Id

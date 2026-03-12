@@ -28,6 +28,7 @@
   let currentClassAssignments = [];
   let currentAssignmentId = null;
   let currentAssignmentName = "";
+  let currentClassDetailTab = "students";
 
   window.addEventListener("DOMContentLoaded", () => {
     const $ = (id) => document.getElementById(id);
@@ -802,6 +803,29 @@
       post("listClasses");
     }
 
+    function setAssignmentFormVisible(show) {
+      const formCard = $("assignment-form-card");
+      if (!formCard) { return; }
+      formCard.style.display = show ? "block" : "none";
+      if (!show) {
+        const errEl = $("assignment-form-error");
+        if (errEl) { errEl.style.display = "none"; }
+      }
+    }
+
+    function updateTopClassActionButton() {
+      const btn = $("btn-new-class");
+      if (!btn) { return; }
+
+      const inClassDetail = $("class-detail-view")?.style.display === "block";
+      if (inClassDetail && currentClassDetailTab === "assignments") {
+        btn.textContent = "+ New Assignment";
+        return;
+      }
+
+      btn.textContent = "+ New Class";
+    }
+
     function renderClasses(classes) {
       const listView = $("class-list-view");
       const emptyEl = $("class-list-empty");
@@ -809,6 +833,9 @@
       const detailView = $("class-detail-view");
       if (loadingEl) { loadingEl.style.display = "none"; }
       if (detailView) { detailView.style.display = "none"; }
+      currentClassDetailTab = "students";
+      setAssignmentFormVisible(false);
+      updateTopClassActionButton();
       if (!listView) { return; }
       listView.style.display = "grid";
       listView.innerHTML = "";
@@ -887,6 +914,7 @@
       if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
       currentAssignmentId = null;
       currentAssignmentName = "";
+      setAssignmentFormVisible(false);
 
       switchClassDetailTab("students");
       renderClassStudents(students);
@@ -898,12 +926,15 @@
       const assignmentsTab = $("class-detail-tab-assignments");
       const studentsView = $("class-detail-students");
       const assignmentsView = $("class-detail-assignments");
+      currentClassDetailTab = tabName;
 
       if (tabName === "students") {
         if (studentsView) { studentsView.style.display = "block"; }
         if (assignmentsView) { assignmentsView.style.display = "none"; }
         if (studentsTab) { studentsTab.style.background = "var(--accent)"; studentsTab.style.color = "white"; }
         if (assignmentsTab) { assignmentsTab.style.background = "var(--bg)"; assignmentsTab.style.color = "var(--muted)"; }
+        setAssignmentFormVisible(false);
+        updateTopClassActionButton();
         return;
       }
 
@@ -911,6 +942,8 @@
       if (assignmentsView) { assignmentsView.style.display = "block"; }
       if (assignmentsTab) { assignmentsTab.style.background = "var(--accent)"; assignmentsTab.style.color = "white"; }
       if (studentsTab) { studentsTab.style.background = "var(--bg)"; studentsTab.style.color = "var(--muted)"; }
+      setAssignmentFormVisible(false);
+      updateTopClassActionButton();
     }
 
     function renderClassStudents(students) {
@@ -1090,12 +1123,18 @@
     }
 
     $("btn-new-class")?.addEventListener("click", () => {
-      const formCard = $("class-form-card");
-      if (formCard) {
+      const inClassDetail = $("class-detail-view")?.style.display === "block";
+      if (inClassDetail && currentClassDetailTab === "assignments") {
+        setAssignmentFormVisible(true);
+        return;
+      }
+
+      const classForm = $("class-form-card");
+      if (classForm) {
         editingClassId = null;
         const submitBtn = $("btn-submit-class");
         if (submitBtn) { submitBtn.textContent = "Create Class"; }
-        formCard.style.display = formCard.style.display === "none" ? "block" : "none";
+        classForm.style.display = classForm.style.display === "none" ? "block" : "none";
       }
     });
 
@@ -1109,6 +1148,9 @@
     $("btn-back-to-classes")?.addEventListener("click", () => {
       if ($("class-detail-view")) { $("class-detail-view").style.display = "none"; }
       if ($("class-list-view")) { $("class-list-view").style.display = "grid"; }
+      currentClassDetailTab = "students";
+      setAssignmentFormVisible(false);
+      updateTopClassActionButton();
       loadClasses();
     });
 

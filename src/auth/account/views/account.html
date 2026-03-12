@@ -1,50 +1,130 @@
 <div class="account-container">
-  <button id="account-theme-toggle" class="top-theme-btn" title="Toggle theme">🌓</button>
-
-  <div class="account-card">
-    <div class="account-header">
-      <div class="account-logo">👤</div>
-      <h1 class="account-title">Account Information</h1>
-      <p class="account-subtitle">Review your account details. Only your display name can be edited.</p>
-    </div>
-
-    <div class="form-group">
-      <label for="account-display-name">Display Name</label>
-      <input type="text" id="account-display-name" placeholder="Your display name" />
-    </div>
-
-    <div class="grid-2">
-      <div class="form-group">
-        <label for="account-role">Role (Read Only)</label>
-        <input type="text" id="account-role" readonly />
+  <div class="dashboard-shell">
+    <aside class="dashboard-sidebar">
+      <div class="sidebar-brand">
+        <p class="sidebar-eyebrow">Account Dashboard</p>
+        <h1 class="sidebar-title">Workspace Profile</h1>
+        <p class="sidebar-copy">Start on your account details, then move through the rest of your dashboard from the same place.</p>
       </div>
-      <div class="form-group">
-        <label for="account-provider">Provider</label>
-        <input type="text" id="account-provider" readonly />
+
+      <nav class="sidebar-nav" aria-label="Dashboard sections">
+        <button id="nav-account" class="sidebar-nav-btn active" type="button" data-view="account">
+          <strong>Account</strong>
+          <span>Profile, role, provider, and workspace details.</span>
+        </button>
+        <button id="nav-classes" class="sidebar-nav-btn hidden" type="button" data-view="classes">
+          <strong>Classes</strong>
+          <span>See joined classes and assignment progress.</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-meta">
+        <button id="account-theme-toggle" class="top-theme-btn" title="Toggle theme">🌓</button>
+        <div class="meta-chip"><span>Role:</span> <strong id="sidebar-role-label">Student</strong></div>
+        <div class="meta-chip"><span>Provider:</span> <strong id="sidebar-provider-label">Email</strong></div>
       </div>
-    </div>
+    </aside>
 
-    <div class="form-group">
-      <label for="account-email">Email</label>
-      <input type="text" id="account-email" readonly />
-    </div>
+    <main class="dashboard-main">
+      <section id="view-account" class="dashboard-view">
+        <div class="account-card">
+          <div class="account-header">
+            <div>
+              <div class="account-logo">👤</div>
+            </div>
+            <div style="flex: 1;">
+              <h2 class="account-title">Account Information</h2>
+              <p class="account-subtitle">Review your account details. Only your display name can be edited.</p>
+            </div>
+          </div>
 
-    <div class="grid-2">
-      <div class="form-group">
-        <label for="account-ide-user">IDE User</label>
-        <input type="text" id="account-ide-user" readonly />
-      </div>
-      <div class="form-group">
-        <label for="account-workspace">Workspace</label>
-        <input type="text" id="account-workspace" readonly />
-      </div>
-    </div>
+          <div class="form-group">
+            <label for="account-display-name">Display Name</label>
+            <input type="text" id="account-display-name" placeholder="Your display name" />
+          </div>
 
-    <div id="account-error" class="account-error hidden"></div>
-    <div id="account-success" class="account-success hidden"></div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="account-role">Role (Read Only)</label>
+              <input type="text" id="account-role" readonly />
+            </div>
+            <div class="form-group">
+              <label for="account-provider">Provider</label>
+              <input type="text" id="account-provider" readonly />
+            </div>
+          </div>
 
-    <div class="actions">
-      <button id="btn-save-account" class="btn-primary">Save Display Name</button>
+          <div class="form-group">
+            <label for="account-email">Email</label>
+            <input type="text" id="account-email" readonly />
+          </div>
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="account-ide-user">IDE User</label>
+              <input type="text" id="account-ide-user" readonly />
+            </div>
+            <div class="form-group">
+              <label for="account-workspace">Workspace</label>
+              <input type="text" id="account-workspace" readonly />
+            </div>
+          </div>
+
+          <div id="account-error" class="account-error hidden"></div>
+          <div id="account-success" class="account-success hidden"></div>
+
+          <div class="actions">
+            <button id="btn-save-account" class="btn-primary">Save Display Name</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-classes" class="dashboard-view hidden">
+        <div class="classes-shell">
+          <div class="page-header">
+            <div>
+              <h2 class="page-title">My Classes</h2>
+              <p class="page-subtitle">Choose a class to review every teacher assignment and whether you have already attached a workspace.</p>
+            </div>
+            <button id="btn-join-class" class="btn-secondary" type="button">Join Class</button>
+          </div>
+
+          <div id="student-classes-status" class="account-success hidden"></div>
+          <div id="student-classes-error" class="account-error hidden"></div>
+
+          <div id="student-classes-empty" class="empty-state hidden">
+            You are not linked to any classes yet. Join a class and connect a workspace before assignments will appear here.
+          </div>
+
+          <div class="classes-layout">
+            <div class="class-list-card">
+              <div id="student-classes-loading" class="loading-state hidden">Loading your classes...</div>
+              <div id="student-classes-list" class="class-list"></div>
+            </div>
+
+            <div class="class-detail-card">
+              <div id="student-class-detail-placeholder" class="detail-placeholder">
+                Select a class from the left to see the assignments your teacher created for it.
+              </div>
+
+              <div id="student-class-detail" class="hidden">
+                <div class="page-header">
+                  <div>
+                    <h3 id="student-class-title" class="page-title" style="font-size: 1.45rem; margin-bottom: 4px;"></h3>
+                    <p id="student-class-meta" class="class-detail-meta"></p>
+                  </div>
+                </div>
+
+                <div id="student-assignments-loading" class="loading-state hidden">Loading assignments...</div>
+                <div id="student-assignments-empty" class="empty-state hidden">
+                  This class does not have assignments yet.
+                </div>
+                <div id="student-assignment-list" class="assignment-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
     </div>
-  </div>
 </div>

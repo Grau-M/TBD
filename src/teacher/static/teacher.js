@@ -23,6 +23,9 @@
   let expandedFile = null;
   let currentLogFilename = null;
   let dashboardDataCache = null;
+  let currentClassId = null;
+  let editingClassId = null;
+  let currentClassAssignments = [];
 
   window.addEventListener("DOMContentLoaded", () => {
     const $ = (id) => document.getElementById(id);
@@ -38,6 +41,31 @@
         vscode.postMessage(Object.assign({ command }, payload));
       } catch (e) {}
     }
+
+    function enableDatePickerOnFullClick(inputId) {
+      const input = $(inputId);
+      if (!input) {
+        return;
+      }
+
+      // Make any click/focus in the date field open the native calendar picker.
+      const openPicker = () => {
+        if (typeof input.showPicker === "function") {
+          try {
+            input.showPicker();
+          } catch (e) {
+            // Ignore if browser blocks picker invocation for this event.
+          }
+        }
+      };
+
+      input.addEventListener("click", openPicker);
+      input.addEventListener("focus", openPicker);
+    }
+
+    enableDatePickerOnFullClick("class-start-date");
+    enableDatePickerOnFullClick("class-end-date");
+    enableDatePickerOnFullClick("assignment-due-date");
 
     // Make post available globally for note handlers + student summary button
     window.postTeacherMessage = post;
@@ -154,6 +182,10 @@
       post("getDeletions");
     });
     $("nav-settings")?.addEventListener("click", () => switchTab("settings"));
+    $("nav-class")?.addEventListener("click", () => {
+      switchTab("class");
+      loadClasses();
+    });
     $("btn-goto-logs")?.addEventListener("click", () => switchTab("logs"));
 
     $("close-log")?.addEventListener("click", () => {
@@ -614,6 +646,14 @@
           break;
 
         case "error":
+          if ($("btn-submit-class")) {
+            $("btn-submit-class").disabled = false;
+            $("btn-submit-class").textContent = editingClassId ? "Save Class Changes" : "Create Class";
+          }
+          if ($("btn-create-assignment")) {
+            $("btn-create-assignment").disabled = false;
+            $("btn-create-assignment").textContent = "Create Assignment";
+          }
           if (status) status.textContent = "Error: " + (msg.message || "");
           if (
             msg.message &&
@@ -630,6 +670,314 @@
             setTimeout(() => (status.textContent = "Ready"), 3000);
           }
           break;
+
+        case "classList":
+          renderClasses(msg.data || []);
+          if (status) { status.textContent = (msg.data || []).length + " class(es) loaded"; }
+          break;
+
+        case "classCreated": {
+          const btn = $("btn-submit-class");
+          if (btn) { btn.disabled = false; btn.textContent = "Create Class"; }
+          if ($("class-form-card")) { $("class-form-card").style.display = "none"; }
+          ["class-course-name","class-course-code","class-teacher-name","class-meeting-time","class-start-date","class-end-date"].forEach((id) => { const el = $(id); if (el) { el.value = ""; } });
+          if (status) { status.textContent = "Class created! Join code: " + (msg.data?.joinCode || ""); setTimeout(() => (status.textContent = "Ready"), 5000); }
+          editingClassId = null;
+          loadClasses();
+          break;
+        }
+
+        case "classUpdated": {
+          const btn = $("btn-submit-class");
+          if (btn) { btn.disabled = false; btn.textContent = "Create Class"; }
+          if ($("class-form-card")) { $("class-form-card").style.display = "none"; }
+          ["class-course-name","class-course-code","class-teacher-name","class-meeting-time","class-start-date","class-end-date"].forEach((id) => { const el = $(id); if (el) { el.value = ""; } });
+          editingClassId = null;
+          if (status) { status.textContent = "Class updated successfully."; setTimeout(() => (status.textContent = "Ready"), 3000); }
+          loadClasses();
+          break;
+        }
+
+        case "classDetails": {
+          renderClassDetails(msg.data || {});
+          if (status) { status.textContent = "Class details loaded."; }
+          break;
+        }
+
+        case "classAssignmentCreated": {
+          const btn = $("btn-create-assignment");
+          if (btn) { btn.disabled = false; btn.textContent = "Create Assignment"; }
+          const errEl = $("assignment-form-error");
+          if (errEl) { errEl.style.display = "none"; }
+          if ($("assignment-name")) { $("assignment-name").value = ""; }
+          if ($("assignment-description")) { $("assignment-description").value = ""; }
+          if ($("assignment-due-date")) { $("assignment-due-date").value = ""; }
+          if (currentClassId) {
+            post("openClass", { classId: currentClassId });
+          }
+          if (status) { status.textContent = "Assignment created."; setTimeout(() => (status.textContent = "Ready"), 3000); }
+          break;
+        }
+      }
+    });
+
+    // --- CLASS TAB LOGIC ---
+    function loadClasses() {
+      const listView = $("class-list-view");
+      const emptyEl = $("class-list-empty");
+      const loadingEl = $("class-list-loading");
+      if (loadingEl) { loadingEl.style.display = "block"; }
+      if (emptyEl) { emptyEl.style.display = "none"; }
+      if (listView) { listView.innerHTML = ""; }
+      post("listClasses");
+    }
+
+    function renderClasses(classes) {
+      const listView = $("class-list-view");
+      const emptyEl = $("class-list-empty");
+      const loadingEl = $("class-list-loading");
+      const detailView = $("class-detail-view");
+      if (loadingEl) { loadingEl.style.display = "none"; }
+      if (detailView) { detailView.style.display = "none"; }
+      if (!listView) { return; }
+      listView.style.display = "grid";
+      listView.innerHTML = "";
+      if (!classes || classes.length === 0) {
+        if (emptyEl) { emptyEl.style.display = "block"; }
+        return;
+      }
+      if (emptyEl) { emptyEl.style.display = "none"; }
+      classes.forEach((cls) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.style.cssText = "display:flex; flex-direction:column; gap:10px;";
+        card.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div>
+              <div style="font-weight:700; font-size:1rem;">${cls.courseName}</div>
+              <div class="meta">${cls.courseCode} &bull; ${cls.teacherName}</div>
+            </div>
+            <div style="background:var(--accent); color:white; padding:4px 12px; border-radius:6px; font-size:0.8rem; font-weight:700; white-space:nowrap; letter-spacing:0.05em;">${cls.joinCode}</div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.88rem;">
+            <div><span style="color:var(--muted);">Meeting:</span> ${cls.meetingTime || '—'}</div>
+            <div><span style="color:var(--muted);">Start:</span> ${cls.startDate || '—'}</div>
+            <div></div>
+            <div><span style="color:var(--muted);">End:</span> ${cls.endDate || '—'}</div>
+          </div>
+          <div class="meta" style="font-size:0.78rem;">Join Code: <strong style="font-family:monospace; font-size:0.9rem; color:var(--accent);">${cls.joinCode}</strong> &mdash; share this with students to link their workspace to this class.</div>
+          <div style="display:flex; gap:8px; margin-top:2px;">
+            <button class="btn btn-primary class-open-btn" style="padding:6px 10px;">Open Class</button>
+            <button class="btn btn-secondary class-edit-btn" style="padding:6px 10px;">Edit</button>
+          </div>
+        `;
+        const openBtn = card.querySelector(".class-open-btn");
+        const editBtn = card.querySelector(".class-edit-btn");
+        openBtn?.addEventListener("click", () => {
+          currentClassId = cls.id;
+          post("openClass", { classId: cls.id });
+        });
+        editBtn?.addEventListener("click", () => {
+          editingClassId = cls.id;
+          if ($("class-form-card")) { $("class-form-card").style.display = "block"; }
+          if ($("class-course-name")) { $("class-course-name").value = cls.courseName || ""; }
+          if ($("class-course-code")) { $("class-course-code").value = cls.courseCode || ""; }
+          if ($("class-teacher-name")) { $("class-teacher-name").value = cls.teacherName || ""; }
+          if ($("class-meeting-time")) { $("class-meeting-time").value = cls.meetingTime || ""; }
+          if ($("class-start-date")) { $("class-start-date").value = cls.startDate || ""; }
+          if ($("class-end-date")) { $("class-end-date").value = cls.endDate || ""; }
+          const submitBtn = $("btn-submit-class");
+          if (submitBtn) { submitBtn.textContent = "Save Class Changes"; }
+          if (status) { status.textContent = "Editing class: " + cls.courseName; }
+        });
+        listView.appendChild(card);
+      });
+    }
+
+    function renderClassDetails(payload) {
+      const classInfo = payload.classInfo || null;
+      const students = payload.students || [];
+      const assignments = payload.assignments || [];
+      if (!classInfo) { return; }
+
+      currentClassId = classInfo.id;
+      currentClassAssignments = assignments;
+
+      if ($("class-list-view")) { $("class-list-view").style.display = "none"; }
+      if ($("class-list-empty")) { $("class-list-empty").style.display = "none"; }
+      if ($("class-detail-view")) { $("class-detail-view").style.display = "block"; }
+
+      if ($("class-detail-title")) { $("class-detail-title").textContent = classInfo.courseName || "Class Detail"; }
+      if ($("class-detail-meta")) {
+        $("class-detail-meta").textContent = (classInfo.courseCode || "") + " • " + (classInfo.teacherName || "") + " • Join Code: " + (classInfo.joinCode || "");
+      }
+
+      switchClassDetailTab("students");
+      renderClassStudents(students);
+      renderClassAssignments(assignments);
+    }
+
+    function switchClassDetailTab(tabName) {
+      const studentsTab = $("class-detail-tab-students");
+      const assignmentsTab = $("class-detail-tab-assignments");
+      const studentsView = $("class-detail-students");
+      const assignmentsView = $("class-detail-assignments");
+
+      if (tabName === "students") {
+        if (studentsView) { studentsView.style.display = "block"; }
+        if (assignmentsView) { assignmentsView.style.display = "none"; }
+        if (studentsTab) { studentsTab.style.background = "var(--accent)"; studentsTab.style.color = "white"; }
+        if (assignmentsTab) { assignmentsTab.style.background = "var(--bg)"; assignmentsTab.style.color = "var(--muted)"; }
+        return;
+      }
+
+      if (studentsView) { studentsView.style.display = "none"; }
+      if (assignmentsView) { assignmentsView.style.display = "block"; }
+      if (assignmentsTab) { assignmentsTab.style.background = "var(--accent)"; assignmentsTab.style.color = "white"; }
+      if (studentsTab) { studentsTab.style.background = "var(--bg)"; studentsTab.style.color = "var(--muted)"; }
+    }
+
+    function renderClassStudents(students) {
+      const table = $("class-students-table");
+      const body = $("class-students-body");
+      const empty = $("class-students-empty");
+      if (!table || !body || !empty) { return; }
+
+      body.innerHTML = "";
+      if (!students || students.length === 0) {
+        table.style.display = "none";
+        empty.style.display = "block";
+        return;
+      }
+
+      empty.style.display = "none";
+      table.style.display = "table";
+
+      students.forEach((s) => {
+        const tr = document.createElement("tr");
+        tr.style.borderBottom = "1px solid var(--border)";
+        tr.innerHTML = `
+          <td style="padding:8px;">
+            <div style="font-weight:600;">${s.studentName || "Unknown Student"}</div>
+            <div class="meta" style="font-size:0.78rem;">${s.studentEmail || ""}</div>
+          </td>
+          <td style="padding:8px;">${s.role || "Student"}</td>
+          <td style="padding:8px;">${s.assignmentName || "—"}</td>
+          <td style="padding:8px;">
+            <div>${s.workspaceName || ""}</div>
+            <div class="meta" style="font-size:0.78rem;">${s.workspaceRootPath || ""}</div>
+          </td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    function renderClassAssignments(assignments) {
+      const list = $("class-assignments-list");
+      const empty = $("class-assignments-empty");
+      if (!list || !empty) { return; }
+
+      list.innerHTML = "";
+      if (!assignments || assignments.length === 0) {
+        empty.style.display = "block";
+        return;
+      }
+
+      empty.style.display = "none";
+      assignments.forEach((a) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.style.marginBottom = "0";
+        card.style.padding = "12px";
+        card.innerHTML = `
+          <div style="font-weight:700;">${a.name}</div>
+          <div class="meta" style="margin-top:4px;">${a.description || "No description"}</div>
+          <div class="meta" style="margin-top:6px;">Due: ${a.dueDate || "No due date"}</div>
+        `;
+        list.appendChild(card);
+      });
+    }
+
+    $("btn-new-class")?.addEventListener("click", () => {
+      const formCard = $("class-form-card");
+      if (formCard) {
+        editingClassId = null;
+        const submitBtn = $("btn-submit-class");
+        if (submitBtn) { submitBtn.textContent = "Create Class"; }
+        formCard.style.display = formCard.style.display === "none" ? "block" : "none";
+      }
+    });
+
+    $("btn-cancel-class")?.addEventListener("click", () => {
+      if ($("class-form-card")) { $("class-form-card").style.display = "none"; }
+      editingClassId = null;
+      const submitBtn = $("btn-submit-class");
+      if (submitBtn) { submitBtn.textContent = "Create Class"; }
+    });
+
+    $("btn-back-to-classes")?.addEventListener("click", () => {
+      if ($("class-detail-view")) { $("class-detail-view").style.display = "none"; }
+      if ($("class-list-view")) { $("class-list-view").style.display = "grid"; }
+      loadClasses();
+    });
+
+    $("class-detail-tab-students")?.addEventListener("click", () => switchClassDetailTab("students"));
+    $("class-detail-tab-assignments")?.addEventListener("click", () => switchClassDetailTab("assignments"));
+
+    $("btn-create-assignment")?.addEventListener("click", () => {
+      if (!currentClassId) {
+        if (status) { status.textContent = "Open a class first."; }
+        return;
+      }
+
+      const name = $("assignment-name")?.value?.trim();
+      const description = $("assignment-description")?.value?.trim();
+      const dueDate = $("assignment-due-date")?.value;
+      const errEl = $("assignment-form-error");
+
+      if (!name) {
+        if (errEl) { errEl.textContent = "Assignment name is required."; errEl.style.display = "block"; }
+        return;
+      }
+
+      if (errEl) { errEl.style.display = "none"; }
+      const btn = $("btn-create-assignment");
+      if (btn) { btn.disabled = true; btn.textContent = "Creating..."; }
+
+      post("createClassAssignment", {
+        classId: currentClassId,
+        name,
+        description: description || "",
+        dueDate: dueDate || ""
+      });
+    });
+
+    $("btn-submit-class")?.addEventListener("click", () => {
+      const courseName = $("class-course-name")?.value?.trim();
+      const courseCode = $("class-course-code")?.value?.trim();
+      const teacherName = $("class-teacher-name")?.value?.trim();
+      const meetingTime = $("class-meeting-time")?.value?.trim();
+      const startDate = $("class-start-date")?.value;
+      const endDate = $("class-end-date")?.value;
+      const errEl = $("class-form-error");
+
+      if (!courseName || !courseCode || !teacherName || !startDate || !endDate) {
+        if (errEl) { errEl.textContent = "Course Name, Course Code, Teacher Name, Start Date, and End Date are required."; errEl.style.display = "block"; }
+        return;
+      }
+      if (startDate > endDate) {
+        if (errEl) { errEl.textContent = "End Date must be on or after Start Date."; errEl.style.display = "block"; }
+        return;
+      }
+      if (errEl) { errEl.style.display = "none"; }
+
+      const btn = $("btn-submit-class");
+      if (btn) { btn.disabled = true; btn.textContent = "Creating..."; }
+      if (editingClassId) {
+        post("updateClass", { classId: editingClassId, courseName, courseCode, teacherName, meetingTime: meetingTime || '', startDate, endDate });
+        if (btn) { btn.textContent = "Saving..."; }
+      } else {
+        post("createClass", { courseName, courseCode, teacherName, meetingTime: meetingTime || '', startDate, endDate });
       }
     });
 

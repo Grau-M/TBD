@@ -168,6 +168,8 @@ async function promptStudentAssignmentLink(
         return undefined;
     }
 
+    await storageManager.enrollStudentInClass(authUserId, linkedClass);
+
     const assignments = await storageManager.listAssignmentsForClass(linkedClass.id);
     if (assignments.length === 0) {
         vscode.window.showErrorMessage(

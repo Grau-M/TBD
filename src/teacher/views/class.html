@@ -88,7 +88,7 @@
     </div>
 
     <div id="class-detail-assignments" style="display:none;">
-      <div class="card" style="padding:14px; margin-bottom:12px;">
+      <div id="assignment-form-card" class="card" style="display:none; padding:14px; margin-bottom:12px;">
         <h3 style="margin-top:0; margin-bottom:10px;">Create Assignment</h3>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
           <div class="form-group" style="margin-bottom:0;">
@@ -110,6 +110,9 @@
         <p id="assignment-form-error" style="color:#ef4444; font-size:0.9rem; margin:8px 0 10px; display:none;"></p>
         <button id="btn-create-assignment" class="btn btn-primary">Create Assignment</button>
       </div>
+
+      <div id="class-assignments-empty" class="meta" style="display:none; padding:20px 0; text-align:center;">No assignments yet for this class.</div>
+      <div id="class-assignments-list" style="margin-bottom:20px;"></div>
       </div>
   </div>
 </div>

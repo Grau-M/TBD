@@ -2232,4 +2232,38 @@ export class DbStorageManager {
             }
         );
     }
+    async validateAssignmentLink(studentAuthUserId: number, workspacePath: string): Promise<{ 
+    classId: number; 
+    assignmentId: number; 
+    assignmentName: string; 
+    courseName: string 
+} | null> {
+    await this.ensureClassesSchema();
+
+    // Query to find the link and join with descriptive tables
+    const result = await executeQuery(
+        `SELECT swa.ClassId, swa.AssignmentId, ca.Name as AssignmentName, c.CourseName
+         FROM dbo.StudentWorkspaceAssignments swa
+         INNER JOIN dbo.ClassAssignments ca ON ca.Id = swa.AssignmentId
+         INNER JOIN dbo.Classes c ON c.Id = swa.ClassId
+         WHERE swa.StudentAuthUserId = @studentAuthUserId 
+           AND swa.WorkspaceRootPath = @workspaceRootPath`,
+        {
+            studentAuthUserId,
+            workspaceRootPath: workspacePath
+        }
+    );
+
+    if (result && result.recordset && result.recordset.length > 0) {
+        const row = result.recordset[0];
+        return {
+            classId: row.ClassId,
+            assignmentId: row.AssignmentId,
+            assignmentName: row.AssignmentName,
+            courseName: row.CourseName
+        };
+    }
+    return null;
+}
+    
 }

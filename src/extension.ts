@@ -422,22 +422,44 @@ export async function activate(context: vscode.ExtensionContext) {
     updateAuthStatusBar(context);
     
 let isSyncing = false;
-let forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync', async () => {
-    if (isSyncing || state.isFlushing) {
-        vscode.window.showInformationMessage("Syncing now... please wait.");
+const forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync', async () => {
+    const session = getWorkspaceAuthSession(context);
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+    // 1. Auth Check
+    if (!session?.authenticated || !session?.authUserId) {
+        vscode.window.showErrorMessage("Sync Denied: Please log in first.");
         return;
     }
 
+    // 2. Assignment Guard: Check if the current workspace is linked to a valid assignment
+    const assignmentLink = await (storageManager as any).validateAssignmentLink(
+        session.authUserId, 
+        workspaceRoot || ''
+    );
+
+    if (!assignmentLink) {
+        vscode.window.showErrorMessage(
+            "Sync Blocked: This workspace is not attached to an active assignment. Please join a class and link this folder first."
+        );
+        return;
+    }
+
+    // 3. Concurrency Check
+    if (isSyncing || state.isFlushing) {
+        vscode.window.showInformationMessage("Sync already in progress...");
+        return;
+    }
+
+    // 4. SUNNY DAY: Valid assignment confirmed, proceed with sync
     isSyncing = true;
-    updateSyncStatus(true); // Updates the global Database icon
+    updateSyncStatus(true);
     
     try {
-        await flushBuffer(); 
-        vscode.window.showInformationMessage("All data successfully pushed to cloud.");
-        // Notify the webview if it's open
-        // You would need to track the active panel to send this message
+        await flushBuffer();
+        vscode.window.showInformationMessage(`✅ Successfully synced to: ${assignmentLink.assignmentName}`);
     } catch (error) {
-        vscode.window.showErrorMessage("Sync failed. Data remains in local queue.");
+        vscode.window.showErrorMessage("Sync failed. Check your network connection.");
     } finally {
         isSyncing = false;
         updateSyncStatus(false);

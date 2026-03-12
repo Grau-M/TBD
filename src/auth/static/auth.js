@@ -75,6 +75,19 @@
     });
 
     // ── Sign In ───────────────────────────────────────────────────
+    function setOAuthBusyState(isBusy, label) {
+      const msBtn = $("btn-signin-microsoft");
+      const ggBtn = $("btn-signin-google");
+      if (msBtn) {
+        msBtn.disabled = isBusy;
+        msBtn.textContent = isBusy && label === "microsoft" ? "Signing in with Microsoft..." : "Continue with Microsoft";
+      }
+      if (ggBtn) {
+        ggBtn.disabled = isBusy;
+        ggBtn.textContent = isBusy && label === "google" ? "Signing in with Google..." : "Continue with Google";
+      }
+    }
+
     function doSignIn() {
       const email = ($("signin-email")?.value || "").trim().toLowerCase();
       const password = ($("signin-password")?.value || "").trim();
@@ -88,6 +101,16 @@
     }
 
     $("btn-signin")?.addEventListener("click", doSignIn);
+    $("btn-signin-microsoft")?.addEventListener("click", () => {
+      clearErrors();
+      setOAuthBusyState(true, "microsoft");
+      post("oauthSignIn", { provider: "microsoft" });
+    });
+    $("btn-signin-google")?.addEventListener("click", () => {
+      clearErrors();
+      setOAuthBusyState(true, "google");
+      post("oauthSignIn", { provider: "google" });
+    });
     [$("signin-email"), $("signin-password")].forEach((el) => {
       el?.addEventListener("keydown", (e) => { if (e.key === "Enter") { doSignIn(); } });
     });
@@ -150,6 +173,7 @@
           if (signinBtn) { signinBtn.disabled = false; signinBtn.textContent = "Sign In"; }
           const registerBtn = $("btn-register");
           if (registerBtn) { registerBtn.disabled = false; registerBtn.textContent = "Create Account"; }
+          setOAuthBusyState(false);
           break;
         }
       }

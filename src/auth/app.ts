@@ -7,6 +7,18 @@ const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let authPanel: vscode.WebviewPanel | undefined;
 
+async function pickRoleForNewUser(): Promise<UserRole | undefined> {
+    const selected = await vscode.window.showQuickPick([
+        { label: 'Student', description: 'Link workspace to class assignments' },
+        { label: 'Teacher', description: 'Access teacher dashboard and class management' },
+        { label: 'Admin', description: 'Full system management access' }
+    ], {
+        title: 'Select your role for this account',
+        placeHolder: 'Choose your role (first-time setup)'
+    });
+    return selected?.label as UserRole | undefined;
+}
+
 /**
  * Opens the dedicated login/register GUI webview.
  * Returns a Promise that resolves with the new session when the user
@@ -45,6 +57,79 @@ export async function openAuthView(
         authPanel.webview.onDidReceiveMessage(async (message) => {
             try {
                 switch (message.command) {
+                    case 'oauthSignIn': {
+                        const provider = String(message.provider || '').toLowerCase();
+                        if (provider !== 'microsoft' && provider !== 'google') {
+                            authPanel?.webview.postMessage({
+                                command: 'authError',
+                                form: 'signin',
+                                message: 'Unsupported sign-in provider.'
+                            });
+                            return;
+                        }
+
+                        const scopes = provider === 'microsoft'
+                            ? ['User.Read']
+                            : ['openid', 'profile', 'email'];
+                        const oauthSession = await vscode.authentication.getSession(provider, scopes, { createIfNone: true });
+                        if (!oauthSession) {
+                            authPanel?.webview.postMessage({
+                                command: 'authError',
+                                form: 'signin',
+                                message: 'Sign-in was cancelled.'
+                            });
+                            return;
+                        }
+
+                        const accountName = oauthSession.account.label || `${provider} user`;
+                        const emailGuess = accountName.includes('@')
+                            ? accountName.toLowerCase()
+                            : `${oauthSession.account.id}@${provider}.local`;
+
+                        const result = await storageManager.upsertAuthUser({
+                            provider,
+                            subjectId: oauthSession.account.id,
+                            email: emailGuess,
+                            displayName: accountName
+                        });
+
+                        let resolvedRole = result.role;
+                        if (result.isNew) {
+                            const chosenRole = await pickRoleForNewUser();
+                            if (!chosenRole) {
+                                authPanel?.webview.postMessage({
+                                    command: 'authError',
+                                    form: 'signin',
+                                    message: 'Role assignment was cancelled.'
+                                });
+                                return;
+                            }
+                            resolvedRole = chosenRole;
+                            await storageManager.updateAuthUserRole(result.authUserId, chosenRole);
+                        }
+
+                        const signedSession: WorkspaceAuthSession = {
+                            authenticated: true,
+                            authUserId: result.authUserId,
+                            role: resolvedRole,
+                            provider: provider as 'microsoft' | 'google',
+                            displayName: accountName,
+                            email: emailGuess
+                        };
+
+                        await context.workspaceState.update(WORKSPACE_AUTH_KEY, signedSession);
+                        authPanel?.webview.postMessage({
+                            command: 'authSuccess',
+                            displayName: signedSession.displayName,
+                            role: signedSession.role
+                        });
+
+                        const panel = authPanel;
+                        setTimeout(() => { panel?.dispose(); }, 1500);
+                        resolve(signedSession);
+                        break;
+                    }
+
                     case 'signIn': {
                         const user = await storageManager.findAuthUserByEmail(message.email as string);
                         if (!user) {

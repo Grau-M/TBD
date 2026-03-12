@@ -220,6 +220,52 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
     .auth-submit-btn:active { transform: scale(0.98); }
     .auth-submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
+    .oauth-buttons {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .auth-oauth-btn {
+      width: 100%;
+      min-height: 42px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      color: var(--fg);
+      font-size: 0.94rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, transform 0.1s;
+    }
+    .auth-oauth-btn:hover {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--surface) 80%, var(--bg) 20%);
+    }
+    .auth-oauth-btn:active { transform: scale(0.98); }
+    .auth-oauth-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .auth-divider {
+      position: relative;
+      text-align: center;
+      margin: 14px 0 16px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .auth-divider::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      border-top: 1px solid var(--border);
+      transform: translateY(-50%);
+    }
+    .auth-divider span {
+      position: relative;
+      background: var(--surface);
+      padding: 0 8px;
+    }
+
     .auth-switch-hint {
       text-align: center;
       margin-top: 18px;

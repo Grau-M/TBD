@@ -16,7 +16,16 @@ import * as vscode from 'vscode';
 //   lock-style status item. This command is expected to open the
 //   Teacher Dashboard (the educator/administrator webview). When provided,
 //   a lock icon is shown which invokes `hiddenCommandId` when clicked.
+let forceSyncButton: vscode.StatusBarItem;
 export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandId?: string): vscode.StatusBarItem {
+    // Create the Force Sync button with a sync icon, positioned to the left of the primary status item.
+    forceSyncButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10002);
+    forceSyncButton.command = 'tbd-logger.forceSync';
+    forceSyncButton.text = `$(sync) Force Sync`;
+    forceSyncButton.tooltip = 'Click to immediately upload local logs to the cloud.';
+    forceSyncButton.show();
+    context.subscriptions.push(forceSyncButton);
+
     // Create the primary StatusBarItem; command registration should be handled by the extension entrypoint
     const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
     item.text = 'TBD Logger $(eye)';
@@ -59,4 +68,20 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
     // expose primary globally so small handler modules can update UI without circular imports
     (global as any).statusBarItem = item;
     return item;
+}
+
+/**
+ * Updates the refresh button icon and text during the Sync process.
+ * Handles the Sunny Day (Syncing) and Rainy Day (Ready) UI states.
+ */
+export function updateSyncStatus(isSyncing: boolean) {
+    if (!forceSyncButton) return;
+
+    if (isSyncing) {
+        forceSyncButton.text = `$(sync~spin) Syncing...`;
+        forceSyncButton.tooltip = 'Synchronization is currently in progress.';
+    } else {
+        forceSyncButton.text = `$(sync) Force Sync`;
+        forceSyncButton.tooltip = 'Click to immediately upload local logs to the cloud.';
+    }
 }

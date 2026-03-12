@@ -19,6 +19,7 @@ import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
 import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess } from './auth';
 import { openAuthView, openAccountView } from './auth/index';
+import { updateSyncStatus } from './statusBar';
 
 import * as path from 'path';
 
@@ -111,14 +112,14 @@ export async function activate(context: vscode.ExtensionContext) {
         await openAuthView(context, storageManager);
     }
 
-    // NEW FEATURE: Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
+    // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
         inactivityThresholdMs: 5 * 60 * 1000, // 5 minutes (change if you want)
         checkEveryMs: 10_000
     });
 
 
-    // NEW: Log Session Start (Persistent Marker)
+    // Log Session Start 
     state.sessionBuffer.push({
         time: formatTimestamp(Date.now()),
         flightTime: '0',
@@ -133,7 +134,7 @@ export async function activate(context: vscode.ExtensionContext) {
     state.currentFocusedFile = isIgnoredPath(initialPath) ? '' : initialPath;
     state.focusStartTime = Date.now();
 
-    // UPDATED: Open Logs Command with Password Prompt
+    //Open Logs Command with Password Prompt
     const openLogs = async () => {
         const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Log access');
         if (!allowed) {
@@ -357,9 +358,32 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initial status update
     void updateDbStatusBar();
     updateAuthStatusBar(context);
+    
+
+    const forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync', async () => {
+        // RAINY DAY: Sync Already In Progress
+        if (state.isFlushing) {
+            vscode.window.showInformationMessage("Syncing now...");
+            return;
+        }
+        // SUNNY DAY: Force Sync
+        updateSyncStatus(true);
+        try {
+            // Bypass N-minute timer by calling flushBuffer immediately
+            await flushBuffer();
+            vscode.window.showInformationMessage("All data successfully pushed to cloud.");
+        } catch (err) {
+            vscode.window.showErrorMessage("Sync failed. Check your connection.");
+        } finally {
+            updateSyncStatus(false);
+        }
+    });
+    // Register the force sync command and add to subscriptions
+    context.subscriptions.push(forceSyncCommand);
 
     //Return the internals so the Test Suite can see them
     return { state, storageManager };
+    
 }
 
 export function deactivate() {

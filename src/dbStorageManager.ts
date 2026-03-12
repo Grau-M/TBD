@@ -1025,6 +1025,18 @@ export class DbStorageManager {
         );
     }
 
+    async findAuthUserByEmail(email: string): Promise<{ authUserId: number; role: UserRole; displayName: string } | null> {
+        await this.ensureAuthSchema();
+        const result = await executeQuery(
+            `SELECT Id, AssignedRole, DisplayName FROM dbo.ExtensionAuthUsers
+             WHERE Provider = 'email' AND SubjectId = @email`,
+            { email: email.toLowerCase() }
+        );
+        if (result.recordset.length === 0) { return null; }
+        const row = result.recordset[0];
+        return { authUserId: row.Id, role: row.AssignedRole as UserRole, displayName: row.DisplayName };
+    }
+
     async createClassActivity(teacherAuthUserId: number, name: string, description: string): Promise<number> {
         await this.ensureAuthSchema();
 

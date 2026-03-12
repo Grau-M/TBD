@@ -17,7 +17,8 @@ import { storageManager, state, CONSTANTS } from './state';
 import { isIgnoredPath, formatTimestamp } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
-import { clearWorkspaceAuthSession, getWorkspaceAuthSession, initializeWorkspaceAccess, manageClassActivities, requireRoleAccess } from './auth';
+import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess } from './auth';
+import { openAuthView } from './auth/index';
 
 import * as path from 'path';
 
@@ -104,7 +105,11 @@ export async function activate(context: vscode.ExtensionContext) {
     await storageManager.init(context);
 
     // Unified workspace authentication + role assignment + student activity mapping.
-    await initializeWorkspaceAccess(context, storageManager);
+    // Open the auth GUI webview if the workspace is not yet authenticated.
+    const existingSession = getWorkspaceAuthSession(context);
+    if (!existingSession?.authenticated) {
+        await openAuthView(context, storageManager);
+    }
 
     // NEW FEATURE: Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
@@ -244,7 +249,7 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        await initializeWorkspaceAccess(context, storageManager, true);
+        await openAuthView(context, storageManager);
         updateAuthStatusBar(context);
     });
     context.subscriptions.push(authSignInCommand);

@@ -1,0 +1,95 @@
+<!-- Auth Panel: Login & Register -->
+<div class="auth-container">
+
+  <button id="auth-theme-toggle" class="top-theme-btn" title="Toggle theme">🌓</button>
+
+  <div class="auth-card">
+
+    <!-- Header -->
+    <div class="auth-header">
+      <div class="auth-logo">🛡️</div>
+      <h1 class="auth-title">TBD Logger</h1>
+      <p class="auth-subtitle">Capstone Integrity Tool</p>
+    </div>
+
+    <!-- Tab buttons -->
+    <div class="auth-tabs">
+      <button id="auth-tab-signin" class="auth-tab-btn active">Sign In</button>
+      <button id="auth-tab-register" class="auth-tab-btn">Register</button>
+    </div>
+
+    <!-- Sign In form -->
+    <div id="auth-signin-panel" class="auth-panel">
+      <div class="form-group">
+        <label for="signin-email">Email Address</label>
+        <input type="text" id="signin-email" placeholder="student@school.edu" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="signin-password">
+          Password
+          <span class="muted-label">(used for log encryption)</span>
+        </label>
+        <div class="password-wrapper">
+          <input type="password" id="signin-password" placeholder="Enter your password" autocomplete="current-password" />
+          <button type="button" class="toggle-pw" data-target="signin-password" title="Show/hide password">👁</button>
+        </div>
+      </div>
+      <div id="signin-error" class="auth-error hidden"></div>
+      <button id="btn-signin" class="auth-submit-btn">Sign In</button>
+      <p class="auth-switch-hint">
+        Don't have an account?
+        <button type="button" class="link-btn" id="go-to-register">Register here</button>
+      </p>
+    </div>
+
+    <!-- Register form -->
+    <div id="auth-register-panel" class="auth-panel hidden">
+      <div class="form-group">
+        <label for="register-name">Display Name</label>
+        <input type="text" id="register-name" placeholder="Jane Smith" autocomplete="name" />
+      </div>
+      <div class="form-group">
+        <label for="register-email">Email Address</label>
+        <input type="text" id="register-email" placeholder="student@school.edu" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label for="register-password">Password</label>
+        <div class="password-wrapper">
+          <input type="password" id="register-password" placeholder="Create a password (min 4 chars)" autocomplete="new-password" />
+          <button type="button" class="toggle-pw" data-target="register-password" title="Show/hide password">👁</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="register-confirm">Confirm Password</label>
+        <div class="password-wrapper">
+          <input type="password" id="register-confirm" placeholder="Repeat your password" autocomplete="new-password" />
+          <button type="button" class="toggle-pw" data-target="register-confirm" title="Show/hide password">👁</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="register-role">Role</label>
+        <select id="register-role">
+          <option value="Student">Student</option>
+          <option value="Teacher">Teacher</option>
+          <option value="Admin">Admin</option>
+        </select>
+      </div>
+      <div id="register-error" class="auth-error hidden"></div>
+      <button id="btn-register" class="auth-submit-btn">Create Account</button>
+      <p class="auth-switch-hint">
+        Already have an account?
+        <button type="button" class="link-btn" id="go-to-signin">Sign in here</button>
+      </p>
+    </div>
+
+    <!-- Success state -->
+    <div id="auth-success-panel" class="auth-panel hidden">
+      <div class="auth-success">
+        <div class="auth-success-icon">✓</div>
+        <h2 id="auth-success-title">Signed In!</h2>
+        <p id="auth-success-msg" class="auth-success-sub"></p>
+      </div>
+    </div>
+
+  </div>
+</div>

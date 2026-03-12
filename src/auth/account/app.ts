@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { DbStorageManager } from '../../dbStorageManager';
 import { WorkspaceAuthSession } from '../../auth';
 import { getAccountHtml } from './getHtml';
@@ -144,6 +145,71 @@ export async function openAccountView(
                             const classes = await storageManager.listStudentClasses(currentSession.authUserId);
                             accountPanel?.webview.postMessage({ command: 'studentClassesData', data: classes });
                         }
+                        break;
+                    }
+                    case 'linkStudentAssignmentWorkspace': {
+                        const currentSession = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
+                        if (!currentSession?.authenticated || currentSession.role !== 'Student') {
+                            accountPanel?.webview.postMessage({ command: 'accountError', message: 'Student class dashboard is unavailable.' });
+                            return;
+                        }
+
+                        const classId = Number(message.classId);
+                        const assignmentId = Number(message.assignmentId);
+                        if (!Number.isFinite(classId) || classId <= 0 || !Number.isFinite(assignmentId) || assignmentId <= 0) {
+                            accountPanel?.webview.postMessage({ command: 'accountError', message: 'Invalid assignment selection.' });
+                            return;
+                        }
+
+                        const assignments = await storageManager.listStudentAssignmentsForClass(currentSession.authUserId, classId);
+                        const target = assignments.find(a => a.assignmentId === assignmentId);
+                        if (!target) {
+                            accountPanel?.webview.postMessage({ command: 'accountError', message: 'Assignment not found for this class.' });
+                            return;
+                        }
+
+                        if (target.workspaceName || target.workspaceRootPath || target.linkedAt) {
+                            accountPanel?.webview.postMessage({
+                                command: 'accountError',
+                                message: 'A workspace is already linked to this assignment and cannot be changed.'
+                            });
+                            return;
+                        }
+
+                        const picked = await vscode.window.showOpenDialog({
+                            canSelectFiles: false,
+                            canSelectFolders: true,
+                            canSelectMany: false,
+                            openLabel: 'Select Assignment Workspace Folder',
+                            title: `Select workspace folder for ${target.assignmentName || 'assignment'}`
+                        });
+
+                        if (!picked || picked.length === 0) {
+                            return;
+                        }
+
+                        const folderUri = picked[0];
+                        const workspaceName = path.basename(folderUri.fsPath || folderUri.path || 'workspace');
+                        await storageManager.linkStudentWorkspaceToAssignment({
+                            studentAuthUserId: currentSession.authUserId,
+                            teacherAuthUserId: 0,
+                            classId,
+                            assignmentId,
+                            workspaceName,
+                            workspaceRootPath: folderUri.fsPath,
+                            workspaceFoldersJson: JSON.stringify([
+                                {
+                                    name: workspaceName,
+                                    uri: folderUri.toString()
+                                }
+                            ])
+                        });
+
+                        const refreshed = await storageManager.listStudentAssignmentsForClass(currentSession.authUserId, classId);
+                        accountPanel?.webview.postMessage({
+                            command: 'studentAssignmentWorkspaceLinked',
+                            data: { classId, assignments: refreshed }
+                        });
                         break;
                     }
                 }

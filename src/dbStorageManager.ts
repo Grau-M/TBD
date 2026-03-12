@@ -12,6 +12,11 @@ import type { StandardEvent } from './types';
 
 // SECURITY CONFIGURATION
 const SECRET_PASSPHRASE = 'password';
+const OFFLINE_QUEUE_SYNC_INTERVAL_MS = 30_000;
+const OFFLINE_QUEUE_MAX_FILES = 500;
+const OFFLINE_QUEUE_WARN_AT = 450;
+const OFFLINE_QUEUE_ENCRYPTION_SALT = 'tbd-offline-queue-salt-v1';
+const OFFLINE_QUEUE_FAILED_DIR = 'failed';
 
 interface QueuedBatch {
     version: 1;
@@ -22,6 +27,16 @@ interface QueuedBatch {
         project: string;
     };
     events: StandardEvent[];
+}
+
+export type SyncState = 'synced' | 'syncing' | 'offline' | 'queue-warning' | 'conflict' | 'idle';
+
+export interface BackgroundSyncStatus {
+    state: SyncState;
+    pendingQueueCount: number;
+    lastSyncedAt: string | null;
+    lastError: string | null;
+    lastConflictAt: string | null;
 }
 
 interface SessionData {
@@ -214,6 +229,13 @@ export class DbStorageManager {
     private isSyncing = false;
     private authSchemaReady = false;
     private classesSchemaReady = false;
+    private syncSchemaReady = false;
+    private pendingQueueCount = 0;
+    private lastSyncedAtMs: number | null = null;
+    private lastSyncError: string | null = null;
+    private lastConflictAtMs: number | null = null;
+    private lastQueueWarningAtMs: number | null = null;
+    private syncState: SyncState = 'idle';
 
     async init(context: vscode.ExtensionContext): Promise<void> {
         this.context = context;
@@ -224,13 +246,14 @@ export class DbStorageManager {
 
         this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
         await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
+        await this.refreshOfflineQueueCount();
 
         // Start connection in the background (don't await - let it connect while extension operates)
         void this.initializeOnlineSessionInBackground();
 
         this.syncTimer = setInterval(() => {
             void this.syncOfflineQueue();
-        }, 30000);
+        }, OFFLINE_QUEUE_SYNC_INTERVAL_MS);
         context.subscriptions.push({
             dispose: () => {
                 if (this.syncTimer) {
@@ -257,8 +280,12 @@ export class DbStorageManager {
             console.log('[TBD Logger DB] Starting background database connection...');
             await this.initializeOnlineSession(this.currentUserName, this.currentProjectName);
             console.log('[TBD Logger DB] Database connection established successfully');
+            if (this.pendingQueueCount === 0) {
+                this.setSyncState('synced');
+            }
         } catch (err) {
             console.warn('[TBD Logger DB] Operating in offline mode. Events will be queued locally.', err);
+            this.setSyncState('offline', String((err as any)?.message || err));
         }
     }
 
@@ -483,9 +510,14 @@ export class DbStorageManager {
 
             await this.insertEventsForSession(this.currentSessionId, newEvents);
             console.log(`[TBD Logger DB] Flushed ${newEvents.length} events to database`);
+            this.lastSyncedAtMs = Date.now();
+            if (this.pendingQueueCount === 0) {
+                this.setSyncState('synced');
+            }
             void this.syncOfflineQueue();
         } catch (err) {
             console.warn('[TBD Logger DB] Database write failed, queueing events for offline sync:', err);
+            this.setSyncState('offline', String((err as any)?.message || err));
             await this.enqueueOfflineBatch({
                 version: 1,
                 queuedAt: new Date().toISOString(),
@@ -558,13 +590,244 @@ export class DbStorageManager {
         }
     }
 
+    private deriveOfflineQueueKey(user: string, project: string): Buffer {
+        return crypto.scryptSync(
+            `${SECRET_PASSPHRASE}:${user}:${project}`,
+            OFFLINE_QUEUE_ENCRYPTION_SALT,
+            32
+        );
+    }
+
+    private encryptQueuedBatch(batch: QueuedBatch): Buffer {
+        const plaintext = Buffer.from(JSON.stringify(batch), 'utf8');
+        const iv = crypto.randomBytes(12);
+        const key = this.deriveOfflineQueueKey(batch.session.user, batch.session.project);
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+        const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+        const tag = cipher.getAuthTag();
+        const envelope = {
+            version: 1,
+            algorithm: 'aes-256-gcm',
+            user: batch.session.user,
+            project: batch.session.project,
+            iv: iv.toString('base64'),
+            tag: tag.toString('base64'),
+            payload: ciphertext.toString('base64')
+        };
+        return Buffer.from(JSON.stringify(envelope), 'utf8');
+    }
+
+    private decryptQueuedBatch(raw: Uint8Array): QueuedBatch {
+        const parsed = JSON.parse(Buffer.from(raw).toString('utf8')) as any;
+
+        // Backward compatibility: older queue files were plaintext JSON batches.
+        if (parsed && parsed.version === 1 && parsed.session && Array.isArray(parsed.events)) {
+            return parsed as QueuedBatch;
+        }
+
+        if (!parsed || parsed.version !== 1 || parsed.algorithm !== 'aes-256-gcm') {
+            throw new Error('Unsupported offline queue payload format');
+        }
+
+        const iv = Buffer.from(parsed.iv, 'base64');
+        const tag = Buffer.from(parsed.tag, 'base64');
+        const ciphertext = Buffer.from(parsed.payload, 'base64');
+        const key = this.deriveOfflineQueueKey(
+            parsed.user || this.currentUserName,
+            parsed.project || this.currentProjectName
+        );
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+        decipher.setAuthTag(tag);
+        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+        return JSON.parse(plaintext.toString('utf8')) as QueuedBatch;
+    }
+
+    private async readOfflineQueueFiles(): Promise<string[]> {
+        if (!this.offlineQueueDir) {
+            return [];
+        }
+        const files = await vscode.workspace.fs.readDirectory(this.offlineQueueDir);
+        return files
+            .map(([name]) => name)
+            .filter(name => name.endsWith('.json'))
+            .sort();
+    }
+
+    private async moveQueueFileToFailed(fileUri: vscode.Uri, fileName: string, reason: string): Promise<void> {
+        if (!this.offlineQueueDir) {
+            return;
+        }
+
+        const failedDir = vscode.Uri.joinPath(this.offlineQueueDir, OFFLINE_QUEUE_FAILED_DIR);
+        await vscode.workspace.fs.createDirectory(failedDir);
+        const failedName = `${Date.now()}-${fileName.replace(/\.json$/i, '')}.failed.json`;
+        const failedUri = vscode.Uri.joinPath(failedDir, failedName);
+
+        try {
+            await vscode.workspace.fs.rename(fileUri, failedUri, { overwrite: false });
+        } catch {
+            const raw = await vscode.workspace.fs.readFile(fileUri);
+            const wrapped = {
+                reason,
+                movedAt: new Date().toISOString(),
+                originalFileName: fileName,
+                raw: Buffer.from(raw).toString('base64')
+            };
+            await vscode.workspace.fs.writeFile(failedUri, Buffer.from(JSON.stringify(wrapped), 'utf8'));
+            await vscode.workspace.fs.delete(fileUri);
+        }
+    }
+
+    private setSyncState(state: SyncState, error?: string | null): void {
+        this.syncState = state;
+        this.lastSyncError = error ?? null;
+    }
+
+    private formatMsIso(ms: number | null): string | null {
+        return ms ? new Date(ms).toISOString() : null;
+    }
+
+    private isLikelyConnectivityError(error: unknown): boolean {
+        const msg = String((error as any)?.message || error || '').toLowerCase();
+        return msg.includes('connect')
+            || msg.includes('timeout')
+            || msg.includes('econn')
+            || msg.includes('network')
+            || msg.includes('socket')
+            || msg.includes('closed');
+    }
+
+    private async refreshOfflineQueueCount(): Promise<void> {
+        this.pendingQueueCount = (await this.readOfflineQueueFiles()).length;
+    }
+
+    private async warnIfQueueNearLimit(): Promise<void> {
+        await this.refreshOfflineQueueCount();
+        const now = Date.now();
+        const shouldNotify = !this.lastQueueWarningAtMs || (now - this.lastQueueWarningAtMs) > 5 * 60 * 1000;
+        if (this.pendingQueueCount > OFFLINE_QUEUE_MAX_FILES) {
+            this.setSyncState('queue-warning', `Offline queue exceeded ${OFFLINE_QUEUE_MAX_FILES} items.`);
+            if (shouldNotify) {
+                this.lastQueueWarningAtMs = now;
+                vscode.window.showWarningMessage(
+                    `TBD Logger offline queue has exceeded ${OFFLINE_QUEUE_MAX_FILES} pending uploads. Reconnect soon to avoid delayed backups.`
+                );
+            }
+            return;
+        }
+
+        if (this.pendingQueueCount >= OFFLINE_QUEUE_WARN_AT) {
+            this.setSyncState('queue-warning', `Offline queue is near limit (${this.pendingQueueCount}/${OFFLINE_QUEUE_MAX_FILES}).`);
+            if (shouldNotify) {
+                this.lastQueueWarningAtMs = now;
+                vscode.window.showWarningMessage(
+                    `TBD Logger offline queue is at ${this.pendingQueueCount}/${OFFLINE_QUEUE_MAX_FILES}. Reconnect to sync pending session data.`
+                );
+            }
+        }
+    }
+
+    private async ensureSyncSchema(): Promise<void> {
+        if (this.syncSchemaReady) {
+            return;
+        }
+
+        await executeQuery(`
+            IF OBJECT_ID('dbo.SessionSyncConflicts', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.SessionSyncConflicts (
+                    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+                    SessionId BIGINT NOT NULL,
+                    DetectedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    ResolutionStrategy NVARCHAR(100) NOT NULL,
+                    DetailsJson NVARCHAR(MAX) NOT NULL,
+                    IsResolved BIT NOT NULL DEFAULT 0
+                );
+            END
+        `);
+
+        this.syncSchemaReady = true;
+    }
+
+    private parseEventTimeMs(event: StandardEvent): number {
+        const parsed = Date.parse(event.time || '');
+        return Number.isFinite(parsed) ? parsed : Date.now();
+    }
+
+    private async recordSyncConflict(
+        sessionId: number,
+        cloudLatestAt: string | null,
+        localLatestAt: string | null,
+        droppedCount: number
+    ): Promise<void> {
+        await this.ensureSyncSchema();
+        await executeQuery(
+            `INSERT INTO dbo.SessionSyncConflicts (SessionId, ResolutionStrategy, DetailsJson)
+             VALUES (@sessionId, @resolutionStrategy, @detailsJson)`,
+            {
+                sessionId,
+                resolutionStrategy: 'LatestWinsTimestamp',
+                detailsJson: JSON.stringify({
+                    cloudLatestAt,
+                    localLatestAt,
+                    droppedCount
+                })
+            }
+        );
+    }
+
+    private async insertEventsWithLatestWins(sessionId: number, events: StandardEvent[]): Promise<{ inserted: number; dropped: number }> {
+        const latestCloudResult = await executeQuery(
+            `SELECT MAX(OccurredAt) AS LatestOccurredAt FROM SessionEvents WHERE SessionId = @sessionId`,
+            { sessionId }
+        );
+
+        const latestCloudRaw = latestCloudResult.recordset[0]?.LatestOccurredAt;
+        const latestCloudMs = latestCloudRaw ? new Date(latestCloudRaw).getTime() : null;
+
+        const sorted = [...events].sort((a, b) => this.parseEventTimeMs(a) - this.parseEventTimeMs(b));
+        const allowed: StandardEvent[] = [];
+        let dropped = 0;
+
+        for (const event of sorted) {
+            const eventMs = this.parseEventTimeMs(event);
+            if (latestCloudMs !== null && eventMs <= latestCloudMs) {
+                dropped += 1;
+                continue;
+            }
+            allowed.push(event);
+        }
+
+        if (allowed.length > 0) {
+            await this.insertEventsForSession(sessionId, allowed);
+        }
+
+        if (dropped > 0) {
+            const latestLocalMs = sorted.length > 0 ? this.parseEventTimeMs(sorted[sorted.length - 1]) : null;
+            await this.recordSyncConflict(
+                sessionId,
+                latestCloudMs ? new Date(latestCloudMs).toISOString() : null,
+                latestLocalMs ? new Date(latestLocalMs).toISOString() : null,
+                dropped
+            );
+            this.lastConflictAtMs = Date.now();
+            this.setSyncState('conflict', `${dropped} queued events were older than cloud state and skipped.`);
+        }
+
+        return { inserted: allowed.length, dropped };
+    }
+
     private async enqueueOfflineBatch(batch: QueuedBatch): Promise<void> {
         if (!this.offlineQueueDir) {
             return;
         }
         const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
         const uri = vscode.Uri.joinPath(this.offlineQueueDir, name);
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(batch), 'utf8'));
+        await vscode.workspace.fs.writeFile(uri, this.encryptQueuedBatch(batch));
+        await this.warnIfQueueNearLimit();
+        if (!isConnected()) {
+            this.setSyncState('offline');
+        }
     }
 
     private async syncOfflineQueue(): Promise<void> {
@@ -574,23 +837,32 @@ export class DbStorageManager {
 
         this.isSyncing = true;
         try {
-            const files = await vscode.workspace.fs.readDirectory(this.offlineQueueDir);
-            const queueFiles = files
-                .map(([name]) => name)
-                .filter(name => name.endsWith('.json'))
-                .sort();
+            const queueFiles = await this.readOfflineQueueFiles();
+            this.pendingQueueCount = queueFiles.length;
 
             if (queueFiles.length === 0) {
+                if (isConnected()) {
+                    this.setSyncState('synced');
+                } else {
+                    this.setSyncState('offline');
+                }
                 return;
             }
 
-            await getPool();
+            this.setSyncState('syncing');
+
+            try {
+                await getPool();
+            } catch (err) {
+                this.setSyncState('offline', String((err as any)?.message || err));
+                return;
+            }
 
             for (const fileName of queueFiles) {
                 const fileUri = vscode.Uri.joinPath(this.offlineQueueDir, fileName);
                 try {
                     const raw = await vscode.workspace.fs.readFile(fileUri);
-                    const batch = JSON.parse(Buffer.from(raw).toString('utf8')) as QueuedBatch;
+                    const batch = this.decryptQueuedBatch(raw);
                     if (!batch.events || batch.events.length === 0) {
                         await vscode.workspace.fs.delete(fileUri);
                         continue;
@@ -605,15 +877,32 @@ export class DbStorageManager {
                         targetSessionId = await this.createSession(batch.session.user, batch.session.project);
                     }
 
-                    await this.insertEventsForSession(targetSessionId, batch.events);
+                    await this.insertEventsWithLatestWins(targetSessionId, batch.events);
                     await vscode.workspace.fs.delete(fileUri);
                 } catch (err) {
-                    console.warn('[TBD Logger DB] Offline sync paused due to error:', err);
-                    break;
+                    if (this.isLikelyConnectivityError(err)) {
+                        console.warn('[TBD Logger DB] Offline sync paused while network is unavailable:', err);
+                        this.setSyncState('offline', String((err as any)?.message || err));
+                        break;
+                    }
+
+                    console.warn('[TBD Logger DB] Skipping invalid offline queue batch and continuing sync:', err);
+                    await this.moveQueueFileToFailed(fileUri, fileName, String((err as any)?.message || err));
+                    this.setSyncState('conflict', 'One queued upload was invalid and moved to failed queue.');
                 }
             }
+
+            await this.refreshOfflineQueueCount();
+            if (this.pendingQueueCount === 0) {
+                this.lastSyncedAtMs = Date.now();
+                if (this.syncState !== 'conflict') {
+                    this.setSyncState('synced');
+                }
+            } else if (this.pendingQueueCount >= OFFLINE_QUEUE_WARN_AT) {
+                this.setSyncState('queue-warning', `Offline queue is near limit (${this.pendingQueueCount}/${OFFLINE_QUEUE_MAX_FILES}).`);
+            }
         } catch (err) {
-            // Database likely still unavailable, keep queue for next sync attempt.
+            this.setSyncState('offline', String((err as any)?.message || err));
         } finally {
             this.isSyncing = false;
         }
@@ -944,6 +1233,16 @@ export class DbStorageManager {
      */
     isOnline(): boolean {
         return isConnected();
+    }
+
+    getBackgroundSyncStatus(): BackgroundSyncStatus {
+        return {
+            state: this.syncState,
+            pendingQueueCount: this.pendingQueueCount,
+            lastSyncedAt: this.formatMsIso(this.lastSyncedAtMs),
+            lastError: this.lastSyncError,
+            lastConflictAt: this.formatMsIso(this.lastConflictAtMs)
+        };
     }
 
     /**
@@ -1842,17 +2141,50 @@ export class DbStorageManager {
     async linkStudentWorkspaceToAssignment(input: StudentAssignmentLinkInput): Promise<void> {
         await this.ensureClassesSchema();
 
+        const classLookup = await executeQuery(
+            `SELECT TOP 1 Id, TeacherAuthUserId
+             FROM dbo.Classes
+             WHERE Id = @classId AND IsActive = 1`,
+            { classId: input.classId }
+        );
+
+        if (classLookup.recordset.length === 0) {
+            throw new Error('Class not found.');
+        }
+
+        const resolvedTeacherAuthUserId = Number(classLookup.recordset[0].TeacherAuthUserId || 0);
+        if (!Number.isFinite(resolvedTeacherAuthUserId) || resolvedTeacherAuthUserId <= 0) {
+            throw new Error('Class teacher could not be resolved.');
+        }
+
         await this.enrollStudentInClass(input.studentAuthUserId, {
             id: input.classId,
-            teacherAuthUserId: input.teacherAuthUserId,
+            teacherAuthUserId: resolvedTeacherAuthUserId,
             teacherName: '',
             courseName: '',
             courseCode: '',
             joinCode: ''
         });
 
+        const existingAssignmentLink = await executeQuery(
+            `SELECT TOP 1 Id
+             FROM dbo.StudentWorkspaceAssignments
+             WHERE StudentAuthUserId = @studentAuthUserId
+               AND ClassId = @classId
+               AND AssignmentId = @assignmentId`,
+            {
+                studentAuthUserId: input.studentAuthUserId,
+                classId: input.classId,
+                assignmentId: input.assignmentId
+            }
+        );
+
+        if (existingAssignmentLink.recordset.length > 0) {
+            throw new Error('A workspace is already linked to this assignment and cannot be changed.');
+        }
+
         const existing = await executeQuery(
-            `SELECT Id
+            `SELECT Id, ClassId, AssignmentId
              FROM dbo.StudentWorkspaceAssignments
              WHERE StudentAuthUserId = @studentAuthUserId
                AND WorkspaceRootPath = @workspaceRootPath`,
@@ -1863,25 +2195,11 @@ export class DbStorageManager {
         );
 
         if (existing.recordset.length > 0) {
-            await executeQuery(
-                `UPDATE dbo.StudentWorkspaceAssignments
-                 SET TeacherAuthUserId = @teacherAuthUserId,
-                     ClassId = @classId,
-                     AssignmentId = @assignmentId,
-                     WorkspaceName = @workspaceName,
-                     WorkspaceFoldersJson = @workspaceFoldersJson,
-                     UpdatedAt = SYSUTCDATETIME()
-                 WHERE Id = @id`,
-                {
-                    id: existing.recordset[0].Id,
-                    teacherAuthUserId: input.teacherAuthUserId,
-                    classId: input.classId,
-                    assignmentId: input.assignmentId,
-                    workspaceName: input.workspaceName,
-                    workspaceFoldersJson: input.workspaceFoldersJson
-                }
-            );
-            return;
+            const existingRow = existing.recordset[0];
+            if (Number(existingRow.ClassId) === input.classId && Number(existingRow.AssignmentId) === input.assignmentId) {
+                throw new Error('This workspace is already linked to this assignment.');
+            }
+            throw new Error('This workspace folder is already linked to a different assignment.');
         }
 
         await executeQuery(
@@ -1905,7 +2223,7 @@ export class DbStorageManager {
             )`,
             {
                 studentAuthUserId: input.studentAuthUserId,
-                teacherAuthUserId: input.teacherAuthUserId,
+                teacherAuthUserId: resolvedTeacherAuthUserId,
                 classId: input.classId,
                 assignmentId: input.assignmentId,
                 workspaceName: input.workspaceName,

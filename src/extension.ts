@@ -29,15 +29,31 @@ async function updateDbStatusBar(): Promise<void> {
     const statusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
     if (!statusItem) return;
 
+    const sync = storageManager.getBackgroundSyncStatus();
+    const pendingSuffix = sync.pendingQueueCount > 0 ? ` (${sync.pendingQueueCount} queued)` : '';
+
     if (storageManager.isConnecting()) {
         statusItem.text = '$(loading~spin) Connecting...';
         statusItem.tooltip = 'Connecting to database...';
+    } else if (sync.state === 'syncing') {
+        statusItem.text = `$(sync~spin) Syncing${pendingSuffix}`;
+        statusItem.tooltip = 'Uploading queued session data in the background.';
+    } else if (sync.state === 'queue-warning') {
+        statusItem.text = `$(warning) Queue High${pendingSuffix}`;
+        statusItem.tooltip = sync.lastError || 'Offline queue is near limit. Reconnect to continue syncing safely.';
+    } else if (sync.state === 'conflict') {
+        statusItem.text = `$(alert) Synced (Conflict Flagged)`;
+        statusItem.tooltip = sync.lastError || 'A sync conflict was detected and flagged for instructor review using Latest Wins resolution.';
     } else if (storageManager.isOnline()) {
-        statusItem.text = '$(database) Online';
-        statusItem.tooltip = 'Database connection is active';
+        statusItem.text = '$(cloud-upload) Synced';
+        statusItem.tooltip = sync.lastSyncedAt
+            ? `Session data is synchronized. Last sync: ${sync.lastSyncedAt}`
+            : 'Session data is synchronized.';
     } else {
-        statusItem.text = '$(database) Offline';
-        statusItem.tooltip = 'Database offline. Events queued for sync when connection restored.';
+        statusItem.text = `$(database) Offline${pendingSuffix}`;
+        statusItem.tooltip = sync.lastError
+            ? `Database offline. Events queued for sync when connection is restored. Last error: ${sync.lastError}`
+            : 'Database offline. Events queued for sync when connection is restored.';
     }
 }
 

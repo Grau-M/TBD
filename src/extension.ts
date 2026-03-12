@@ -27,7 +27,7 @@ import { openStudentSyncView } from './auth/studentSyncView';
 // Function to update database status bar item
 async function updateDbStatusBar(): Promise<void> {
     const statusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
-    if (!statusItem) return;
+    if (!statusItem) { return; }
 
     const sync = storageManager.getBackgroundSyncStatus();
     const pendingSuffix = sync.pendingQueueCount > 0 ? ` (${sync.pendingQueueCount} queued)` : '';

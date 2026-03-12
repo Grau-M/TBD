@@ -57,7 +57,6 @@ suite('Extension Integration Tests', () => {
         // 4. Verify via API
         const events = api.state.sessionBuffer;
 
-        // FIX: Find the SPECIFIC event matching our content length
         // This ignores the "Hello" event (5 chars) from the previous test
         const pasteEvent = events.find(e => 
             (e.eventType === 'paste' || e.eventType === 'ai-paste') && 

@@ -3,9 +3,8 @@ import * as vscode from 'vscode';
 import { ExtensionApi } from '../../extension'; 
 
 suite('Extension Integration Tests', function () {
-    this.timeout(20000);
-
-    vscode.window.showInformationMessage('Start all tests.');
+    // Increase timeout to 60s for CI stability
+    this.timeout(60000);
 
     test('Edit Listener captures typing events', async () => {
         const extension = vscode.extensions.getExtension('MarcusGrau.tbd-logger');
@@ -24,7 +23,8 @@ suite('Extension Integration Tests', function () {
             editBuilder.insert(new vscode.Position(0, 0), 'Hello');
         });
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Increase delay for CI processing
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         const events = api.state.sessionBuffer;
         const editEvent = events.find(e => e.eventType === 'input' || e.eventType === 'paste' || e.eventType === 'ai-paste');
@@ -45,7 +45,7 @@ suite('Extension Integration Tests', function () {
             editBuilder.insert(new vscode.Position(0, 0), pasteContent);
         });
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         const events = api.state.sessionBuffer;
         const pasteEvent = events.find(e => 

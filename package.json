@@ -74,6 +74,10 @@
       "command": "tbd-logger.forceSync",
       "title": "TBD Logger: Force Sync",
       "icon": "$(sync)"
+      },
+      {
+      "command": "tbd-logger.openStudentSyncView",
+      "title": "TBD Logger: Open Student Dashboard"
       }
     ],
     "menus": {

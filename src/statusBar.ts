@@ -4,6 +4,7 @@
 // optional secondary (locked) item, registers them for disposal, and
 // exposes the primary item via the global object for other modules.
 import * as vscode from 'vscode';
+import { storageManager } from './state';
 
 // Function: createStatusBar
 // Purpose: Construct and register a primary status bar item (and an
@@ -18,13 +19,6 @@ import * as vscode from 'vscode';
 //   a lock icon is shown which invokes `hiddenCommandId` when clicked.
 let forceSyncButton: vscode.StatusBarItem;
 export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandId?: string): vscode.StatusBarItem {
-    // Create the Force Sync button with a sync icon, positioned to the left of the primary status item.
-    forceSyncButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10002);
-    forceSyncButton.command = 'tbd-logger.forceSync';
-    forceSyncButton.text = `$(sync) Force Sync`;
-    forceSyncButton.tooltip = 'Click to immediately upload local logs to the cloud.';
-    forceSyncButton.show();
-    context.subscriptions.push(forceSyncButton);
 
     // Create the primary StatusBarItem; command registration should be handled by the extension entrypoint
     const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
@@ -37,7 +31,7 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 9999);
     statusItem.text = '$(database) Offline';
     statusItem.tooltip = 'Database connection status. Click to refresh';
-    statusItem.command = 'tbd-logger.checkDbStatus';
+    statusItem.command = 'tbd-logger.openStudentSyncView';
     statusItem.show();
     context.subscriptions.push(statusItem);
     (global as any).dbStatusBarItem = statusItem;
@@ -75,13 +69,17 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
  * Handles the Sunny Day (Syncing) and Rainy Day (Ready) UI states.
  */
 export function updateSyncStatus(isSyncing: boolean) {
-    if (!forceSyncButton) return;
+    const dbItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
+    if (!dbItem) return;
 
     if (isSyncing) {
-        forceSyncButton.text = `$(sync~spin) Syncing...`;
-        forceSyncButton.tooltip = 'Synchronization is currently in progress.';
+        // Change the existing "Online" icon to a spinning sync icon
+        dbItem.text = `$(sync~spin) Syncing Data...`;
+        dbItem.tooltip = 'Uploading session logs to the cloud database.';
     } else {
-        forceSyncButton.text = `$(sync) Force Sync`;
-        forceSyncButton.tooltip = 'Click to immediately upload local logs to the cloud.';
+        // Restore standard database status based on connectivity
+        const isOnline = storageManager.isOnline(); 
+        dbItem.text = isOnline ? '$(database) Online' : '$(database) Offline';
+        dbItem.tooltip = isOnline ? 'Database connection is active' : 'Database offline';
     }
 }

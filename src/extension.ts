@@ -22,6 +22,7 @@ import { openAuthView, openAccountView } from './auth/index';
 import { updateSyncStatus } from './statusBar';
 
 import * as path from 'path';
+import { openStudentSyncView } from './auth/studentSyncView';
 
 // Function to update database status bar item
 async function updateDbStatusBar(): Promise<void> {
@@ -361,27 +362,36 @@ export async function activate(context: vscode.ExtensionContext) {
     void updateDbStatusBar();
     updateAuthStatusBar(context);
     
+let isSyncing = false;
+let forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync', async () => {
+    if (isSyncing || state.isFlushing) {
+        vscode.window.showInformationMessage("Syncing now... please wait.");
+        return;
+    }
 
-    const forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync', async () => {
-        // RAINY DAY: Sync Already In Progress
-        if (state.isFlushing) {
-            vscode.window.showInformationMessage("Syncing now...");
-            return;
-        }
-        // SUNNY DAY: Force Sync
-        updateSyncStatus(true);
-        try {
-            // Bypass N-minute timer by calling flushBuffer immediately
-            await flushBuffer();
-            vscode.window.showInformationMessage("All data successfully pushed to cloud.");
-        } catch (err) {
-            vscode.window.showErrorMessage("Sync failed. Check your connection.");
-        } finally {
-            updateSyncStatus(false);
-        }
-    });
+    isSyncing = true;
+    updateSyncStatus(true); // Updates the global Database icon
+    
+    try {
+        await flushBuffer(); 
+        vscode.window.showInformationMessage("All data successfully pushed to cloud.");
+        // Notify the webview if it's open
+        // You would need to track the active panel to send this message
+    } catch (error) {
+        vscode.window.showErrorMessage("Sync failed. Data remains in local queue.");
+    } finally {
+        isSyncing = false;
+        updateSyncStatus(false);
+    }
+});
     // Register the force sync command and add to subscriptions
     context.subscriptions.push(forceSyncCommand);
+
+    const openSyncViewCommand = vscode.commands.registerCommand('tbd-logger.openStudentSyncView', async () => {
+        await openStudentSyncView(context);
+    });
+
+    context.subscriptions.push(openSyncViewCommand); //
 
     //Return the internals so the Test Suite can see them
     return { state, storageManager };

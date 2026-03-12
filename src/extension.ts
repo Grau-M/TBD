@@ -300,6 +300,49 @@ export async function activate(context: vscode.ExtensionContext) {
     const saveListener = createSaveListener();
     context.subscriptions.push(saveListener);
 
+    // Auth guard: prompt unauthenticated users when they make any workspace changes.
+    // Shown at most once per session; resets only if the user picks "Login" and then
+    // closes the auth panel without completing sign-in.
+    let _authPromptShown = false;
+
+    const promptIfUnauthenticated = async () => {
+        if (_authPromptShown) { return; }
+        const session = getWorkspaceAuthSession(context);
+        if (session?.authenticated) { return; }
+
+        _authPromptShown = true;
+
+        const choice = await vscode.window.showWarningMessage(
+            'You are not signed in to TBD Logger. Your activity is not being tracked.',
+            'Login',
+            'Keep Working Without',
+            "I'm Not Working on School"
+        );
+
+        if (choice === 'Login') {
+            _authPromptShown = false; // allow re-prompt if they cancel the login panel
+            await openAuthView(context, storageManager);
+            updateAuthStatusBar(context);
+        }
+        // "Keep Working Without", "I'm Not Working on School", or dismiss (undefined)
+        // all leave _authPromptShown = true so the prompt won't appear again this session.
+    };
+
+    // Text edits
+    const authEditGuard = vscode.workspace.onDidChangeTextDocument((e) => {
+        if (e.contentChanges.length === 0) { return; }
+        const docPath = vscode.workspace.asRelativePath(e.document.uri, false);
+        if (isIgnoredPath(docPath)) { return; }
+        void promptIfUnauthenticated();
+    });
+    context.subscriptions.push(authEditGuard);
+
+    // File creates, deletes, renames
+    const authCreateGuard = vscode.workspace.onDidCreateFiles(() => void promptIfUnauthenticated());
+    const authDeleteGuard = vscode.workspace.onDidDeleteFiles(() => void promptIfUnauthenticated());
+    const authRenameGuard = vscode.workspace.onDidRenameFiles(() => void promptIfUnauthenticated());
+    context.subscriptions.push(authCreateGuard, authDeleteGuard, authRenameGuard);
+
     // Command to manually refresh database status
     const checkDbStatusCommand = vscode.commands.registerCommand('tbd-logger.checkDbStatus', () => {
         void updateDbStatusBar();

@@ -45,6 +45,8 @@ function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
     const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin'));
     const hiddenItem = (global as any).hiddenStatusBarItem as vscode.StatusBarItem | undefined;
 
+    void vscode.commands.executeCommand('setContext', 'tbd.hasTeacherDashboardAccess', shouldShowLock);
+
     if (shouldShowLock) {
         if (!hiddenItem) {
             const newHiddenItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10001);

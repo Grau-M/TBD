@@ -1842,17 +1842,50 @@ export class DbStorageManager {
     async linkStudentWorkspaceToAssignment(input: StudentAssignmentLinkInput): Promise<void> {
         await this.ensureClassesSchema();
 
+        const classLookup = await executeQuery(
+            `SELECT TOP 1 Id, TeacherAuthUserId
+             FROM dbo.Classes
+             WHERE Id = @classId AND IsActive = 1`,
+            { classId: input.classId }
+        );
+
+        if (classLookup.recordset.length === 0) {
+            throw new Error('Class not found.');
+        }
+
+        const resolvedTeacherAuthUserId = Number(classLookup.recordset[0].TeacherAuthUserId || 0);
+        if (!Number.isFinite(resolvedTeacherAuthUserId) || resolvedTeacherAuthUserId <= 0) {
+            throw new Error('Class teacher could not be resolved.');
+        }
+
         await this.enrollStudentInClass(input.studentAuthUserId, {
             id: input.classId,
-            teacherAuthUserId: input.teacherAuthUserId,
+            teacherAuthUserId: resolvedTeacherAuthUserId,
             teacherName: '',
             courseName: '',
             courseCode: '',
             joinCode: ''
         });
 
+        const existingAssignmentLink = await executeQuery(
+            `SELECT TOP 1 Id
+             FROM dbo.StudentWorkspaceAssignments
+             WHERE StudentAuthUserId = @studentAuthUserId
+               AND ClassId = @classId
+               AND AssignmentId = @assignmentId`,
+            {
+                studentAuthUserId: input.studentAuthUserId,
+                classId: input.classId,
+                assignmentId: input.assignmentId
+            }
+        );
+
+        if (existingAssignmentLink.recordset.length > 0) {
+            throw new Error('A workspace is already linked to this assignment and cannot be changed.');
+        }
+
         const existing = await executeQuery(
-            `SELECT Id
+            `SELECT Id, ClassId, AssignmentId
              FROM dbo.StudentWorkspaceAssignments
              WHERE StudentAuthUserId = @studentAuthUserId
                AND WorkspaceRootPath = @workspaceRootPath`,
@@ -1863,25 +1896,11 @@ export class DbStorageManager {
         );
 
         if (existing.recordset.length > 0) {
-            await executeQuery(
-                `UPDATE dbo.StudentWorkspaceAssignments
-                 SET TeacherAuthUserId = @teacherAuthUserId,
-                     ClassId = @classId,
-                     AssignmentId = @assignmentId,
-                     WorkspaceName = @workspaceName,
-                     WorkspaceFoldersJson = @workspaceFoldersJson,
-                     UpdatedAt = SYSUTCDATETIME()
-                 WHERE Id = @id`,
-                {
-                    id: existing.recordset[0].Id,
-                    teacherAuthUserId: input.teacherAuthUserId,
-                    classId: input.classId,
-                    assignmentId: input.assignmentId,
-                    workspaceName: input.workspaceName,
-                    workspaceFoldersJson: input.workspaceFoldersJson
-                }
-            );
-            return;
+            const existingRow = existing.recordset[0];
+            if (Number(existingRow.ClassId) === input.classId && Number(existingRow.AssignmentId) === input.assignmentId) {
+                throw new Error('This workspace is already linked to this assignment.');
+            }
+            throw new Error('This workspace folder is already linked to a different assignment.');
         }
 
         await executeQuery(
@@ -1905,7 +1924,7 @@ export class DbStorageManager {
             )`,
             {
                 studentAuthUserId: input.studentAuthUserId,
-                teacherAuthUserId: input.teacherAuthUserId,
+                teacherAuthUserId: resolvedTeacherAuthUserId,
                 classId: input.classId,
                 assignmentId: input.assignmentId,
                 workspaceName: input.workspaceName,

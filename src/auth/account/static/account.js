@@ -8,6 +8,7 @@
       classesLoaded: false,
       loadingClasses: false,
       loadingAssignments: false,
+      linkingAssignmentId: null,
       selectedClassId: null,
       classes: [],
       assignmentsByClassId: Object.create(null),
@@ -221,6 +222,7 @@
       setVisible(emptyAssignments, false);
       assignmentList.innerHTML = assignments.map((assignment) => {
         const started = !!(assignment.workspaceName || assignment.workspaceRootPath || assignment.linkedAt);
+        const isLinking = state.linkingAssignmentId === assignment.assignmentId;
         return `
           <article class="assignment-card">
             <div class="assignment-status-row">
@@ -235,9 +237,36 @@
               <div><strong>Workspace:</strong> ${escapeHtml(assignment.workspaceName || "Not yet started")}</div>
               <div><strong>Path:</strong> ${escapeHtml(assignment.workspaceRootPath || "No workspace linked yet")}</div>
             </div>
+            ${started ? "" : `
+              <div style="margin-top:12px;">
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  data-link-workspace-assignment-id="${assignment.assignmentId}"
+                  ${isLinking ? "disabled" : ""}
+                >${isLinking ? "Linking workspace..." : "Select Workspace"}</button>
+              </div>
+            `}
           </article>
         `;
       }).join("");
+
+      assignmentList.querySelectorAll("[data-link-workspace-assignment-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const assignmentId = Number(button.getAttribute("data-link-workspace-assignment-id"));
+          if (!Number.isFinite(assignmentId) || !state.selectedClassId) {
+            return;
+          }
+          clearMessages();
+          showClassesSuccess("");
+          state.linkingAssignmentId = assignmentId;
+          renderSelectedClass();
+          post("linkStudentAssignmentWorkspace", {
+            classId: state.selectedClassId,
+            assignmentId,
+          });
+        });
+      });
     }
 
     function renderStudentClasses(classes) {
@@ -388,8 +417,10 @@
         case "accountError": {
           state.loadingClasses = false;
           state.loadingAssignments = false;
+          state.linkingAssignmentId = null;
           setVisible($("student-classes-loading"), false);
           setVisible($("student-assignments-loading"), false);
+          renderSelectedClass();
           const save = $("btn-save-account");
           if (save) {
             save.disabled = false;
@@ -417,10 +448,27 @@
             break;
           }
           state.loadingAssignments = false;
+          state.linkingAssignmentId = null;
           state.assignmentsByClassId[payload.classId] = Array.isArray(payload.assignments) ? payload.assignments : [];
           if (state.selectedClassId === payload.classId) {
             renderSelectedClass();
           }
+          break;
+        }
+        case "studentAssignmentWorkspaceLinked": {
+          const payload = msg.data || {};
+          if (!Number.isFinite(payload.classId)) {
+            state.linkingAssignmentId = null;
+            renderSelectedClass();
+            break;
+          }
+
+          state.linkingAssignmentId = null;
+          state.assignmentsByClassId[payload.classId] = Array.isArray(payload.assignments) ? payload.assignments : [];
+          if (state.selectedClassId === payload.classId) {
+            renderSelectedClass();
+          }
+          showClassesSuccess("Workspace linked to assignment successfully.");
           break;
         }
         case "studentClassJoinResult": {

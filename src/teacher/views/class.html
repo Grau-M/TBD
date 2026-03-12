@@ -4,7 +4,6 @@
     <button id="btn-new-class" class="btn btn-primary">+ New Class</button>
   </div>
 
-  <!-- Create Class Form -->
   <div id="class-form-card" class="card" style="display:none; max-width:600px;">
     <h2>Create New Class</h2>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
@@ -26,11 +25,17 @@
       </div>
       <div class="form-group">
         <label for="class-start-date">Start Date</label>
-        <input type="date" id="class-start-date" />
+        <input type="date" id="class-start-date" 
+               style="cursor: pointer; width: 100%;" 
+               onclick="this.showPicker()" 
+               onfocus="this.showPicker()" />
       </div>
       <div class="form-group">
         <label for="class-end-date">End Date</label>
-        <input type="date" id="class-end-date" />
+        <input type="date" id="class-end-date" 
+               style="cursor: pointer; width: 100%;" 
+               onclick="this.showPicker()" 
+               onfocus="this.showPicker()" />
       </div>
     </div>
     <p id="class-form-error" style="color:#ef4444; font-size:0.9rem; margin:4px 0 12px; display:none;"></p>
@@ -40,23 +45,19 @@
     </div>
   </div>
 
-  <!-- Loading State -->
   <div id="class-list-loading" style="display:none; text-align:center; padding:40px;">
     <div class="spinner"></div>
     <p class="meta" style="margin-top:12px;">Loading classes...</p>
   </div>
 
-  <!-- Empty State -->
   <div id="class-list-empty" style="display:none; text-align:center; padding:60px; color:var(--muted);">
     <div style="font-size:3rem; margin-bottom:16px;">🏫</div>
     <p style="font-size:1.1rem; font-weight:600; margin-bottom:8px;">No classes yet</p>
     <p class="meta">Click <strong>+ New Class</strong> above to create your first class.</p>
   </div>
 
-  <!-- Class Cards -->
   <div id="class-list-view" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; margin-top:4px;"></div>
 
-  <!-- Class Detail View -->
   <div id="class-detail-view" class="card" style="display:none; margin-top:16px;">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
       <div>
@@ -79,8 +80,6 @@
             <tr style="text-align:left; border-bottom:1px solid var(--border);">
               <th style="padding:8px;">Student</th>
               <th style="padding:8px;">Role</th>
-              <th style="padding:8px;">Assignment</th>
-              <th style="padding:8px;">Workspace</th>
             </tr>
           </thead>
           <tbody id="class-students-body"></tbody>
@@ -98,7 +97,10 @@
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="assignment-due-date">Due Date</label>
-            <input type="date" id="assignment-due-date" />
+            <input type="date" id="assignment-due-date" 
+                   style="cursor: pointer; width: 100%;" 
+                   onclick="this.showPicker()" 
+                   onfocus="this.showPicker()" />
           </div>
           <div class="form-group" style="grid-column:1/-1; margin-bottom:0;">
             <label for="assignment-description">Description</label>
@@ -108,9 +110,6 @@
         <p id="assignment-form-error" style="color:#ef4444; font-size:0.9rem; margin:8px 0 10px; display:none;"></p>
         <button id="btn-create-assignment" class="btn btn-primary">Create Assignment</button>
       </div>
-
-      <div id="class-assignments-empty" class="meta" style="display:none; padding:10px 0;">No assignments created yet.</div>
-      <div id="class-assignments-list" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px;"></div>
-    </div>
+      </div>
   </div>
 </div>

@@ -221,7 +221,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             break;
           }
 
-          const students = await storageManager.listClassStudents(classId, session.authUserId);
+          const students = await storageManager.listClassStudentsSummary(classId, session.authUserId);
           const assignments = await storageManager.listClassAssignments(classId, session.authUserId);
 
           panel?.webview.postMessage({
@@ -251,6 +251,92 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           });
 
           panel?.webview.postMessage({ command: 'classAssignmentCreated', data: assignment });
+          break;
+        }
+
+        case 'openAssignmentWork': {
+          const session = getWorkspaceAuthSession(context);
+          if (!session?.authenticated) {
+            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
+            break;
+          }
+
+          const classId = Number(message.classId);
+          const assignmentId = Number(message.assignmentId);
+          const classInfo = await storageManager.getTeacherClassById(classId, session.authUserId);
+          if (!classInfo) {
+            panel?.webview.postMessage({ command: 'error', message: 'Class not found or access denied.' });
+            break;
+          }
+
+          const assignments = await storageManager.listClassAssignments(classId, session.authUserId);
+          const assignment = assignments.find(a => a.id === assignmentId);
+          if (!assignment) {
+            panel?.webview.postMessage({ command: 'error', message: 'Assignment not found.' });
+            break;
+          }
+
+          const students = await storageManager.listAssignmentStudentWork(classId, assignmentId, session.authUserId);
+          panel?.webview.postMessage({
+            command: 'assignmentWorkData',
+            data: { classInfo, assignment, students }
+          });
+          break;
+        }
+
+        case 'openAssignmentStudent': {
+          const session = getWorkspaceAuthSession(context);
+          if (!session?.authenticated) {
+            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
+            break;
+          }
+
+          const classId = Number(message.classId);
+          const assignmentId = Number(message.assignmentId);
+          const studentAuthUserId = Number(message.studentAuthUserId);
+
+          const sessions = await storageManager.listAssignmentStudentSessions(
+            classId,
+            assignmentId,
+            studentAuthUserId,
+            session.authUserId
+          );
+
+          panel?.webview.postMessage({
+            command: 'assignmentStudentSessions',
+            data: {
+              classId,
+              assignmentId,
+              studentAuthUserId,
+              studentName: String(message.studentName || ''),
+              sessions
+            }
+          });
+          break;
+        }
+
+        case 'loadClassSessionLog': {
+          const pwd = await ensurePassword(`Enter Administrator Password to view ${message.filename}`);
+          if (!pwd) {
+            panel?.webview.postMessage({ command: 'error', message: 'Password required' });
+            break;
+          }
+
+          const all = await storageManager.listLogFiles();
+          const target = all.find(f => f.label === String(message.filename || ''));
+          if (!target) {
+            panel?.webview.postMessage({ command: 'error', message: 'Session log not found.' });
+            break;
+          }
+
+          const content = await storageManager.retrieveLogContentForUri(pwd, target.uri);
+          panel?.webview.postMessage({
+            command: 'classSessionLogData',
+            data: {
+              filename: target.label,
+              text: content
+            }
+          });
           break;
         }
       }

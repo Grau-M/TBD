@@ -58,7 +58,16 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     .form-group { margin-bottom: 16px; position: relative; }
     label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9rem; color: var(--muted); }
     input[type="text"], input[type="number"], input[type="date"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; min-height: 42px; }
-    input[type="date"] { color-scheme: dark light; }
+    input[type="date"] {
+      color-scheme: dark light;
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      caret-color: transparent;
+    }
     input[type="date"]::-webkit-datetime-edit,
     input[type="date"]::-webkit-datetime-edit-text,
     input[type="date"]::-webkit-datetime-edit-month-field,
@@ -69,10 +78,19 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     input[type="date"]:invalid::-webkit-datetime-edit {
       color: var(--muted);
     }
+    /* WebKit CSS-only strategy: make picker indicator cover the full input area. */
     input[type="date"]::-webkit-calendar-picker-indicator {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
       cursor: pointer;
+      background: transparent;
+      color: transparent;
+      opacity: 0.01;
       filter: var(--date-icon-filter);
-      opacity: 0.95;
     }
     input:focus { outline: 2px solid var(--accent); border-color: transparent; }
     .search-container { position: relative; }

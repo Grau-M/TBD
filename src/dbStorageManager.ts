@@ -133,6 +133,30 @@ export interface ClassStudentRecord {
     linkedAt: string;
 }
 
+export interface ClassStudentSummaryRecord {
+    authUserId: number;
+    studentName: string;
+    studentEmail: string;
+    role: UserRole;
+    linkedAt: string;
+}
+
+export interface AssignmentStudentWorkRecord {
+    authUserId: number;
+    studentName: string;
+    studentEmail: string;
+    role: UserRole;
+    sessionCount: number;
+}
+
+export interface AssignmentStudentSessionRecord {
+    sessionId: number;
+    filename: string;
+    startedAt: string;
+    ideUser: string;
+    workspaceName: string;
+}
+
 export interface StudentAssignmentLinkInput {
     studentAuthUserId: number;
     teacherAuthUserId: number;
@@ -1025,6 +1049,17 @@ export class DbStorageManager {
         );
     }
 
+    async updateAuthUserDisplayName(authUserId: number, displayName: string): Promise<void> {
+        await this.ensureAuthSchema();
+        await executeQuery(
+            `UPDATE dbo.ExtensionAuthUsers
+             SET DisplayName = @displayName,
+                 UpdatedAt = SYSUTCDATETIME()
+             WHERE Id = @authUserId`,
+            { authUserId, displayName }
+        );
+    }
+
     async findAuthUserByEmail(email: string): Promise<{ authUserId: number; role: UserRole; displayName: string } | null> {
         await this.ensureAuthSchema();
         const result = await executeQuery(
@@ -1445,6 +1480,120 @@ export class DbStorageManager {
             workspaceName: row.WorkspaceName || '',
             workspaceRootPath: row.WorkspaceRootPath || '',
             linkedAt: row.LinkedAt || ''
+        }));
+    }
+
+    async listClassStudentsSummary(classId: number, teacherAuthUserId: number): Promise<ClassStudentSummaryRecord[]> {
+        await this.ensureClassesSchema();
+
+        const result = await executeQuery(
+            `WITH ranked AS (
+                SELECT
+                    eau.Id AS AuthUserId,
+                    eau.DisplayName AS StudentName,
+                    eau.Email AS StudentEmail,
+                    eau.AssignedRole AS AssignedRole,
+                    swa.LinkedAt,
+                    ROW_NUMBER() OVER (PARTITION BY eau.Id ORDER BY swa.LinkedAt DESC) AS rn
+                 FROM dbo.StudentWorkspaceAssignments swa
+                 INNER JOIN dbo.ExtensionAuthUsers eau ON eau.Id = swa.StudentAuthUserId
+                 INNER JOIN dbo.Classes c ON c.Id = swa.ClassId
+                 WHERE swa.ClassId = @classId
+                   AND c.TeacherAuthUserId = @teacherAuthUserId
+            )
+            SELECT
+                AuthUserId,
+                StudentName,
+                StudentEmail,
+                AssignedRole,
+                CONVERT(VARCHAR, LinkedAt, 126) AS LinkedAt
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY StudentName ASC`,
+            { classId, teacherAuthUserId }
+        );
+
+        return result.recordset.map((row: any) => ({
+            authUserId: row.AuthUserId,
+            studentName: row.StudentName || 'Unknown Student',
+            studentEmail: row.StudentEmail || '',
+            role: (row.AssignedRole || 'Student') as UserRole,
+            linkedAt: row.LinkedAt || ''
+        }));
+    }
+
+    async listAssignmentStudentWork(
+        classId: number,
+        assignmentId: number,
+        teacherAuthUserId: number
+    ): Promise<AssignmentStudentWorkRecord[]> {
+        await this.ensureClassesSchema();
+
+        const result = await executeQuery(
+            `SELECT
+                eau.Id AS AuthUserId,
+                eau.DisplayName AS StudentName,
+                eau.Email AS StudentEmail,
+                eau.AssignedRole AS AssignedRole,
+                COUNT(DISTINCT s.Id) AS SessionCount
+             FROM dbo.StudentWorkspaceAssignments swa
+             INNER JOIN dbo.ExtensionAuthUsers eau ON eau.Id = swa.StudentAuthUserId
+             INNER JOIN dbo.Classes c ON c.Id = swa.ClassId
+             LEFT JOIN dbo.Projects p ON p.Name = swa.WorkspaceName
+             LEFT JOIN dbo.Sessions s ON s.ProjectId = p.Id
+             WHERE swa.ClassId = @classId
+               AND swa.AssignmentId = @assignmentId
+               AND c.TeacherAuthUserId = @teacherAuthUserId
+             GROUP BY eau.Id, eau.DisplayName, eau.Email, eau.AssignedRole
+             ORDER BY eau.DisplayName ASC`,
+            { classId, assignmentId, teacherAuthUserId }
+        );
+
+        return result.recordset.map((row: any) => ({
+            authUserId: row.AuthUserId,
+            studentName: row.StudentName || 'Unknown Student',
+            studentEmail: row.StudentEmail || '',
+            role: (row.AssignedRole || 'Student') as UserRole,
+            sessionCount: Number(row.SessionCount || 0)
+        }));
+    }
+
+    async listAssignmentStudentSessions(
+        classId: number,
+        assignmentId: number,
+        studentAuthUserId: number,
+        teacherAuthUserId: number
+    ): Promise<AssignmentStudentSessionRecord[]> {
+        await this.ensureClassesSchema();
+
+        const result = await executeQuery(
+            `SELECT DISTINCT
+                s.Id AS SessionId,
+                ISNULL(slf.OriginalFilename,
+                    CONCAT(u.Username, '-', p.Name, '-Session', s.Id, '-integrity.log')) AS FileName,
+                CONVERT(VARCHAR, s.StartedAt, 126) AS StartedAt,
+                u.Username AS IdeUser,
+                p.Name AS WorkspaceName
+             FROM dbo.StudentWorkspaceAssignments swa
+             INNER JOIN dbo.Classes c ON c.Id = swa.ClassId
+             INNER JOIN dbo.Projects p ON p.Name = swa.WorkspaceName
+             INNER JOIN dbo.Sessions s ON s.ProjectId = p.Id
+             INNER JOIN dbo.Users u ON u.Id = s.UserId
+             LEFT JOIN dbo.SessionLogFiles slf ON slf.SessionId = s.Id
+             WHERE swa.ClassId = @classId
+               AND swa.AssignmentId = @assignmentId
+               AND swa.StudentAuthUserId = @studentAuthUserId
+               AND c.TeacherAuthUserId = @teacherAuthUserId
+             ORDER BY s.StartedAt DESC`,
+            { classId, assignmentId, studentAuthUserId, teacherAuthUserId }
+        );
+
+        return result.recordset.map((row: any) => ({
+            sessionId: row.SessionId,
+            filename: row.FileName,
+            startedAt: row.StartedAt || '',
+            ideUser: row.IdeUser || '',
+            workspaceName: row.WorkspaceName || ''
         }));
     }
 

@@ -26,6 +26,8 @@
   let currentClassId = null;
   let editingClassId = null;
   let currentClassAssignments = [];
+  let currentAssignmentId = null;
+  let currentAssignmentName = "";
 
   window.addEventListener("DOMContentLoaded", () => {
     const $ = (id) => document.getElementById(id);
@@ -42,30 +44,80 @@
       } catch (e) {}
     }
 
-    function enableDatePickerOnFullClick(inputId) {
-      const input = $(inputId);
-      if (!input) {
-        return;
-      }
+    function installDatePickerBehavior() {
+      const targetIds = new Set([
+        "class-start-date",
+        "class-end-date",
+        "assignment-due-date",
+      ]);
 
-      // Make any click/focus in the date field open the native calendar picker.
-      const openPicker = () => {
-        if (typeof input.showPicker === "function") {
+      const getTargetDateInput = (event) => {
+        const el = event.target;
+        if (!(el instanceof HTMLInputElement)) {
+          return null;
+        }
+        if (el.type !== "date" || !targetIds.has(el.id)) {
+          return null;
+        }
+        return el;
+      };
+
+      const tryShowPicker = (el) => {
+        if (typeof el.showPicker === "function") {
           try {
-            input.showPicker();
+            el.showPicker();
+            return true;
           } catch (e) {
-            // Ignore if browser blocks picker invocation for this event.
+            return false;
           }
+        }
+        return false;
+      };
+
+      const onPointerDown = (event) => {
+        const el = getTargetDateInput(event);
+        if (!el) {
+          return;
+        }
+
+        // Only suppress native text-segment focus when picker actually opens.
+        const opened = tryShowPicker(el);
+        if (opened) {
+          el.dataset.pickerOpenedAt = String(Date.now());
+          event.preventDefault();
+          return;
+        }
+
+        // Fallback: allow default behavior; don't block user interaction.
+        try {
+          el.focus({ preventScroll: true });
+        } catch (e) {
+          el.focus();
         }
       };
 
-      input.addEventListener("click", openPicker);
-      input.addEventListener("focus", openPicker);
+      const onClick = (event) => {
+        const el = getTargetDateInput(event);
+        if (!el) {
+          return;
+        }
+
+        const openedAt = Number(el.dataset.pickerOpenedAt || 0);
+        if (openedAt && Date.now() - openedAt < 500) {
+          return;
+        }
+
+        // Click-path fallback for environments that block mousedown-triggered picker.
+        tryShowPicker(el);
+      };
+
+      // Capture phase ensures this runs before the browser applies text-segment selection.
+      document.addEventListener("mousedown", onPointerDown, true);
+      document.addEventListener("touchstart", onPointerDown, true);
+      document.addEventListener("click", onClick, true);
     }
 
-    enableDatePickerOnFullClick("class-start-date");
-    enableDatePickerOnFullClick("class-end-date");
-    enableDatePickerOnFullClick("assignment-due-date");
+    installDatePickerBehavior();
 
     // Make post available globally for note handlers + student summary button
     window.postTeacherMessage = post;
@@ -718,6 +770,24 @@
           if (status) { status.textContent = "Assignment created."; setTimeout(() => (status.textContent = "Ready"), 3000); }
           break;
         }
+
+        case "assignmentWorkData": {
+          renderAssignmentWork(msg.data || {});
+          if (status) { status.textContent = "Assignment work loaded."; }
+          break;
+        }
+
+        case "assignmentStudentSessions": {
+          renderAssignmentStudentSessions(msg.data || {});
+          if (status) { status.textContent = "Student sessions loaded."; }
+          break;
+        }
+
+        case "classSessionLogData": {
+          renderAssignmentSessionLog(msg.data || {});
+          if (status) { status.textContent = "Session log loaded."; }
+          break;
+        }
       }
     });
 
@@ -812,6 +882,12 @@
         $("class-detail-meta").textContent = (classInfo.courseCode || "") + " • " + (classInfo.teacherName || "") + " • Join Code: " + (classInfo.joinCode || "");
       }
 
+      if ($("assignment-work-view")) { $("assignment-work-view").style.display = "none"; }
+      if ($("assignment-student-view")) { $("assignment-student-view").style.display = "none"; }
+      if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
+      currentAssignmentId = null;
+      currentAssignmentName = "";
+
       switchClassDetailTab("students");
       renderClassStudents(students);
       renderClassAssignments(assignments);
@@ -844,7 +920,17 @@
       if (!table || !body || !empty) { return; }
 
       body.innerHTML = "";
-      if (!students || students.length === 0) {
+      const deduped = [];
+      const seen = new Set();
+      (students || []).forEach((s) => {
+        const key = String(s.authUserId || "") || `${s.studentEmail || ""}|${s.studentName || ""}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(s);
+        }
+      });
+
+      if (deduped.length === 0) {
         table.style.display = "none";
         empty.style.display = "block";
         return;
@@ -853,7 +939,7 @@
       empty.style.display = "none";
       table.style.display = "table";
 
-      students.forEach((s) => {
+      deduped.forEach((s) => {
         const tr = document.createElement("tr");
         tr.style.borderBottom = "1px solid var(--border)";
         tr.innerHTML = `
@@ -862,11 +948,6 @@
             <div class="meta" style="font-size:0.78rem;">${s.studentEmail || ""}</div>
           </td>
           <td style="padding:8px;">${s.role || "Student"}</td>
-          <td style="padding:8px;">${s.assignmentName || "—"}</td>
-          <td style="padding:8px;">
-            <div>${s.workspaceName || ""}</div>
-            <div class="meta" style="font-size:0.78rem;">${s.workspaceRootPath || ""}</div>
-          </td>
         `;
         body.appendChild(tr);
       });
@@ -893,9 +974,119 @@
           <div style="font-weight:700;">${a.name}</div>
           <div class="meta" style="margin-top:4px;">${a.description || "No description"}</div>
           <div class="meta" style="margin-top:6px;">Due: ${a.dueDate || "No due date"}</div>
+          <div style="margin-top:10px;">
+            <button class="btn btn-primary assignment-work-btn" style="padding:6px 10px;">View Student Work</button>
+          </div>
         `;
+        const btn = card.querySelector(".assignment-work-btn");
+        btn?.addEventListener("click", () => {
+          if (!currentClassId) { return; }
+          currentAssignmentId = a.id;
+          currentAssignmentName = a.name || "Assignment";
+          post("openAssignmentWork", { classId: currentClassId, assignmentId: a.id });
+        });
         list.appendChild(card);
       });
+    }
+
+    function renderAssignmentWork(payload) {
+      const assignment = payload.assignment || {};
+      const students = payload.students || [];
+      const view = $("assignment-work-view");
+      const list = $("assignment-work-list");
+      const empty = $("assignment-work-empty");
+      const title = $("assignment-work-title");
+      const meta = $("assignment-work-meta");
+      const studentView = $("assignment-student-view");
+      const logView = $("assignment-session-log-view");
+      if (!view || !list || !empty || !title || !meta) { return; }
+
+      currentAssignmentId = assignment.id || currentAssignmentId;
+      currentAssignmentName = assignment.name || currentAssignmentName;
+
+      view.style.display = "block";
+      list.innerHTML = "";
+      if (studentView) { studentView.style.display = "none"; }
+      if (logView) { logView.style.display = "none"; }
+
+      title.textContent = `Assignment Work: ${currentAssignmentName || "Assignment"}`;
+      meta.textContent = `Students linked: ${students.length}`;
+
+      if (!students.length) {
+        empty.style.display = "block";
+        return;
+      }
+      empty.style.display = "none";
+
+      students.forEach((s) => {
+        const card = document.createElement("button");
+        card.className = "btn btn-secondary";
+        card.style.cssText = "text-align:left; padding:10px; border:1px solid var(--border); background:var(--surface);";
+        card.innerHTML = `
+          <div style="font-weight:700;">${s.studentName || "Unknown Student"}</div>
+          <div class="meta" style="font-size:0.8rem;">${s.studentEmail || ""}</div>
+          <div style="margin-top:8px; display:flex; justify-content:space-between; gap:8px; font-size:0.85rem;">
+            <span>Role: ${s.role || "Student"}</span>
+            <span><strong>${s.sessionCount || 0}</strong> log(s)</span>
+          </div>
+        `;
+        card.addEventListener("click", () => {
+          if (!currentClassId || !currentAssignmentId) { return; }
+          post("openAssignmentStudent", {
+            classId: currentClassId,
+            assignmentId: currentAssignmentId,
+            studentAuthUserId: s.authUserId,
+            studentName: s.studentName || "Unknown Student"
+          });
+        });
+        list.appendChild(card);
+      });
+    }
+
+    function renderAssignmentStudentSessions(payload) {
+      const sessions = payload.sessions || [];
+      const studentName = payload.studentName || "Student";
+      const studentView = $("assignment-student-view");
+      const title = $("assignment-student-title");
+      const empty = $("assignment-student-sessions-empty");
+      const list = $("assignment-student-sessions-list");
+      const logView = $("assignment-session-log-view");
+      if (!studentView || !title || !empty || !list) { return; }
+
+      studentView.style.display = "block";
+      title.textContent = `${studentName} - Session Logs`;
+      list.innerHTML = "";
+      if (logView) { logView.style.display = "none"; }
+
+      if (!sessions.length) {
+        empty.style.display = "block";
+        return;
+      }
+      empty.style.display = "none";
+
+      sessions.forEach((s) => {
+        const row = document.createElement("button");
+        row.className = "btn btn-secondary";
+        row.style.cssText = "text-align:left; border:1px solid var(--border); background:var(--surface); padding:10px;";
+        row.innerHTML = `
+          <div style="font-weight:700;">${s.filename}</div>
+          <div class="meta" style="font-size:0.8rem;">${s.workspaceName || ""} • ${s.startedAt || ""} • IDE user: ${s.ideUser || ""}</div>
+        `;
+        row.addEventListener("click", () => {
+          post("loadClassSessionLog", { filename: s.filename });
+        });
+        list.appendChild(row);
+      });
+    }
+
+    function renderAssignmentSessionLog(payload) {
+      const title = $("assignment-session-log-title");
+      const content = $("assignment-session-log-content");
+      const view = $("assignment-session-log-view");
+      if (!title || !content || !view) { return; }
+      title.textContent = payload.filename || "Session Log";
+      content.textContent = payload.text || "No log data available.";
+      view.style.display = "block";
     }
 
     $("btn-new-class")?.addEventListener("click", () => {
@@ -919,6 +1110,17 @@
       if ($("class-detail-view")) { $("class-detail-view").style.display = "none"; }
       if ($("class-list-view")) { $("class-list-view").style.display = "grid"; }
       loadClasses();
+    });
+
+    $("btn-back-to-assignments")?.addEventListener("click", () => {
+      if ($("assignment-work-view")) { $("assignment-work-view").style.display = "none"; }
+      if ($("assignment-student-view")) { $("assignment-student-view").style.display = "none"; }
+      if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
+    });
+
+    $("btn-back-to-assignment-students")?.addEventListener("click", () => {
+      if ($("assignment-student-view")) { $("assignment-student-view").style.display = "none"; }
+      if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
     });
 
     $("class-detail-tab-students")?.addEventListener("click", () => switchClassDetailTab("students"));

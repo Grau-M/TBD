@@ -18,7 +18,7 @@ import { isIgnoredPath, formatTimestamp } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
 import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess } from './auth';
-import { openAuthView } from './auth/index';
+import { openAuthView, openAccountView } from './auth/index';
 
 import * as path from 'path';
 
@@ -241,10 +241,10 @@ export async function activate(context: vscode.ExtensionContext) {
             const ideIdentity = getSessionInfo().user;
             const workspaceName = vscode.workspace.name || 'Unknown Workspace';
 
-            vscode.window.showInformationMessage(
-                `Name: ${session.displayName}\nIDE User: ${ideIdentity}\nEmail: ${session.email}\nWorkspace: ${workspaceName}\nRole: ${session.role}`,
-                { modal: true }
-            );
+            await openAccountView(context, storageManager, {
+                ideUser: ideIdentity,
+                workspaceName
+            });
             updateAuthStatusBar(context);
             return;
         }

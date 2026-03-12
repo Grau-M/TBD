@@ -23,7 +23,7 @@ suite('Extension Integration Tests', function () {
             editBuilder.insert(new vscode.Position(0, 0), 'Hello');
         });
 
-        // Increase delay for CI processing
+        // Delay to allow buffer processing in virtualized environments
         await new Promise(resolve => setTimeout(resolve, 3000));
 
         const events = api.state.sessionBuffer;

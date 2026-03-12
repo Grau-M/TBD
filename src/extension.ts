@@ -480,43 +480,37 @@ const forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync',
 }
 
 export function deactivate() {
-    // Function: deactivate
-    // Purpose: VS Code extension deactivation entrypoint. Records final
-    // focus duration, marks clean shutdown for the interruption
-    // tracker, flushes the buffer and disposes the status bar item.
-    // Record final focus duration
-
-    // NEW FEATURE: Mark clean shutdown (lets us detect force-close/crash next time)
+    // 1. Mark clean shutdown for the tracker
     SessionInterruptionTracker.markCleanShutdown();
 
+    // 2. Log final focus duration
     const now = Date.now();
     if (state.currentFocusedFile) {
-        const durationMs = now - state.focusStartTime;
         state.sessionBuffer.push({
             time: formatTimestamp(now),
-            flightTime: String(durationMs),
+            flightTime: String(now - state.focusStartTime),
             eventType: 'focusDuration',
             fileEdit: '',
             fileView: state.currentFocusedFile
         });
     }
 
+    // 3. Final data flush
     void flushBuffer();
 
+    // 4. Dispose global status bar references
     const globalSb = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
     if (globalSb) { globalSb.dispose(); }
-    
-    // Close database connection
-    void storageManager.dispose();
-    
-    // Clear status bar items
+
     const dbStatusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
-    if (dbStatusItem) {
-        dbStatusItem.dispose();
-    }
+    if (dbStatusItem) { dbStatusItem.dispose(); }
 
     const authStatusItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
-    if (authStatusItem) {
-        authStatusItem.dispose();
-    }
+    if (authStatusItem) { authStatusItem.dispose(); }
+
+    const hiddenItem = (global as any).hiddenStatusBarItem as vscode.StatusBarItem | undefined;
+    if (hiddenItem) { hiddenItem.dispose(); }
+
+    // 5. Close database connection
+    void storageManager.dispose();
 }

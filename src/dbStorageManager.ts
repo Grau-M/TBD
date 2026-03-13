@@ -17,6 +17,7 @@ const OFFLINE_QUEUE_MAX_FILES = 500;
 const OFFLINE_QUEUE_WARN_AT = 450;
 const OFFLINE_QUEUE_ENCRYPTION_SALT = 'tbd-offline-queue-salt-v1';
 const OFFLINE_QUEUE_FAILED_DIR = 'failed';
+const UNMONITORED_ALERT_QUEUE_DIR = 'unmonitored-alert-queue';
 
 interface QueuedBatch {
     version: 1;
@@ -29,6 +30,14 @@ interface QueuedBatch {
     events: StandardEvent[];
 }
 
+interface UnmonitoredWorkAlertPayload {
+    observedAt: string;
+    ideUser: string;
+    workspaceName: string;
+    workspacePath: string;
+    reason: string;
+}
+
 export type SyncState = 'synced' | 'syncing' | 'offline' | 'queue-warning' | 'conflict' | 'idle';
 
 export interface BackgroundSyncStatus {
@@ -37,6 +46,24 @@ export interface BackgroundSyncStatus {
     lastSyncedAt: string | null;
     lastError: string | null;
     lastConflictAt: string | null;
+}
+
+export interface SessionIntegrityVerification {
+    sessionId: number;
+    eventCount: number;
+    verified: boolean;
+    mismatchReason: string | null;
+    expectedHash: string | null;
+    computedHash: string | null;
+}
+
+export interface UnmonitoredWorkAlertRecord {
+    id: number;
+    observedAt: string;
+    ideUser: string;
+    workspaceName: string;
+    workspacePath: string;
+    reason: string;
 }
 
 interface SessionData {
@@ -227,9 +254,12 @@ export class DbStorageManager {
     private offlineQueueDir: vscode.Uri | null = null;
     private syncTimer: NodeJS.Timeout | null = null;
     private isSyncing = false;
+    private isSyncingUnmonitoredAlerts = false;
     private authSchemaReady = false;
     private classesSchemaReady = false;
     private syncSchemaReady = false;
+    private integritySchemaReady = false;
+    private unmonitoredAlertQueueDir: vscode.Uri | null = null;
     private pendingQueueCount = 0;
     private lastSyncedAtMs: number | null = null;
     private lastSyncError: string | null = null;
@@ -248,11 +278,15 @@ export class DbStorageManager {
         await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
         await this.refreshOfflineQueueCount();
 
+        this.unmonitoredAlertQueueDir = vscode.Uri.joinPath(context.globalStorageUri, UNMONITORED_ALERT_QUEUE_DIR);
+        await vscode.workspace.fs.createDirectory(this.unmonitoredAlertQueueDir);
+
         // Start connection in the background (don't await - let it connect while extension operates)
         void this.initializeOnlineSessionInBackground();
 
         this.syncTimer = setInterval(() => {
             void this.syncOfflineQueue();
+            void this.syncUnmonitoredWorkAlerts();
         }, OFFLINE_QUEUE_SYNC_INTERVAL_MS);
         context.subscriptions.push({
             dispose: () => {
@@ -265,6 +299,7 @@ export class DbStorageManager {
 
         this.initialized = true;
         void this.syncOfflineQueue();
+        void this.syncUnmonitoredWorkAlerts();
     }
 
     /**
@@ -279,6 +314,8 @@ export class DbStorageManager {
         try {
             console.log('[TBD Logger DB] Starting background database connection...');
             await this.initializeOnlineSession(this.currentUserName, this.currentProjectName);
+            await this.ensureIntegritySchema();
+            await this.ensureUnmonitoredWorkSchema();
             console.log('[TBD Logger DB] Database connection established successfully');
             if (this.pendingQueueCount === 0) {
                 this.setSyncState('synced');
@@ -531,15 +568,90 @@ export class DbStorageManager {
         }
     }
 
+    private hashSha256(input: string): string {
+        return crypto.createHash('sha256').update(input, 'utf8').digest('hex');
+    }
+
+    private normalizeForHash(value: unknown): unknown {
+        if (value === null || value === undefined) {
+            return null;
+        }
+        if (Array.isArray(value)) {
+            return value.map(v => this.normalizeForHash(v));
+        }
+        if (typeof value !== 'object') {
+            return value;
+        }
+        const obj = value as Record<string, unknown>;
+        const sortedKeys = Object.keys(obj).sort();
+        const out: Record<string, unknown> = {};
+        for (const key of sortedKeys) {
+            out[key] = this.normalizeForHash(obj[key]);
+        }
+        return out;
+    }
+
+    private buildEventCanonicalPayload(
+        sessionId: number,
+        occurredAt: Date,
+        rawTimeText: string,
+        eventType: string,
+        flightTimeMs: number,
+        fileEditPath: string,
+        fileViewPath: string,
+        fileFocusDurationText: string | null,
+        possibleAiDetection: string | null,
+        pasteCharCount: number | null,
+        metadataJson: string
+    ): string {
+        const metadataObj = (() => {
+            try {
+                return JSON.parse(metadataJson || '{}');
+            } catch {
+                return {};
+            }
+        })();
+
+        const normalized = this.normalizeForHash({
+            sessionId,
+            occurredAt: occurredAt.toISOString(),
+            rawTimeText,
+            eventType,
+            flightTimeMs,
+            fileEditPath,
+            fileViewPath,
+            fileFocusDurationText,
+            possibleAiDetection,
+            pasteCharCount,
+            metadata: metadataObj
+        });
+
+        return JSON.stringify(normalized);
+    }
+
+    private computeSessionRootHash(sessionId: number, eventCount: number, lastChainHash: string): string {
+        return this.hashSha256(`${sessionId}|${eventCount}|${lastChainHash}`);
+    }
+
     private async insertEventsForSession(sessionId: number, events: StandardEvent[]): Promise<void> {
+        await this.ensureIntegritySchema();
         const pool = await getPool();
         const transaction = pool.transaction();
         await transaction.begin();
 
         try {
-            for (const event of events) {
-                const request = transaction.request();
+            const prevChainReq = transaction.request();
+            prevChainReq.input('sessionId', sessionId);
+            const prevChainRes = await prevChainReq.query(`
+                SELECT TOP 1 sei.ChainHash
+                FROM dbo.SessionEventIntegrity sei
+                INNER JOIN dbo.SessionEvents se ON se.Id = sei.EventId
+                WHERE se.SessionId = @sessionId
+                ORDER BY se.Id DESC
+            `);
+            let previousChainHash = prevChainRes.recordset[0]?.ChainHash || '';
 
+            for (const event of events) {
                 let eventTime: Date;
                 try {
                     eventTime = new Date(event.time);
@@ -550,16 +662,14 @@ export class DbStorageManager {
                     eventTime = new Date();
                 }
 
-                request.input('sessionId', sessionId);
-                request.input('occurredAt', eventTime);
-                request.input('rawTimeText', event.time || formatTimestamp(Date.now()));
-                request.input('eventType', event.eventType);
-                request.input('flightTimeMs', parseInt(event.flightTime || '0', 10) || 0);
-                request.input('fileEditPath', event.fileEdit || '');
-                request.input('fileViewPath', event.fileView || '');
-                request.input('fileFocusDurationText', event.fileFocusCount || null);
-                request.input('possibleAiDetection', event.possibleAiDetection || null);
-                request.input('pasteCharCount', event.pasteCharCount || null);
+                const rawTimeText = event.time || formatTimestamp(Date.now());
+                const eventType = event.eventType;
+                const flightTimeMs = parseInt(event.flightTime || '0', 10) || 0;
+                const fileEditPath = event.fileEdit || '';
+                const fileViewPath = event.fileView || '';
+                const fileFocusDurationText = event.fileFocusCount || null;
+                const possibleAiDetection = event.possibleAiDetection || null;
+                const pasteCharCount = event.pasteCharCount || null;
 
                 const additionalData: Record<string, unknown> = {};
                 for (const key in event) {
@@ -567,21 +677,93 @@ export class DbStorageManager {
                         additionalData[key] = (event as unknown as Record<string, unknown>)[key];
                     }
                 }
-                // MetadataJson is non-nullable in the current schema.
                 const additionalDataJson = Object.keys(additionalData).length > 0 ? JSON.stringify(additionalData) : '{}';
-                request.input('metadataJson', additionalDataJson);
 
-                await request.query(`
+                const insertReq = transaction.request();
+                insertReq.input('sessionId', sessionId);
+                insertReq.input('occurredAt', eventTime);
+                insertReq.input('rawTimeText', rawTimeText);
+                insertReq.input('eventType', eventType);
+                insertReq.input('flightTimeMs', flightTimeMs);
+                insertReq.input('fileEditPath', fileEditPath);
+                insertReq.input('fileViewPath', fileViewPath);
+                insertReq.input('fileFocusDurationText', fileFocusDurationText);
+                insertReq.input('possibleAiDetection', possibleAiDetection);
+                insertReq.input('pasteCharCount', pasteCharCount);
+                insertReq.input('metadataJson', additionalDataJson);
+
+                const insertResult = await insertReq.query(`
                     INSERT INTO SessionEvents
                     (SessionId, OccurredAt, RawTimeText, FlightTimeMs, EventType,
                      FileEditPath, FileViewPath, FileFocusDurationText,
                      PossibleAiDetection, PasteCharCount, MetadataJson)
+                    OUTPUT INSERTED.Id AS EventId
                     VALUES
                     (@sessionId, @occurredAt, @rawTimeText, @flightTimeMs, @eventType,
                      @fileEditPath, @fileViewPath, @fileFocusDurationText,
                      @possibleAiDetection, @pasteCharCount, @metadataJson)
                 `);
+
+                const insertedEventId = Number(insertResult.recordset[0]?.EventId);
+                const eventCanonicalPayload = this.buildEventCanonicalPayload(
+                    sessionId,
+                    eventTime,
+                    rawTimeText,
+                    eventType,
+                    flightTimeMs,
+                    fileEditPath,
+                    fileViewPath,
+                    fileFocusDurationText,
+                    possibleAiDetection,
+                    pasteCharCount,
+                    additionalDataJson
+                );
+                const eventHash = this.hashSha256(eventCanonicalPayload);
+                const chainHash = this.hashSha256(`${previousChainHash}|${eventHash}`);
+
+                const integrityReq = transaction.request();
+                integrityReq.input('eventId', insertedEventId);
+                integrityReq.input('eventHash', eventHash);
+                integrityReq.input('prevEventHash', previousChainHash || null);
+                integrityReq.input('chainHash', chainHash);
+                await integrityReq.query(`
+                    INSERT INTO dbo.SessionEventIntegrity (EventId, EventHash, PrevEventHash, ChainHash)
+                    VALUES (@eventId, @eventHash, @prevEventHash, @chainHash)
+                `);
+
+                previousChainHash = chainHash;
             }
+
+            const eventCountReq = transaction.request();
+            eventCountReq.input('sessionId', sessionId);
+            const eventCountRes = await eventCountReq.query(`
+                SELECT COUNT(*) AS EventCount
+                FROM dbo.SessionEvents
+                WHERE SessionId = @sessionId
+            `);
+
+            const nextSeqReq = transaction.request();
+            nextSeqReq.input('sessionId', sessionId);
+            const nextSeqRes = await nextSeqReq.query(`
+                SELECT ISNULL(MAX(SequenceNumber), 0) + 1 AS NextSequence
+                FROM dbo.SessionIntegritySnapshots
+                WHERE SessionId = @sessionId
+            `);
+
+            const eventCount = Number(eventCountRes.recordset[0]?.EventCount || 0);
+            const nextSequence = Number(nextSeqRes.recordset[0]?.NextSequence || 1);
+            const computedSnapshotHash = this.computeSessionRootHash(sessionId, eventCount, previousChainHash || '');
+
+            const insertSnapshotReq = transaction.request();
+            insertSnapshotReq.input('sessionId', sessionId);
+            insertSnapshotReq.input('sequenceNumber', nextSequence);
+            insertSnapshotReq.input('eventCount', eventCount);
+            insertSnapshotReq.input('sessionHash', computedSnapshotHash);
+            insertSnapshotReq.input('lastChainHash', previousChainHash || null);
+            await insertSnapshotReq.query(`
+                INSERT INTO dbo.SessionIntegritySnapshots (SessionId, SequenceNumber, EventCount, SessionHash, LastChainHash)
+                VALUES (@sessionId, @sequenceNumber, @eventCount, @sessionHash, @lastChainHash)
+            `);
 
             await transaction.commit();
         } catch (err) {
@@ -1025,6 +1207,27 @@ export class DbStorageManager {
                 return event;
             });
 
+            const verification = await this.verifySessionIntegrity(sessionId);
+            metadata.integrityVerification = {
+                verified: verification.verified,
+                mismatchReason: verification.mismatchReason,
+                expectedHash: verification.expectedHash,
+                computedHash: verification.computedHash,
+                eventCount: verification.eventCount
+            };
+
+            if (!verification.verified) {
+                await executeQuery(
+                    `INSERT INTO dbo.IntegrityAuditTrail (ActionType, SessionId, Details)
+                     VALUES (@actionType, @sessionId, @details)`,
+                    {
+                        actionType: 'TAMPER_ALERT',
+                        sessionId,
+                        details: verification.mismatchReason || 'Session integrity verification failed.'
+                    }
+                );
+            }
+
             const sessionData: SessionData = {
                 sessionHeader: {
                     sessionNumber: sessionId,
@@ -1250,6 +1453,333 @@ export class DbStorageManager {
      */
     isConnecting(): boolean {
         return this.isConnectionInProgress;
+    }
+
+    private async ensureIntegritySchema(): Promise<void> {
+        if (this.integritySchemaReady) {
+            return;
+        }
+
+        await executeQuery(`
+            IF OBJECT_ID('dbo.SessionEventIntegrity', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.SessionEventIntegrity (
+                    EventId BIGINT NOT NULL PRIMARY KEY,
+                    EventHash CHAR(64) NOT NULL,
+                    PrevEventHash CHAR(64) NULL,
+                    ChainHash CHAR(64) NOT NULL,
+                    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT FK_SessionEventIntegrity_Event FOREIGN KEY (EventId) REFERENCES dbo.SessionEvents(Id)
+                );
+            END
+
+            IF OBJECT_ID('dbo.SessionIntegritySnapshots', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.SessionIntegritySnapshots (
+                    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+                    SessionId BIGINT NOT NULL,
+                    SequenceNumber INT NOT NULL,
+                    EventCount INT NOT NULL,
+                    SessionHash CHAR(64) NOT NULL,
+                    LastChainHash CHAR(64) NULL,
+                    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT UQ_SessionIntegritySnapshots UNIQUE (SessionId, SequenceNumber)
+                );
+            END
+
+            IF OBJECT_ID('dbo.IntegrityAuditTrail', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.IntegrityAuditTrail (
+                    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+                    OccurredAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    ActionType NVARCHAR(50) NOT NULL,
+                    SessionId BIGINT NULL,
+                    EventId BIGINT NULL,
+                    Actor NVARCHAR(256) NULL,
+                    Details NVARCHAR(MAX) NULL
+                );
+            END
+
+            EXEC('CREATE OR ALTER TRIGGER dbo.TR_SessionEvents_WORM_BlockUpdateDelete
+                ON dbo.SessionEvents
+                AFTER UPDATE, DELETE
+                AS
+                BEGIN
+                    SET NOCOUNT ON;
+
+                    INSERT INTO dbo.IntegrityAuditTrail (ActionType, SessionId, EventId, Actor, Details)
+                    SELECT
+                        CASE
+                            WHEN EXISTS(SELECT 1 FROM inserted) AND EXISTS(SELECT 1 FROM deleted) THEN ''UPDATE_BLOCKED''
+                            ELSE ''DELETE_BLOCKED''
+                        END,
+                        d.SessionId,
+                        d.Id,
+                        ORIGINAL_LOGIN(),
+                        ''Write-once policy blocked modification on SessionEvents''
+                    FROM deleted d;
+
+                    ROLLBACK TRANSACTION;
+                    RAISERROR(''SessionEvents are immutable (WORM policy): UPDATE/DELETE blocked.'', 16, 1);
+                END');
+
+            EXEC('CREATE OR ALTER TRIGGER dbo.TR_SessionEventIntegrity_WORM_BlockUpdateDelete
+                ON dbo.SessionEventIntegrity
+                INSTEAD OF UPDATE, DELETE
+                AS
+                BEGIN
+                    SET NOCOUNT ON;
+                    INSERT INTO dbo.IntegrityAuditTrail (ActionType, EventId, Actor, Details)
+                    SELECT
+                        CASE
+                            WHEN EXISTS(SELECT 1 FROM inserted) AND EXISTS(SELECT 1 FROM deleted) THEN ''INTEGRITY_UPDATE_BLOCKED''
+                            ELSE ''INTEGRITY_DELETE_BLOCKED''
+                        END,
+                        d.EventId,
+                        ORIGINAL_LOGIN(),
+                        ''Write-once policy blocked modification on SessionEventIntegrity''
+                    FROM deleted d;
+
+                    RAISERROR(''SessionEventIntegrity is immutable (WORM policy): UPDATE/DELETE blocked.'', 16, 1);
+                END');
+
+            EXEC('CREATE OR ALTER TRIGGER dbo.TR_SessionIntegritySnapshots_WORM_BlockUpdateDelete
+                ON dbo.SessionIntegritySnapshots
+                INSTEAD OF UPDATE, DELETE
+                AS
+                BEGIN
+                    SET NOCOUNT ON;
+                    INSERT INTO dbo.IntegrityAuditTrail (ActionType, SessionId, Actor, Details)
+                    SELECT
+                        CASE
+                            WHEN EXISTS(SELECT 1 FROM inserted) AND EXISTS(SELECT 1 FROM deleted) THEN ''SNAPSHOT_UPDATE_BLOCKED''
+                            ELSE ''SNAPSHOT_DELETE_BLOCKED''
+                        END,
+                        d.SessionId,
+                        ORIGINAL_LOGIN(),
+                        ''Write-once policy blocked modification on SessionIntegritySnapshots''
+                    FROM deleted d;
+
+                    RAISERROR(''SessionIntegritySnapshots are immutable (WORM policy): UPDATE/DELETE blocked.'', 16, 1);
+                END');
+        `);
+
+        this.integritySchemaReady = true;
+    }
+
+    private async ensureUnmonitoredWorkSchema(): Promise<void> {
+        await this.ensureIntegritySchema();
+
+        await executeQuery(`
+            IF OBJECT_ID('dbo.UnmonitoredWorkAlerts', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.UnmonitoredWorkAlerts (
+                    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+                    ObservedAt DATETIME2 NOT NULL,
+                    IdeUser NVARCHAR(255) NOT NULL,
+                    WorkspaceName NVARCHAR(255) NOT NULL,
+                    WorkspacePath NVARCHAR(1024) NOT NULL,
+                    Reason NVARCHAR(255) NOT NULL,
+                    IsAcknowledged BIT NOT NULL DEFAULT 0,
+                    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+                );
+            END
+        `);
+    }
+
+    async listRecentUnmonitoredWorkAlerts(limit = 50): Promise<UnmonitoredWorkAlertRecord[]> {
+        await this.ensureUnmonitoredWorkSchema();
+
+        const safeLimit = Math.max(1, Math.min(limit, 500));
+        const result = await executeQuery(
+            `SELECT TOP (${safeLimit})
+                Id,
+                CONVERT(VARCHAR, ObservedAt, 126) AS ObservedAt,
+                IdeUser,
+                WorkspaceName,
+                WorkspacePath,
+                Reason
+             FROM dbo.UnmonitoredWorkAlerts
+             ORDER BY ObservedAt DESC`
+        );
+
+        return result.recordset.map((row: any) => ({
+            id: Number(row.Id),
+            observedAt: row.ObservedAt || '',
+            ideUser: row.IdeUser || '',
+            workspaceName: row.WorkspaceName || '',
+            workspacePath: row.WorkspacePath || '',
+            reason: row.Reason || ''
+        }));
+    }
+
+    async recordUnmonitoredWorkAlert(input: {
+        ideUser: string;
+        workspaceName: string;
+        workspacePath: string;
+        reason?: string;
+    }): Promise<void> {
+        const payload: UnmonitoredWorkAlertPayload = {
+            observedAt: new Date().toISOString(),
+            ideUser: input.ideUser,
+            workspaceName: input.workspaceName,
+            workspacePath: input.workspacePath,
+            reason: input.reason || 'Workspace activity occurred while user was not authenticated in monitoring extension.'
+        };
+
+        try {
+            await this.ensureUnmonitoredWorkSchema();
+            await executeQuery(
+                `INSERT INTO dbo.UnmonitoredWorkAlerts (ObservedAt, IdeUser, WorkspaceName, WorkspacePath, Reason)
+                 VALUES (@observedAt, @ideUser, @workspaceName, @workspacePath, @reason)`,
+                payload
+            );
+        } catch (err) {
+            if (!this.unmonitoredAlertQueueDir) {
+                return;
+            }
+            const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
+            const uri = vscode.Uri.joinPath(this.unmonitoredAlertQueueDir, name);
+            await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(payload), 'utf8'));
+        }
+    }
+
+    private async syncUnmonitoredWorkAlerts(): Promise<void> {
+        if (this.isSyncingUnmonitoredAlerts || !this.unmonitoredAlertQueueDir) {
+            return;
+        }
+
+        this.isSyncingUnmonitoredAlerts = true;
+        try {
+            await this.ensureUnmonitoredWorkSchema();
+            const files = await vscode.workspace.fs.readDirectory(this.unmonitoredAlertQueueDir);
+            const queueFiles = files
+                .map(([name]) => name)
+                .filter(name => name.endsWith('.json'))
+                .sort();
+
+            for (const fileName of queueFiles) {
+                const fileUri = vscode.Uri.joinPath(this.unmonitoredAlertQueueDir, fileName);
+                try {
+                    const raw = await vscode.workspace.fs.readFile(fileUri);
+                    const payload = JSON.parse(Buffer.from(raw).toString('utf8')) as UnmonitoredWorkAlertPayload;
+                    await executeQuery(
+                        `INSERT INTO dbo.UnmonitoredWorkAlerts (ObservedAt, IdeUser, WorkspaceName, WorkspacePath, Reason)
+                         VALUES (@observedAt, @ideUser, @workspaceName, @workspacePath, @reason)`,
+                        payload
+                    );
+                    await vscode.workspace.fs.delete(fileUri);
+                } catch (err) {
+                    break;
+                }
+            }
+        } catch {
+            // Defer to next timer tick.
+        } finally {
+            this.isSyncingUnmonitoredAlerts = false;
+        }
+    }
+
+    async verifySessionIntegrity(sessionId: number): Promise<SessionIntegrityVerification> {
+        await this.ensureIntegritySchema();
+
+        const rows = await executeQuery(
+            `SELECT
+                se.Id AS EventId,
+                se.SessionId,
+                se.OccurredAt,
+                se.RawTimeText,
+                se.EventType,
+                se.FlightTimeMs,
+                se.FileEditPath,
+                se.FileViewPath,
+                se.FileFocusDurationText,
+                se.PossibleAiDetection,
+                se.PasteCharCount,
+                se.MetadataJson,
+                sei.EventHash,
+                sei.PrevEventHash,
+                sei.ChainHash
+             FROM dbo.SessionEvents se
+             LEFT JOIN dbo.SessionEventIntegrity sei ON sei.EventId = se.Id
+             WHERE se.SessionId = @sessionId
+             ORDER BY se.Id ASC`,
+            { sessionId }
+        );
+
+        let previousChainHash = '';
+        let mismatchReason: string | null = null;
+        let lastChainHash = '';
+
+        for (const row of rows.recordset) {
+            if (!row.EventHash || !row.ChainHash) {
+                mismatchReason = 'Missing integrity hash rows for one or more events.';
+                break;
+            }
+
+            const occurredAt = row.OccurredAt ? new Date(row.OccurredAt) : new Date();
+            const canonical = this.buildEventCanonicalPayload(
+                Number(row.SessionId),
+                occurredAt,
+                row.RawTimeText || '',
+                row.EventType || '',
+                Number(row.FlightTimeMs || 0),
+                row.FileEditPath || '',
+                row.FileViewPath || '',
+                row.FileFocusDurationText || null,
+                row.PossibleAiDetection || null,
+                row.PasteCharCount === null || row.PasteCharCount === undefined ? null : Number(row.PasteCharCount),
+                row.MetadataJson || '{}'
+            );
+
+            const computedEventHash = this.hashSha256(canonical);
+            if (computedEventHash !== row.EventHash) {
+                mismatchReason = `Event hash mismatch at event ${row.EventId}.`;
+                break;
+            }
+
+            const expectedChainHash = this.hashSha256(`${previousChainHash}|${computedEventHash}`);
+            if (expectedChainHash !== row.ChainHash) {
+                mismatchReason = `Chain hash mismatch at event ${row.EventId}.`;
+                break;
+            }
+
+            if ((row.PrevEventHash || '') !== previousChainHash) {
+                mismatchReason = `Previous hash link mismatch at event ${row.EventId}.`;
+                break;
+            }
+
+            previousChainHash = expectedChainHash;
+            lastChainHash = expectedChainHash;
+        }
+
+        const snapshotResult = await executeQuery(
+            `SELECT TOP 1 SessionHash, EventCount
+             FROM dbo.SessionIntegritySnapshots
+             WHERE SessionId = @sessionId
+             ORDER BY SequenceNumber DESC`,
+            { sessionId }
+        );
+
+        const expectedHash = snapshotResult.recordset[0]?.SessionHash || null;
+        const expectedEventCount = Number(snapshotResult.recordset[0]?.EventCount || rows.recordset.length);
+        const computedHash = this.computeSessionRootHash(sessionId, rows.recordset.length, lastChainHash || '');
+
+        if (!mismatchReason && expectedHash && expectedHash !== computedHash) {
+            mismatchReason = 'Snapshot hash mismatch for this session.';
+        }
+        if (!mismatchReason && expectedEventCount !== rows.recordset.length) {
+            mismatchReason = 'Snapshot event count does not match current session event count.';
+        }
+
+        return {
+            sessionId,
+            eventCount: rows.recordset.length,
+            verified: !mismatchReason,
+            mismatchReason,
+            expectedHash,
+            computedHash
+        };
     }
 
     private async ensureAuthSchema(): Promise<void> {

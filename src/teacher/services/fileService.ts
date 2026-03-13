@@ -12,13 +12,17 @@ export async function handleOpenLog(panel: vscode.WebviewPanel, password: string
   const { content, parsed, partial } = await fetchAndParseLog(password, chosen.uri);
 
   if (parsed) {
-    // ✅ Evidence Confidence Indicator (attached to the parsed payload)
+    // Evidence Confidence Indicator (attached to the parsed payload)
     try {
       const total = Array.isArray(parsed.events) ? parsed.events.length : 0;
 
       let label = "High";
-      if (partial || total < 20) label = "Medium";
-      if (partial && total < 10) label = "Low";
+      if (partial || total < 20) {
+        label = "Medium";
+      }
+      if (partial && total < 10) {
+        label = "Low";
+      }
 
       parsed.confidence = {
         label,
@@ -36,7 +40,9 @@ export async function handleOpenLog(panel: vscode.WebviewPanel, password: string
     panel.webview.postMessage({ command: 'logData', filename, data: parsed, partial });
   } else {
     let safe = String(content).replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '\uFFFD');
-    if (safe.length > 200_000) { safe = safe.slice(0, 200_000) + '\n\n[truncated]'; }
+    if (safe.length > 200_000) {
+      safe = safe.slice(0, 200_000) + '\n\n[truncated]';
+    }
     panel.webview.postMessage({ command: 'rawData', filename, data: safe, partial });
   }
 }
@@ -45,7 +51,9 @@ export async function handleExportLog(panel: vscode.WebviewPanel, password: stri
   try {
     const files = await storageManager.listLogFiles();
     const chosen = files.find(f => f.label === filename);
-    if (!chosen) { throw new Error("File not found on disk"); }
+    if (!chosen) {
+      throw new Error("File not found on disk");
+    }
 
     const res = await storageManager.retrieveLogContentWithPassword(password, chosen.uri);
     const logData = JSON.parse(res.text);
@@ -77,7 +85,9 @@ export async function handleExportLog(panel: vscode.WebviewPanel, password: stri
       if (vscode.workspace.workspaceFolders) {
         const auditUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.vscode', 'audit_log.txt');
         let currentAudit = '';
-        try { currentAudit = (await vscode.workspace.fs.readFile(auditUri)).toString(); } catch { }
+        try {
+          currentAudit = (await vscode.workspace.fs.readFile(auditUri)).toString();
+        } catch { }
         await vscode.workspace.fs.writeFile(auditUri, Buffer.from(currentAudit + auditEntry, 'utf8'));
       }
       vscode.window.showInformationMessage(`Successfully exported ${filename} to ${format.toUpperCase()}`);
@@ -88,7 +98,9 @@ export async function handleExportLog(panel: vscode.WebviewPanel, password: stri
     if (vscode.workspace.workspaceFolders) {
       const auditUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.vscode', 'audit_log.txt');
       let currentAudit = '';
-      try { currentAudit = (await vscode.workspace.fs.readFile(auditUri)).toString(); } catch { }
+      try {
+        currentAudit = (await vscode.workspace.fs.readFile(auditUri)).toString();
+      } catch { }
       await vscode.workspace.fs.writeFile(auditUri, Buffer.from(currentAudit + auditEntry, 'utf8'));
     }
     vscode.window.showErrorMessage(`Export Failed: ${err.message}`);
@@ -99,7 +111,11 @@ export async function handleExportLog(panel: vscode.WebviewPanel, password: stri
 export async function handleGetDeletions(panel: vscode.WebviewPanel, password: string) {
   const json = await storageManager.retrieveHiddenLogContent(password);
   let parsed: any = null;
-  try { parsed = JSON.parse(json); } catch { parsed = { raw: json }; }
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    parsed = { raw: json };
+  }
   panel.webview.postMessage({ command: 'deletionData', data: parsed });
 }
 
@@ -121,12 +137,14 @@ export async function handleLoadLogNotes(panel: vscode.WebviewPanel, password: s
   }
 }
 
-// ✅ NEW: Generate Student Transparency Summary
+//Generate Student Transparency Summary
 export async function handleGenerateStudentSummary(panel: vscode.WebviewPanel, password: string, filename: string) {
   try {
     const files = await storageManager.listLogFiles();
     const chosen = files.find(f => f.label === filename);
-    if (!chosen) throw new Error("Log not found");
+    if (!chosen) {
+      throw new Error("File not found on disk");
+    }
 
     const { parsed, partial } = await fetchAndParseLog(password, chosen.uri);
 
@@ -150,14 +168,22 @@ export async function handleGenerateStudentSummary(panel: vscode.WebviewPanel, p
 
     for (const e of events) {
       const et = (e.eventType || "").toLowerCase();
-      if (et === "paste" || et === "clipboard" || et === "pasteevent") pasteCount++;
+      if (et === "paste" || et === "clipboard" || et === "pasteevent") {
+        pasteCount++;
+      }
 
       const f = e.fileView || e.fileEdit || e.file || e.filePath || "";
-      if (typeof f === "string" && f.trim()) fileSet.add(f.trim());
+      if (typeof f === "string" && f.trim()) {
+        fileSet.add(f.trim());
+      }
 
       const t = parseLogTime(e.time || "");
-      if (t > 0 && firstTs === 0) firstTs = t;
-      if (t > 0) lastTs = t;
+      if (t > 0 && firstTs === 0) {
+        firstTs = t;
+      }
+      if (t > 0) {
+        lastTs = t;
+      }
     }
 
     const durationMin =
@@ -165,11 +191,15 @@ export async function handleGenerateStudentSummary(panel: vscode.WebviewPanel, p
 
     const lines: string[] = [];
     lines.push("This summary gives a high-level view of your recorded work session.");
-    if (durationMin !== null) lines.push(`• Session length: about ${durationMin} minute(s).`);
+    if (durationMin !== null) {
+      lines.push(`• Session length: about ${durationMin} minute(s).`);
+    }
     lines.push(`• Total recorded actions: ${events.length}.`);
     lines.push(`• Files interacted with: ${fileSet.size}.`);
     lines.push(`• Clipboard paste actions: ${pasteCount}.`);
-    if (partial) lines.push("• Note: Some session data may be incomplete due to interruptions or missing logs.");
+    if (partial) {
+      lines.push("• Note: Some session data may be incomplete due to interruptions or missing logs.");
+    }
     lines.push("This summary excludes internal metrics and is provided for transparency.");
 
     panel.webview.postMessage({

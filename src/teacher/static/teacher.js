@@ -154,9 +154,9 @@
         isDark = !isDark;
         themeToggle.textContent = isDark ? "🌙" : "☀️";
         if (vscode.setState)
-          try {
+          {try {
             vscode.setState({ theme: isDark ? "dark" : "light" });
-          } catch (e) {}
+          } catch (e) {}}
       });
     }
 
@@ -178,9 +178,9 @@
         } else {
           const existing = document.getElementById("sidebar-backdrop");
           if (existing)
-            try {
+            {try {
               existing.remove();
-            } catch (e) {}
+            } catch (e) {}}
         }
       });
     }
@@ -219,8 +219,8 @@
       if (dashboardDataCache && dashboardDataCache.metrics) {
         UI.renderDashboard(dashboardDataCache, handlers);
         if ($("dashboard-log-name"))
-          $("dashboard-log-name").textContent = "Viewing: All logs";
-        if (status) status.textContent = "Dashboard ready";
+          {$("dashboard-log-name").textContent = "Viewing: All logs";}
+        if (status) {status.textContent = "Dashboard ready";}
         return;
       }
       showDashboardLoading();
@@ -243,20 +243,20 @@
 
     $("close-log")?.addEventListener("click", () => {
       if ($("logs-viewer-container"))
-        $("logs-viewer-container").style.display = "none";
-      if ($("logs-view")) $("logs-view").innerHTML = "";
-      if ($("logs-log-name")) $("logs-log-name").textContent = "";
-      if (searchInput) searchInput.value = "";
+        {$("logs-viewer-container").style.display = "none";}
+      if ($("logs-view")) {$("logs-view").innerHTML = "";}
+      if ($("logs-log-name")) {$("logs-log-name").textContent = "";}
+      if (searchInput) {searchInput.value = "";}
     });
 
     $("refresh-logs")?.addEventListener("click", () => {
-      if (status) status.textContent = "Refreshing list...";
+      if (status) {status.textContent = "Refreshing list...";}
       // New/removed logs can change aggregate metrics.
       dashboardDataCache = null;
       post("listLogs");
     });
     $("refreshDeletions")?.addEventListener("click", () => {
-      if (status) status.textContent = "Fetching deletions...";
+      if (status) {status.textContent = "Fetching deletions...";}
       post("getDeletions");
     });
 
@@ -280,17 +280,17 @@
     });
     $("resetSettings")?.addEventListener("click", () => {
       if ($("inactivityInput"))
-        $("inactivityInput").value = defaults.inactivity;
-      if ($("flightInput")) $("flightInput").value = defaults.flight;
+        {$("inactivityInput").value = defaults.inactivity;}
+      if ($("flightInput")) {$("flightInput").value = defaults.flight;}
       if ($("pasteLengthInput"))
-        $("pasteLengthInput").value = defaults.pasteLength;
-      if ($("flagAiEvents")) $("flagAiEvents").checked = defaults.flagAiEvents;
+        {$("pasteLengthInput").value = defaults.pasteLength;}
+      if ($("flagAiEvents")) {$("flagAiEvents").checked = defaults.flagAiEvents;}
       post("saveSettings", { settings: defaults });
     });
 
     // --- SEARCH & DROPDOWN ---
     function renderSearchDropdown(items) {
-      if (!dropdown) return;
+      if (!dropdown) {return;}
       dropdown.innerHTML = "";
       if (!items || items.length === 0) {
         dropdown.innerHTML =
@@ -303,9 +303,9 @@
         div.textContent = name;
         div.addEventListener("mousedown", (e) => {
           e.preventDefault();
-          if (searchInput) searchInput.value = name;
+          if (searchInput) {searchInput.value = name;}
           dropdown.classList.remove("show");
-          if (status) status.textContent = "Decrypting " + name + "...";
+          if (status) {status.textContent = "Decrypting " + name + "...";}
           post("openLog", { filename: name });
         });
         dropdown.appendChild(div);
@@ -321,13 +321,13 @@
     if (searchInput) {
       searchInput.addEventListener("input", (e) => {
         renderSearchDropdown(filterLogs((e.target.value || "").toLowerCase()));
-        if (dropdown) dropdown.classList.add("show");
+        if (dropdown) {dropdown.classList.add("show");}
       });
       searchInput.addEventListener("focus", () => {
         renderSearchDropdown(
           filterLogs((searchInput.value || "").toLowerCase()),
         );
-        if (dropdown) dropdown.classList.add("show");
+        if (dropdown) {dropdown.classList.add("show");}
       });
     }
     const clearSearchBtn = $("clear-search");
@@ -360,8 +360,8 @@
         const checks = document.querySelectorAll(".log-checkbox:checked");
         const filenames = Array.from(checks).map((c) => c.value);
         if (filenames.length === 0)
-          return (status.textContent =
-            "Error: Select at least 1 log to build a timeline.");
+          {return (status.textContent =
+            "Error: Select at least 1 log to build a timeline.");}
         status.textContent = "Generating Timeline...";
         post("generateTimeline", { filenames });
       },
@@ -369,28 +369,28 @@
         const checks = document.querySelectorAll(".log-checkbox:checked");
         const filenames = Array.from(checks).map((c) => c.value);
         if (filenames.length < 2)
-          return (status.textContent =
-            "Error: Select at least 2 logs to build a profile.");
+          {return (status.textContent =
+            "Error: Select at least 2 logs to build a profile.");}
         status.textContent = "Generating Profile...";
         post("generateProfile", { filenames });
       },
       onExportCsv: (filename) => {
-        if (status) status.textContent = "Exporting CSV...";
+        if (status) {status.textContent = "Exporting CSV...";}
         post("exportLog", { format: "csv", filename: filename });
       },
       onExportJson: (filename) => {
-        if (status) status.textContent = "Exporting JSON...";
+        if (status) {status.textContent = "Exporting JSON...";}
         post("exportLog", { format: "json", filename: filename });
       },
       onRowClick: (evClick, row, fname, checkCell, nameDiv) => {
         let clickedCell = evClick.target;
         while (clickedCell && clickedCell.parentNode !== row)
-          clickedCell = clickedCell.parentNode;
+          {clickedCell = clickedCell.parentNode;}
         const cellIndex = Array.from(row.children).indexOf(clickedCell);
 
         if (cellIndex === 0 || cellIndex === 1) {
           const checkbox = checkCell.querySelector("input");
-          if (evClick.target !== checkbox) checkbox.checked = !checkbox.checked;
+          if (evClick.target !== checkbox) {checkbox.checked = !checkbox.checked;}
           return;
         }
 
@@ -440,7 +440,7 @@
         case "logList":
           logNamesCache = (msg.data || []).slice().sort().reverse();
           if ($("log-count"))
-            $("log-count").textContent = logNamesCache.length + " logs found";
+            {$("log-count").textContent = logNamesCache.length + " logs found";}
           renderSearchDropdown(
             filterLogs((searchInput?.value || "").toLowerCase()),
           );
@@ -450,18 +450,18 @@
           dashboardDataCache = msg.data || null;
           UI.renderDashboard(msg.data, handlers);
           if ($("dashboard-log-name"))
-            $("dashboard-log-name").textContent = "Viewing: All logs";
-          if (status) status.textContent = "Dashboard updated";
+            {$("dashboard-log-name").textContent = "Viewing: All logs";}
+          if (status) {status.textContent = "Dashboard updated";}
           break;
 
         case "profileData":
           UI.renderProfile(msg.data);
-          if (status) status.textContent = "Behavioral profile generated.";
+          if (status) {status.textContent = "Behavioral profile generated.";}
           break;
 
         case "timelineData":
           UI.renderTimeline(msg.data);
-          if (status) status.textContent = "Timeline generated.";
+          if (status) {status.textContent = "Timeline generated.";}
           break;
 
         case "logData":
@@ -478,7 +478,7 @@
               currentSettings,
             );
             requestedDashboardFile = null;
-            if (status) status.textContent = "Loaded " + msg.filename;
+            if (status) {status.textContent = "Loaded " + msg.filename;}
           } else {
             UI.renderParsedInLogs(
               msg.data,
@@ -488,7 +488,7 @@
             );
             // Load notes for this log file
             post("loadLogNotes", { filename: msg.filename });
-            if (status) status.textContent = "Loaded " + msg.filename;
+            if (status) {status.textContent = "Loaded " + msg.filename;}
           }
           break;
 
@@ -500,7 +500,7 @@
               ? msg.summary
               : "No summary returned.";
           renderStudentSummaryToUI(filename, summaryText);
-          if (status) status.textContent = "Student summary ready.";
+          if (status) {status.textContent = "Student summary ready.";}
           break;
         }
 
@@ -537,13 +537,13 @@
 
         case "rawData":
           if ($("logs-viewer-container"))
-            $("logs-viewer-container").style.display = "block";
+            {$("logs-viewer-container").style.display = "block";}
           if ($("logs-view"))
-            $("logs-view").innerHTML = "<pre>" + msg.data + "</pre>";
+            {$("logs-view").innerHTML = "<pre>" + msg.data + "</pre>";}
           if ($("dashboard-view") && currentTab === "dashboard")
-            $("dashboard-view").innerHTML =
-              '<div class="card"><h2>Raw Data Only</h2><p class="meta">Score unavailable.</p></div>';
-          if (status) status.textContent = "Loaded " + msg.filename;
+            {$("dashboard-view").innerHTML =
+              '<div class="card"><h2>Raw Data Only</h2><p class="meta">Score unavailable.</p></div>';}
+          if (status) {status.textContent = "Loaded " + msg.filename;}
           break;
 
         case "loadSettings":
@@ -560,25 +560,25 @@
                   : defaults.flagAiEvents,
             };
             if ($("inactivityInput"))
-              $("inactivityInput").value = currentSettings.inactivity;
+              {$("inactivityInput").value = currentSettings.inactivity;}
             if ($("flightInput"))
-              $("flightInput").value = currentSettings.flight;
+              {$("flightInput").value = currentSettings.flight;}
             if ($("pasteLengthInput"))
-              $("pasteLengthInput").value = currentSettings.pasteLength;
+              {$("pasteLengthInput").value = currentSettings.pasteLength;}
             if ($("flagAiEvents"))
-              $("flagAiEvents").checked = currentSettings.flagAiEvents;
+              {$("flagAiEvents").checked = currentSettings.flagAiEvents;}
           }
           break;
 
         case "settingsSaved":
           if ($("inactivityInput"))
-            currentSettings.inactivity = parseInt($("inactivityInput").value);
+            {currentSettings.inactivity = parseInt($("inactivityInput").value);}
           if ($("flightInput"))
-            currentSettings.flight = parseInt($("flightInput").value);
+            {currentSettings.flight = parseInt($("flightInput").value);}
           if ($("pasteLengthInput"))
-            currentSettings.pasteLength = parseInt($("pasteLengthInput").value);
+            {currentSettings.pasteLength = parseInt($("pasteLengthInput").value);}
           if ($("flagAiEvents"))
-            currentSettings.flagAiEvents = $("flagAiEvents").checked;
+            {currentSettings.flagAiEvents = $("flagAiEvents").checked;}
           if ($("settings-msg")) {
             $("settings-msg").textContent = "Settings saved successfully!";
             setTimeout(() => ($("settings-msg").textContent = ""), 3000);
@@ -590,7 +590,7 @@
           try {
             const d = msg.data;
             const view = $("deletions-view");
-            if (!view) break;
+            if (!view) {break;}
             if (typeof d === "string") {
               view.innerHTML = "<pre>" + d + "</pre>";
             } else {
@@ -627,15 +627,15 @@
                   row.className = "card deletion-row";
                   const inferActivityType = (entry) => {
                     if (entry.activityType)
-                      return String(entry.activityType).toLowerCase();
+                      {return String(entry.activityType).toLowerCase();}
                     if (
                       entry.deletedFile ||
                       entry.deletedAt ||
                       entry.lastKnownSize
                     )
-                      return "deleted";
+                      {return "deleted";}
                     if (entry.modifiedFile || entry.modifiedAt)
-                      return "modified";
+                      {return "modified";}
                     const lowerNote = String(
                       entry.note || entry.reason || "",
                     ).toLowerCase();
@@ -643,8 +643,8 @@
                       lowerNote.includes("manual edit") ||
                       lowerNote.includes("modified")
                     )
-                      return "modified";
-                    if (lowerNote.includes("deleted")) return "deleted";
+                      {return "modified";}
+                    if (lowerNote.includes("deleted")) {return "deleted";}
                     return "activity";
                   };
 
@@ -693,9 +693,9 @@
             }
           } catch (err) {
             if ($("deletions-view"))
-              $("deletions-view").textContent = "Failed to render deletions.";
+              {$("deletions-view").textContent = "Failed to render deletions.";}
           }
-          if (status) status.textContent = "Deletions updated";
+          if (status) {status.textContent = "Deletions updated";}
           break;
 
         case "error":
@@ -707,7 +707,7 @@
             $("btn-create-assignment").disabled = false;
             $("btn-create-assignment").textContent = "Create Assignment";
           }
-          if (status) status.textContent = "Error: " + (msg.message || "");
+          if (status) {status.textContent = "Error: " + (msg.message || "");}
           if (
             msg.message &&
             (msg.message.toLowerCase().includes("mismatch") ||

@@ -1,27 +1,27 @@
+# grau-m/tbd/TBD-dev-keenan/.github/workflows/ci.yml
 name: CI
 
 on:
   push:
-    branches:
-      - main
-      - "dev/**"
-      - "test/**"
-      - "feature/**"
+    branches: [main, "dev/**", "test/**", "feature/**"]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   build:
-    # DEFINE THE MATRIX
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-      # Fail-fast: false ensures that if an OS fails, the others continue
       fail-fast: false
     runs-on: ${{ matrix.os }}
+    # Move database variables here so they are available to ALL steps and processes
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      AZURE_SQL_SERVER: "localhost"
+      AZURE_SQL_DATABASE: "test_db"
+      AZURE_SQL_USER: "sa"
+      AZURE_SQL_PASSWORD: "DummyPassword123"
+      AZURE_SQL_ENCRYPT: "false"
 
     steps:
       - name: Checkout
@@ -36,14 +36,10 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      #LINUX SPECIFIC SETUP (XVFB)
-      # linxu doesnt have a display server, so we need to install and run Xvfb for tests that require a GUI
       - name: Install Xvfb (Linux Only)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
-      # RUN TESTS
-      # linux uses xvfb-run. On Mac/Windows, we just run npm test.
       - name: Run Tests
         run: |
           if [ "$RUNNER_OS" == "Linux" ]; then
@@ -53,6 +49,5 @@ jobs:
           fi
         shell: bash
 
-      # COMPILE
       - name: Build
         run: npm run build

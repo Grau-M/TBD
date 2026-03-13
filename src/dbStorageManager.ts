@@ -267,12 +267,12 @@ export class DbStorageManager {
     private lastQueueWarningAtMs: number | null = null;
     private syncState: SyncState = 'idle';
 
-    async init(context: vscode.ExtensionContext): Promise<void> {
-        this.context = context;
+   async init(context: vscode.ExtensionContext): Promise<void> {
+    this.context = context;
 
-        const info = getSessionInfo();
-        this.currentUserName = info.user;
-        this.currentProjectName = info.project;
+    const info = getSessionInfo();
+    this.currentUserName = info.user;
+    this.currentProjectName = info.project;
 
         this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
         await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
@@ -296,11 +296,39 @@ export class DbStorageManager {
                 }
             }
         });
+    this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
+    await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
+    await this.refreshOfflineQueueCount();
 
+    if (process.env.CI === 'true') {
+        console.log('[TBD Logger DB] Running in CI mode, skipping DB sync and timers');
+        this.setSyncState('offline');
         this.initialized = true;
         void this.syncOfflineQueue();
         void this.syncUnmonitoredWorkAlerts();
+        // Exit early to prevent background timers from starting in CI
+        return;
     }
+
+    // These only run if NOT in CI
+    void this.initializeOnlineSessionInBackground();
+
+    this.syncTimer = setInterval(() => {
+        void this.syncOfflineQueue();
+    }, OFFLINE_QUEUE_SYNC_INTERVAL_MS);
+
+    context.subscriptions.push({
+        dispose: () => {
+            if (this.syncTimer) {
+                clearInterval(this.syncTimer);
+                this.syncTimer = null;
+            }
+        }
+    });
+
+    this.initialized = true;
+    void this.syncOfflineQueue();
+}
 
     /**
      * Initialize database connection in the background without blocking
@@ -2762,4 +2790,38 @@ export class DbStorageManager {
             }
         );
     }
+    async validateAssignmentLink(studentAuthUserId: number, workspacePath: string): Promise<{ 
+    classId: number; 
+    assignmentId: number; 
+    assignmentName: string; 
+    courseName: string 
+} | null> {
+    await this.ensureClassesSchema();
+
+    // Query to find the link and join with descriptive tables
+    const result = await executeQuery(
+        `SELECT swa.ClassId, swa.AssignmentId, ca.Name as AssignmentName, c.CourseName
+         FROM dbo.StudentWorkspaceAssignments swa
+         INNER JOIN dbo.ClassAssignments ca ON ca.Id = swa.AssignmentId
+         INNER JOIN dbo.Classes c ON c.Id = swa.ClassId
+         WHERE swa.StudentAuthUserId = @studentAuthUserId 
+           AND swa.WorkspaceRootPath = @workspaceRootPath`,
+        {
+            studentAuthUserId,
+            workspaceRootPath: workspacePath
+        }
+    );
+
+    if (result && result.recordset && result.recordset.length > 0) {
+        const row = result.recordset[0];
+        return {
+            classId: row.ClassId,
+            assignmentId: row.AssignmentId,
+            assignmentName: row.AssignmentName,
+            courseName: row.CourseName
+        };
+    }
+    return null;
+}
+    
 }

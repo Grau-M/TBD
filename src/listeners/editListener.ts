@@ -48,7 +48,7 @@ export function createEditListener(): vscode.Disposable {
         // helper to normalize line endings for clipboard comparison
         const normalize = (str: string) => str.replace(/\s+/g, '');
         const isExternalCopy = (text: string) => {
-            if (!state.externalCopiedText) return false;
+            if (!state.externalCopiedText) {return false;}
             // Now compares the raw characters without spaces/tabs breaking it
             return normalize(state.externalCopiedText).includes(normalize(text));
         };

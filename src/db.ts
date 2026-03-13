@@ -11,7 +11,11 @@ import * as path from 'path';
 // Load environment variables from the extension root.
 // __dirname is dist/ when bundled, so go up one level to find .env
 dotenv.config({ path: path.resolve(__dirname, '..', '.env'), quiet: true });
-
+//Define the variable and enforce the security check for encryption
+const isEncryptionForced = process.env.AZURE_SQL_ENCRYPT === 'true';
+if (process.env.NODE_ENV === 'production' && !isEncryptionForced) {
+    throw new Error('SECURITY HALT: Production database connections must enforce TLS/SSL encryption (AZURE_SQL_ENCRYPT=true).');
+}
 // Database configuration from environment variables
 const config: sql.config = {
     server: process.env.AZURE_SQL_SERVER || '',
@@ -20,7 +24,7 @@ const config: sql.config = {
     password: process.env.AZURE_SQL_PASSWORD || '',
     port: parseInt(process.env.AZURE_SQL_PORT || '1433'),
     options: {
-        encrypt: process.env.AZURE_SQL_ENCRYPT === 'true',
+        encrypt: isEncryptionForced, // Enforce encryption based on environment variable
         trustServerCertificate: false,
         enableArithAbort: true,
         connectTimeout: 30000,
@@ -37,13 +41,16 @@ let isConnecting = false;
  * @returns Promise<sql.ConnectionPool>
  */
 export async function getPool(): Promise<sql.ConnectionPool> {
+    if (!config.server) {
+        throw new Error('Database configuration missing: AZURE_SQL_SERVER is not defined');
+    }
+
     if (pool && pool.connected) {
         return pool;
     }
 
     // Prevent concurrent connection attempts
     if (isConnecting) {
-        // Wait for the current connection attempt to complete
         while (isConnecting) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
@@ -56,16 +63,16 @@ export async function getPool(): Promise<sql.ConnectionPool> {
         isConnecting = true;
         console.log('[TBD Logger DB] Connecting to Azure SQL Database...');
         pool = await new sql.ConnectionPool(config).connect();
-        console.log('[TBD Logger DB] Connected to Azure SQL Database successfully');
-        
-        // Handle pool errors
-        pool.on('error', (err: Error) => {
-            console.error('[TBD Logger DB] Connection pool error:', err);
-        });
-        
         return pool;
-    } catch (err) {
-        console.error('[TBD Logger DB] Failed to connect to database:', err);
+    } catch (err:any) {
+        // Rainy Day Handling: Log specific handshake or auth failures
+        if (err.message.includes('Login failed')) {
+            console.error('[SECURITY EVENT] Authentication Handshake Failure: Invalid credentials provided.', err);
+        } else if (err.message.includes('certificate') || err.message.includes('SSL')) {
+            console.error('[SECURITY EVENT] Insecure Connection Attempt: TLS handshake rejected by server.', err);
+        } else {
+            console.error('[TBD Logger DB] Failed to connect to database:', err);
+        }
         throw err;
     } finally {
         isConnecting = false;

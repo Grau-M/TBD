@@ -19,13 +19,15 @@ import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
 import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess } from './auth';
 import { openAuthView, openAccountView } from './auth/index';
+import { updateSyncStatus } from './statusBar';
 
 import * as path from 'path';
+import { openStudentSyncView } from './auth/studentSyncView';
 
 // Function to update database status bar item
 async function updateDbStatusBar(): Promise<void> {
     const statusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
-    if (!statusItem) return;
+    if (!statusItem) { return; }
 
     const sync = storageManager.getBackgroundSyncStatus();
     const pendingSuffix = sync.pendingQueueCount > 0 ? ` (${sync.pendingQueueCount} queued)` : '';
@@ -126,17 +128,22 @@ export async function activate(context: vscode.ExtensionContext) {
     // Open the auth GUI webview if the workspace is not yet authenticated.
     const existingSession = getWorkspaceAuthSession(context);
     if (!existingSession?.authenticated) {
-        await openAuthView(context, storageManager);
+        // prevents the extension from hanging in CI
+        if (process.env.CI === 'true') {
+            console.log('[TBD Logger] CI environment detected: Skipping authentication webview block.');
+        } else {
+            await openAuthView(context, storageManager);
+        }
     }
 
-    // NEW FEATURE: Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
+    // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
         inactivityThresholdMs: 5 * 60 * 1000, // 5 minutes (change if you want)
         checkEveryMs: 10_000
     });
 
 
-    // NEW: Log Session Start (Persistent Marker)
+    // Log Session Start 
     state.sessionBuffer.push({
         time: formatTimestamp(Date.now()),
         flightTime: '0',
@@ -151,7 +158,7 @@ export async function activate(context: vscode.ExtensionContext) {
     state.currentFocusedFile = isIgnoredPath(initialPath) ? '' : initialPath;
     state.focusStartTime = Date.now();
 
-    // UPDATED: Open Logs Command with Password Prompt
+    //Open Logs Command with Password Prompt
     const openLogs = async () => {
         const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Log access');
         if (!allowed) {
@@ -321,6 +328,7 @@ export async function activate(context: vscode.ExtensionContext) {
     let _unmonitoredAlertCaptured = false;
 
     const promptIfUnauthenticated = async () => {
+        if (process.env.CI === 'true') { return; }
         if (_authPromptShown) { return; }
         const session = getWorkspaceAuthSession(context);
         if (session?.authenticated) { return; }
@@ -431,49 +439,97 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initial status update
     void updateDbStatusBar();
     updateAuthStatusBar(context);
+    
+let isSyncing = false;
+const forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync', async () => {
+    const session = getWorkspaceAuthSession(context);
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+    // 1. Auth Check
+    if (!session?.authenticated || !session?.authUserId) {
+        vscode.window.showErrorMessage("Sync Denied: Please log in first.");
+        return;
+    }
+
+    // 2. Assignment Guard: Check if the current workspace is linked to a valid assignment
+    const assignmentLink = await (storageManager as any).validateAssignmentLink(
+        session.authUserId, 
+        workspaceRoot || ''
+    );
+
+    if (!assignmentLink) {
+        vscode.window.showErrorMessage(
+            "Sync Blocked: This workspace is not attached to an active assignment. Please join a class and link this folder first."
+        );
+        return;
+    }
+
+    // 3. Concurrency Check
+    if (isSyncing || state.isFlushing) {
+        vscode.window.showInformationMessage("Sync already in progress...");
+        return;
+    }
+
+    // 4. SUNNY DAY: Valid assignment confirmed, proceed with sync
+    isSyncing = true;
+    updateSyncStatus(true);
+    
+    try {
+        await flushBuffer();
+        vscode.window.showInformationMessage(`✅ Successfully synced to: ${assignmentLink.assignmentName}`);
+    } catch (error) {
+        vscode.window.showErrorMessage("Sync failed. Check your network connection.");
+    } finally {
+        isSyncing = false;
+        updateSyncStatus(false);
+    }
+});
+    // Register the force sync command and add to subscriptions
+    context.subscriptions.push(forceSyncCommand);
+
+    const openSyncViewCommand = vscode.commands.registerCommand('tbd-logger.openStudentSyncView', async () => {
+        await openStudentSyncView(context);
+    });
+
+    context.subscriptions.push(openSyncViewCommand); //
 
     //Return the internals so the Test Suite can see them
     return { state, storageManager };
+    
 }
 
 export function deactivate() {
-    // Function: deactivate
-    // Purpose: VS Code extension deactivation entrypoint. Records final
-    // focus duration, marks clean shutdown for the interruption
-    // tracker, flushes the buffer and disposes the status bar item.
-    // Record final focus duration
-
-    // NEW FEATURE: Mark clean shutdown (lets us detect force-close/crash next time)
+    // 1. Mark clean shutdown for the tracker
     SessionInterruptionTracker.markCleanShutdown();
 
+    // 2. Log final focus duration
     const now = Date.now();
     if (state.currentFocusedFile) {
-        const durationMs = now - state.focusStartTime;
         state.sessionBuffer.push({
             time: formatTimestamp(now),
-            flightTime: String(durationMs),
+            flightTime: String(now - state.focusStartTime),
             eventType: 'focusDuration',
             fileEdit: '',
             fileView: state.currentFocusedFile
         });
     }
 
+    // 3. Final data flush
     void flushBuffer();
 
+    // 4. Dispose global status bar references
     const globalSb = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
     if (globalSb) { globalSb.dispose(); }
-    
-    // Close database connection
-    void storageManager.dispose();
-    
-    // Clear status bar items
+
     const dbStatusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
-    if (dbStatusItem) {
-        dbStatusItem.dispose();
-    }
+    if (dbStatusItem) { dbStatusItem.dispose(); }
 
     const authStatusItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
-    if (authStatusItem) {
-        authStatusItem.dispose();
-    }
+    if (authStatusItem) { authStatusItem.dispose(); }
+
+    const hiddenItem = (global as any).hiddenStatusBarItem as vscode.StatusBarItem | undefined;
+    if (hiddenItem) { hiddenItem.dispose(); }
+
+    // 5. Close database connection
+    void storageManager.dispose();
 }

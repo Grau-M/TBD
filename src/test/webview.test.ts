@@ -70,6 +70,9 @@ suite('Webview Integration Tests', () => {
         assert.ok(html.includes('main-content'), 'HTML should contain main content');
         assert.ok(html.includes('teacher.js'), 'HTML should reference teacher.js');
         assert.ok(html.includes('renderers.js'), 'HTML should reference renderers.js');
+        assert.ok(html.includes('assignment-work-view'), 'HTML should include assignment work detail container');
+        assert.ok(html.includes('assignment-student-view'), 'HTML should include assignment student detail container');
+        assert.ok(html.includes('assignment-session-log-view'), 'HTML should include assignment log detail container');
     });
 
     /**

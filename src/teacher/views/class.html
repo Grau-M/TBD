@@ -68,11 +68,11 @@
     </div>
 
     <div style="display:flex; gap:8px; margin:14px 0 12px; flex-wrap:wrap;">
-      <button id="class-detail-tab-students" class="btn btn-secondary" style="background:var(--accent); color:white;">Students</button>
-      <button id="class-detail-tab-assignments" class="btn btn-secondary">Assignments</button>
+      <button id="class-detail-tab-assignments" class="btn btn-secondary" style="background:var(--accent); color:white;">Assignments</button>
+      <button id="class-detail-tab-students" class="btn btn-secondary">Students</button>
     </div>
 
-    <div id="class-detail-students" style="display:block;">
+    <div id="class-detail-students" style="display:none;">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
         <span></span>
         <button id="btn-refresh-students" class="btn btn-secondary" style="font-size:12px; padding:4px 10px;">&#8635; Refresh</button>
@@ -91,7 +91,7 @@
       </div>
     </div>
 
-    <div id="class-detail-assignments" style="display:none;">
+    <div id="class-detail-assignments" style="display:block;">
       <div id="assignment-form-card" class="card" style="display:none; padding:14px; margin-bottom:12px;">
         <h3 style="margin-top:0; margin-bottom:10px;">Create Assignment</h3>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
@@ -117,6 +117,62 @@
 
       <div id="class-assignments-empty" class="meta" style="display:none; padding:20px 0; text-align:center;">No assignments yet for this class.</div>
       <div id="class-assignments-list" style="margin-bottom:20px;"></div>
+      <div id="assignment-work-view" class="card" style="display:none; padding:14px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+          <div>
+            <h3 id="assignment-work-title" style="margin:0;">Assignment Details</h3>
+            <div id="assignment-work-meta" class="meta" style="margin-top:4px;"></div>
+          </div>
+          <button id="btn-back-to-assignments" class="btn btn-secondary">Back to Assignments</button>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+          <div id="assignment-compare-selection-status" class="meta">Select up to 2 students to compare their sessions side by side.</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button id="btn-clear-assignment-compare" class="btn btn-secondary">Clear Selection</button>
+            <button id="btn-compare-assignment-students" class="btn btn-primary" disabled>Compare Sessions</button>
+          </div>
+        </div>
+        <div id="assignment-compare-message" class="meta" style="display:none; margin-bottom:12px; padding:10px; border:1px solid var(--border); border-radius:8px;"></div>
+        <div id="assignment-work-empty" class="meta" style="display:none; padding:16px 0; text-align:center;">
+          No students have started this assignment yet.
+        </div>
+        <div id="assignment-work-list" style="display:grid; gap:10px;"></div>
+        <div id="assignment-compare-view" class="card" style="display:none; margin-top:12px; margin-bottom:0; padding:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+            <div>
+              <h4 style="margin:0;">Side-by-Side Session Comparison</h4>
+              <div id="assignment-compare-summary" class="meta" style="margin-top:4px;"></div>
+            </div>
+          </div>
+          <div id="assignment-compare-warnings" style="display:grid; gap:8px; margin-bottom:12px;"></div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; font-size:0.9rem;">
+            <label><input type="checkbox" class="assignment-compare-filter" data-category="input" checked /> Typing</label>
+            <label><input type="checkbox" class="assignment-compare-filter" data-category="edit" checked /> Edits</label>
+            <label><input type="checkbox" class="assignment-compare-filter" data-category="paste" checked /> Copy/Paste</label>
+            <label><input type="checkbox" class="assignment-compare-filter" data-category="ai" checked /> AI</label>
+            <label><input type="checkbox" class="assignment-compare-filter" data-category="focus" checked /> Focus/Save</label>
+            <label><input type="checkbox" class="assignment-compare-filter" data-category="run" checked /> Run/Debug</label>
+            <label><input type="checkbox" class="assignment-compare-filter" data-category="other" checked /> Other</label>
+          </div>
+          <div id="assignment-compare-panels" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px;"></div>
+        </div>
       </div>
+
+      <div id="assignment-student-view" class="card" style="display:none; padding:14px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+          <h3 id="assignment-student-title" style="margin:0;">Student Sessions</h3>
+          <button id="btn-back-to-assignment-students" class="btn btn-secondary">Back to Students</button>
+        </div>
+        <div id="assignment-student-sessions-empty" class="meta" style="display:none; padding:16px 0; text-align:center;">
+          No session logs are available for this student yet.
+        </div>
+        <div id="assignment-student-sessions-list" style="display:grid; gap:10px;"></div>
+      </div>
+
+      <div id="assignment-session-log-view" class="card" style="display:none; padding:14px; margin-bottom:0;">
+        <h3 id="assignment-session-log-title" style="margin-top:0; margin-bottom:10px;">Session Log</h3>
+        <pre id="assignment-session-log-content" style="margin:0;"></pre>
+      </div>
+    </div>
   </div>
 </div>

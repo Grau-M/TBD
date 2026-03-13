@@ -2,6 +2,241 @@ import * as vscode from 'vscode';
 import { storageManager } from '../../state';
 import { parseLogTime, fetchAndParseLog } from '../utilis/LogHelpers';
 
+type AssignmentComparisonSelection = {
+    studentAuthUserId: number;
+    studentName: string;
+    totalSessionCount?: number;
+    sessions: Array<{
+        sessionId: number;
+        filename: string;
+        startedAt: string;
+        ideUser: string;
+        workspaceName: string;
+    }>;
+};
+
+type ComparisonCategory = 'input' | 'edit' | 'paste' | 'ai' | 'focus' | 'run' | 'other';
+
+function toCategory(eventType: string): ComparisonCategory {
+    const lowered = String(eventType || '').toLowerCase();
+    if (lowered === 'input' || lowered === 'key' || lowered === 'keystroke' || lowered === 'keypress') {return 'input';}
+    if (lowered === 'replace' || lowered === 'delete' || lowered === 'backspace' || lowered === 'undo') {return 'edit';}
+    if (lowered === 'paste' || lowered === 'clipboard' || lowered === 'pasteevent' || lowered === 'external-paste') {return 'paste';}
+    if (lowered.startsWith('ai-') || lowered === 'ai' || lowered === 'ai-assist') {return 'ai';}
+    if (lowered === 'focuschange' || lowered === 'focusduration' || lowered === 'save') {return 'focus';}
+    if (lowered === 'terminal' || lowered === 'debug' || lowered === 'run' || lowered === 'terminalcommand') {return 'run';}
+    return 'other';
+}
+
+function basenameish(value: string): string {
+    const normalized = String(value || '').replace(/\\/g, '/');
+    const parts = normalized.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : normalized;
+}
+
+function readPasteLength(event: any): number {
+    if (typeof event.pasteCharCount === 'number') {return event.pasteCharCount;}
+    if (typeof event.pasteLength === 'number') {return event.pasteLength;}
+    if (typeof event.length === 'number') {return event.length;}
+    if (typeof event.text === 'string') {return event.text.length;}
+    return 0;
+}
+
+function average(values: number[]): number {
+    if (!values.length) {return 0;}
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function clamp01(value: number): number {
+    if (value < 0) {return 0;}
+    if (value > 1) {return 1;}
+    return value;
+}
+
+function sampleCategories(events: Array<{ category: ComparisonCategory }>, sampleCount: number): ComparisonCategory[] {
+    if (!events.length || sampleCount <= 0) {return [];}
+    if (events.length <= sampleCount) {return events.map(event => event.category);}
+
+    const sampled: ComparisonCategory[] = [];
+    for (let index = 0; index < sampleCount; index++) {
+        const sourceIndex = Math.round((index * (events.length - 1)) / Math.max(1, sampleCount - 1));
+        sampled.push(events[sourceIndex].category);
+    }
+    return sampled;
+}
+
+function computeSequenceSimilarity(left: Array<{ category: ComparisonCategory }>, right: Array<{ category: ComparisonCategory }>): number {
+    const sampleCount = Math.min(60, Math.max(left.length, right.length));
+    if (sampleCount <= 0) {return 0;}
+
+    const leftSample = sampleCategories(left, sampleCount);
+    const rightSample = sampleCategories(right, sampleCount);
+    let matches = 0;
+    for (let index = 0; index < sampleCount; index++) {
+        if (leftSample[index] === rightSample[index]) {
+            matches++;
+        }
+    }
+
+    return matches / sampleCount;
+}
+
+function computeComparisonScore(left: any, right: any) {
+    const categories: ComparisonCategory[] = ['input', 'edit', 'paste', 'ai', 'focus', 'run', 'other'];
+    const leftTotal = Math.max(1, left.totalEvents || 0);
+    const rightTotal = Math.max(1, right.totalEvents || 0);
+
+    let distributionDelta = 0;
+    for (const category of categories) {
+        const leftRatio = (left.categoryCounts?.[category] || 0) / leftTotal;
+        const rightRatio = (right.categoryCounts?.[category] || 0) / rightTotal;
+        distributionDelta += Math.abs(leftRatio - rightRatio);
+    }
+    const distributionScore = clamp01(1 - (distributionDelta / 2));
+
+    const sequenceScore = computeSequenceSimilarity(left.timelineEvents || [], right.timelineEvents || []);
+
+    const gapScore = clamp01(1 - (Math.abs((left.averageGapMs || 0) - (right.averageGapMs || 0)) / Math.max(1, left.averageGapMs || 0, right.averageGapMs || 0)));
+    const pasteScore = clamp01(1 - (Math.abs((left.pasteRate || 0) - (right.pasteRate || 0)) / Math.max(1, left.pasteRate || 0, right.pasteRate || 0)));
+    const durationScore = clamp01(1 - (Math.abs((left.activeSpanMs || 0) - (right.activeSpanMs || 0)) / Math.max(1, left.activeSpanMs || 0, right.activeSpanMs || 0)));
+    const cadenceScore = average([gapScore, pasteScore, durationScore]);
+
+    const overall = Math.round(((distributionScore * 0.45) + (sequenceScore * 0.35) + (cadenceScore * 0.20)) * 100);
+
+    return {
+        overall,
+        distribution: Math.round(distributionScore * 100),
+        sequence: Math.round(sequenceScore * 100),
+        cadence: Math.round(cadenceScore * 100)
+    };
+}
+
+async function buildAssignmentComparisonStudent(selection: AssignmentComparisonSelection, password: string, pasteThreshold: number) {
+    const timelineEvents: any[] = [];
+    const sessionSummaries: any[] = [];
+    const warnings: string[] = [];
+    const projects = new Set<string>();
+    const extensionVersions = new Set<string>();
+    const vscodeVersions = new Set<string>();
+    const categoryCounts: Record<ComparisonCategory, number> = {
+        input: 0,
+        edit: 0,
+        paste: 0,
+        ai: 0,
+        focus: 0,
+        run: 0,
+        other: 0
+    };
+
+    await Promise.all(selection.sessions.map(async (session) => {
+        try {
+            const uri = vscode.Uri.parse(`tbd-db://session/${session.sessionId}`);
+            const { parsed, partial } = await fetchAndParseLog(password, uri);
+            if (!parsed || !Array.isArray(parsed.events)) {
+                warnings.push(`Session ${session.filename} could not be parsed for comparison.`);
+                return;
+            }
+
+            const metadata = parsed.sessionHeader?.metadata || {};
+            const extensionVersion = String(metadata.extensionVersion || '');
+            const vscodeVersion = String(metadata.vscodeVersion || '');
+            const project = String(parsed.sessionHeader?.project || session.workspaceName || '');
+
+            if (extensionVersion) {extensionVersions.add(extensionVersion);} else {warnings.push(`Session ${session.filename} is missing extension version metadata.`);}
+            if (vscodeVersion) {vscodeVersions.add(vscodeVersion);}
+            if (project) {projects.add(project);}
+
+            const parsedEvents = parsed.events
+                .map((event: any, index: number) => {
+                    const timeMs = parseLogTime(event.time || '');
+                    const category = toCategory(event.eventType || '');
+                    const pasteLength = readPasteLength(event);
+                    const suspiciousPaste = category === 'paste' && (!pasteLength || pasteLength > pasteThreshold || event.source === 'external' || event.pastedFrom === 'external' || event.internal === false);
+                    const fileName = basenameish(event.fileEdit || event.fileView || event.file || event.filePath || '');
+
+                    categoryCounts[category]++;
+                    return {
+                        key: `${session.sessionId}-${index}`,
+                        time: event.time || '',
+                        timeMs,
+                        category,
+                        eventType: String(event.eventType || 'unknown'),
+                        sessionId: session.sessionId,
+                        sessionLabel: session.filename,
+                        workspaceName: session.workspaceName || project || '',
+                        fileName,
+                        pasteLength,
+                        suspiciousPaste,
+                        flightTime: Number.parseInt(String(event.flightTime || '0'), 10) || 0,
+                        source: String(event.source || event.pastedFrom || ''),
+                        possibleAiDetection: String(event.possibleAiDetection || '')
+                    };
+                })
+                .sort((left: any, right: any) => left.timeMs - right.timeMs);
+
+            timelineEvents.push(...parsedEvents);
+            sessionSummaries.push({
+                sessionId: session.sessionId,
+                filename: session.filename,
+                startedAt: session.startedAt,
+                ideUser: session.ideUser,
+                workspaceName: session.workspaceName,
+                eventCount: parsedEvents.length,
+                partial: !!partial,
+                extensionVersion,
+                vscodeVersion,
+                integrityVerified: metadata.integrityVerification?.verified !== false
+            });
+        } catch (err: any) {
+            warnings.push(`Session ${session.filename} failed to load: ${String(err?.message || err)}`);
+        }
+    }));
+
+    timelineEvents.sort((left: any, right: any) => left.timeMs - right.timeMs);
+    const validEventTimes = timelineEvents.map((event: any) => event.timeMs).filter((value: number) => value > 0);
+    const firstTime = validEventTimes.length ? validEventTimes[0] : 0;
+    const lastTime = validEventTimes.length ? validEventTimes[validEventTimes.length - 1] : 0;
+    const gaps: number[] = [];
+    for (let index = 1; index < validEventTimes.length; index++) {
+        const gap = validEventTimes[index] - validEventTimes[index - 1];
+        if (gap > 0) {
+            gaps.push(gap);
+        }
+    }
+
+    for (const event of timelineEvents) {
+        event.offsetMs = event.timeMs > 0 && firstTime > 0 ? event.timeMs - firstTime : 0;
+    }
+
+    const totalEvents = timelineEvents.length;
+    const totalPasteEvents = timelineEvents.filter(event => event.category === 'paste').length;
+    const suspiciousPasteCount = timelineEvents.filter(event => event.suspiciousPaste).length;
+    const synced = selection.sessions.length > 0 && totalEvents > 0;
+    if ((selection.totalSessionCount || selection.sessions.length) > selection.sessions.length) {
+        warnings.push(`Only the most recent ${selection.sessions.length} session(s) were analyzed for ${selection.studentName}.`);
+    }
+
+    return {
+        studentAuthUserId: selection.studentAuthUserId,
+        studentName: selection.studentName,
+        synced,
+        sessionCount: selection.sessions.length,
+        totalEvents,
+        totalPasteEvents,
+        suspiciousPasteCount,
+        activeSpanMs: firstTime > 0 && lastTime >= firstTime ? lastTime - firstTime : 0,
+        averageGapMs: Math.round(average(gaps)),
+        pasteRate: totalEvents > 0 ? totalPasteEvents / totalEvents : 0,
+        categoryCounts,
+        projects: Array.from(projects),
+        extensionVersions: Array.from(extensionVersions),
+        vscodeVersions: Array.from(vscodeVersions),
+        warnings,
+        sessions: sessionSummaries,
+        timelineEvents
+    };
+}
+
 export async function handleAnalyzeLogs(panel: vscode.WebviewPanel, password: string, context: vscode.ExtensionContext) {
     const files = await storageManager.listLogFiles();
     if (!files || files.length === 0) {
@@ -277,4 +512,66 @@ export async function handleGenerateTimeline(panel: vscode.WebviewPanel, passwor
     if (currentPeriod) {periods.push(currentPeriod);}
 
     panel.webview.postMessage({ command: 'timelineData', data: { user: expectedUser, project: expectedProject, periods, totalEvents: allEvents.length } });
+}
+
+export async function handleCompareAssignmentStudents(
+    panel: vscode.WebviewPanel,
+    password: string,
+    selections: AssignmentComparisonSelection[],
+    context: vscode.ExtensionContext
+) {
+    const limitedSelections = Array.isArray(selections) ? selections.slice(0, 2) : [];
+    if (limitedSelections.length < 2) {
+        panel.webview.postMessage({ command: 'error', message: 'Select two students to compare sessions.' });
+        return;
+    }
+
+    const savedSettings = context.globalState.get('tbdSettings', { pasteLengthThreshold: 50 });
+    const pasteThreshold = Number(savedSettings?.pasteLengthThreshold || 50);
+    const students = [];
+    for (const selection of limitedSelections) {
+        students.push(await buildAssignmentComparisonStudent(selection, password, pasteThreshold));
+    }
+
+    const warnings: string[] = [];
+    const missingStudents = students.filter(student => !student.synced).map(student => student.studentName);
+    if (missingStudents.length > 0) {
+        warnings.push(`Missing data: ${missingStudents.join(', ')} have not synced session data yet. Ask them to sync before relying on this comparison.`);
+    }
+
+    const extensionVersions = new Set(students.flatMap(student => student.extensionVersions));
+    if (extensionVersions.size > 1) {
+        warnings.push('Selected students are using different versions of the extension. Comparison may be less accurate.');
+    }
+    if (extensionVersions.size === 0) {
+        warnings.push('Extension version metadata is unavailable for the selected sessions. Comparison accuracy may be reduced.');
+    }
+
+    const projects = new Set(students.flatMap(student => student.projects));
+    if (projects.size > 1) {
+        warnings.push('Selected students have session data across different projects or workspace names. Review the context before drawing conclusions.');
+    }
+
+    for (const student of students) {
+        warnings.push(...student.warnings);
+    }
+
+    const comparableStudents = students.filter(student => student.synced);
+    const similarity = comparableStudents.length === 2 ? computeComparisonScore(comparableStudents[0], comparableStudents[1]) : null;
+    const maxOffsetMs = students.reduce((largest, student) => Math.max(largest, student.activeSpanMs || 0), 0);
+
+    panel.webview.postMessage({
+        command: 'assignmentComparisonData',
+        data: {
+            students,
+            warnings,
+            missingStudents,
+            similarity,
+            maxOffsetMs,
+            categories: ['input', 'edit', 'paste', 'ai', 'focus', 'run', 'other'],
+            summary: similarity
+                ? `Similarity score ${similarity.overall}% based on event mix, sequence shape, and session pacing.`
+                : 'Comparison is partial because one or more selected students do not yet have enough synced session data.'
+        }
+    });
 }

@@ -247,14 +247,17 @@ export class DbStorageManager {
     this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
     await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
     await this.refreshOfflineQueueCount();
-    
-    // Only attempt connection if NOT in CI
+
     if (process.env.CI === 'true') {
-        console.log('[TBD Logger DB] Running in CI mode, skipping background DB connection');
+        console.log('[TBD Logger DB] Running in CI mode, skipping DB sync and timers');
         this.setSyncState('offline');
-    } else {
-        void this.initializeOnlineSessionInBackground();
+        this.initialized = true;
+        // Exit early to prevent background timers from starting in CI
+        return;
     }
+
+    // These only run if NOT in CI
+    void this.initializeOnlineSessionInBackground();
 
     this.syncTimer = setInterval(() => {
         void this.syncOfflineQueue();

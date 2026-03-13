@@ -128,7 +128,12 @@ export async function activate(context: vscode.ExtensionContext) {
     // Open the auth GUI webview if the workspace is not yet authenticated.
     const existingSession = getWorkspaceAuthSession(context);
     if (!existingSession?.authenticated) {
-        await openAuthView(context, storageManager);
+        // prevents the extension from hanging in CI
+        if (process.env.CI === 'true') {
+            console.log('[TBD Logger] CI environment detected: Skipping authentication webview block.');
+        } else {
+            await openAuthView(context, storageManager);
+        }
     }
 
     // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
@@ -322,6 +327,7 @@ export async function activate(context: vscode.ExtensionContext) {
     let _authPromptShown = false;
 
     const promptIfUnauthenticated = async () => {
+        if (process.env.CI === 'true') { return; }
         if (_authPromptShown) { return; }
         const session = getWorkspaceAuthSession(context);
         if (session?.authenticated) { return; }

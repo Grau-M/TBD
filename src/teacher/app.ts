@@ -22,6 +22,18 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     return;
   }
 
+  try {
+    const recentAlerts = await storageManager.listRecentUnmonitoredWorkAlerts(5);
+    if (recentAlerts.length > 0) {
+      const latest = recentAlerts[0];
+      vscode.window.showWarningMessage(
+        `Monitoring alert: ${recentAlerts.length} unmonitored work record(s). Latest: ${latest.ideUser} in ${latest.workspaceName} at ${latest.observedAt}.`
+      );
+    }
+  } catch {
+    // Non-blocking: dashboard can still open when alert query is unavailable.
+  }
+
   if (panel) {
     panel.reveal(vscode.ViewColumn.One);
     return;

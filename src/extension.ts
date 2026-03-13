@@ -325,12 +325,25 @@ export async function activate(context: vscode.ExtensionContext) {
     // Shown at most once per session; resets only if the user picks "Login" and then
     // closes the auth panel without completing sign-in.
     let _authPromptShown = false;
+    let _unmonitoredAlertCaptured = false;
 
     const promptIfUnauthenticated = async () => {
         if (process.env.CI === 'true') { return; }
         if (_authPromptShown) { return; }
         const session = getWorkspaceAuthSession(context);
         if (session?.authenticated) { return; }
+
+        if (!_unmonitoredAlertCaptured) {
+            _unmonitoredAlertCaptured = true;
+            const info = getSessionInfo();
+            const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+            await storageManager.recordUnmonitoredWorkAlert({
+                ideUser: info.user,
+                workspaceName: info.project,
+                workspacePath,
+                reason: 'Student activity detected while not signed in to TBD Logger monitoring.'
+            });
+        }
 
         _authPromptShown = true;
 

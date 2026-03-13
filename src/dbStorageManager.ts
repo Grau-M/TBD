@@ -237,35 +237,43 @@ export class DbStorageManager {
     private lastQueueWarningAtMs: number | null = null;
     private syncState: SyncState = 'idle';
 
-    async init(context: vscode.ExtensionContext): Promise<void> {
-        this.context = context;
+   async init(context: vscode.ExtensionContext): Promise<void> {
+    this.context = context;
 
-        const info = getSessionInfo();
-        this.currentUserName = info.user;
-        this.currentProjectName = info.project;
+    const info = getSessionInfo();
+    this.currentUserName = info.user;
+    this.currentProjectName = info.project;
 
-        this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
-        await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
-        await this.refreshOfflineQueueCount();
-
-        // Start connection in the background (don't await - let it connect while extension operates)
+    this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
+    await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
+    await this.refreshOfflineQueueCount();
+    
+    // Only attempt connection if NOT in CI
+    if (process.env.CI === 'true') {
+        console.log('[TBD Logger DB] Running in CI mode, skipping background DB connection');
+        this.setSyncState('offline');
+    } else {
         void this.initializeOnlineSessionInBackground();
-
-        this.syncTimer = setInterval(() => {
-            void this.syncOfflineQueue();
-        }, OFFLINE_QUEUE_SYNC_INTERVAL_MS);
-        context.subscriptions.push({
-            dispose: () => {
-                if (this.syncTimer) {
-                    clearInterval(this.syncTimer);
-                    this.syncTimer = null;
-                }
-            }
-        });
-
-        this.initialized = true;
-        void this.syncOfflineQueue();
     }
+
+    // REMOVED the duplicate "void this.initializeOnlineSessionInBackground();" that was here
+
+    this.syncTimer = setInterval(() => {
+        void this.syncOfflineQueue();
+    }, OFFLINE_QUEUE_SYNC_INTERVAL_MS);
+
+    context.subscriptions.push({
+        dispose: () => {
+            if (this.syncTimer) {
+                clearInterval(this.syncTimer);
+                this.syncTimer = null;
+            }
+        }
+    });
+
+    this.initialized = true;
+    void this.syncOfflineQueue();
+}
 
     /**
      * Initialize database connection in the background without blocking

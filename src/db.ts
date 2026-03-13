@@ -37,13 +37,16 @@ let isConnecting = false;
  * @returns Promise<sql.ConnectionPool>
  */
 export async function getPool(): Promise<sql.ConnectionPool> {
+    if (!config.server) {
+        throw new Error('Database configuration missing: AZURE_SQL_SERVER is not defined');
+    }
+
     if (pool && pool.connected) {
         return pool;
     }
 
     // Prevent concurrent connection attempts
     if (isConnecting) {
-        // Wait for the current connection attempt to complete
         while (isConnecting) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
@@ -56,13 +59,6 @@ export async function getPool(): Promise<sql.ConnectionPool> {
         isConnecting = true;
         console.log('[TBD Logger DB] Connecting to Azure SQL Database...');
         pool = await new sql.ConnectionPool(config).connect();
-        console.log('[TBD Logger DB] Connected to Azure SQL Database successfully');
-        
-        // Handle pool errors
-        pool.on('error', (err: Error) => {
-            console.error('[TBD Logger DB] Connection pool error:', err);
-        });
-        
         return pool;
     } catch (err) {
         console.error('[TBD Logger DB] Failed to connect to database:', err);

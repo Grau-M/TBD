@@ -36,6 +36,22 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      # Set environment variables for tests (database connection)
+      - name: Run Tests
+        env:
+          AZURE_SQL_SERVER: "localhost"
+          AZURE_SQL_DATABASE: "test_db"
+          AZURE_SQL_USER: "sa"
+          AZURE_SQL_PASSWORD: "DummyPassword123"
+          AZURE_SQL_ENCRYPT: "false"
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            xvfb-run -a npm test
+          else
+            npm test
+          fi
+        shell: bash
+
       #LINUX SPECIFIC SETUP (XVFB)
       # linxu doesnt have a display server, so we need to install and run Xvfb for tests that require a GUI
       - name: Install Xvfb (Linux Only)

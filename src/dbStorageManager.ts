@@ -256,8 +256,6 @@ export class DbStorageManager {
         void this.initializeOnlineSessionInBackground();
     }
 
-    // REMOVED the duplicate "void this.initializeOnlineSessionInBackground();" that was here
-
     this.syncTimer = setInterval(() => {
         void this.syncOfflineQueue();
     }, OFFLINE_QUEUE_SYNC_INTERVAL_MS);

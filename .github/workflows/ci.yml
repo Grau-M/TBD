@@ -36,6 +36,10 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Install Xvfb (Linux Only)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
       # Set environment variables for tests (database connection)
       - name: Run Tests
         env:
@@ -51,6 +55,9 @@ jobs:
             npm test
           fi
         shell: bash
+
+      - name: Build
+        run: npm run build
 
       #LINUX SPECIFIC SETUP (XVFB)
       # linxu doesnt have a display server, so we need to install and run Xvfb for tests that require a GUI

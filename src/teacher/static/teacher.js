@@ -321,31 +321,6 @@
         dashOut.innerHTML = `<pre style="white-space:pre-wrap; margin:0; padding:10px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">${summaryText}</pre>`;
       }
 
-      // 2) Logs view: add/update a card near top
-      try {
-        const logsView = document.getElementById("logs-view");
-        if (logsView && currentTab === "logs") {
-          let card = document.getElementById("student-summary-card");
-          if (!card) {
-            card = document.createElement("div");
-            card.id = "student-summary-card";
-            card.className = "card";
-            card.style.borderLeft = "6px solid var(--accent)";
-            card.style.marginTop = "12px";
-            // Put it near the top
-            logsView.insertBefore(card, logsView.firstChild?.nextSibling || null);
-          }
-          card.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-              <div>
-                <div style="font-weight:800;">Student Transparency Summary</div>
-                <div class="meta">${filename || ""}</div>
-              </div>
-            </div>
-            <pre style="white-space:pre-wrap; margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">${summaryText}</pre>
-          `;
-        }
-      } catch (e) {}
     }
 
     // --- ROUTER (LISTEN FOR MESSAGES) ---

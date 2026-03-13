@@ -1974,7 +1974,7 @@ export class DbStorageManager {
         };
     }
 
-    async enrollStudentInClass(studentAuthUserId: number, classInfo: ClassLookupRecord): Promise<void> {
+async enrollStudentInClass(studentAuthUserId: number, classInfo: ClassLookupRecord): Promise<boolean> {
         await this.ensureClassesSchema();
 
         const existing = await executeQuery(
@@ -1988,7 +1988,9 @@ export class DbStorageManager {
             }
         );
 
+        // RAINY DAY: Double Enrollment Detection
         if (existing.recordset.length > 0) {
+            // We just update the record to ensure it is active, but return false so the UI knows it's a duplicate
             await executeQuery(
                 `UPDATE dbo.StudentClassEnrollments
                  SET TeacherAuthUserId = @teacherAuthUserId,
@@ -2000,7 +2002,7 @@ export class DbStorageManager {
                     teacherAuthUserId: classInfo.teacherAuthUserId
                 }
             );
-            return;
+            return false; 
         }
 
         await executeQuery(
@@ -2012,6 +2014,8 @@ export class DbStorageManager {
                 classId: classInfo.id
             }
         );
+        
+        return true; 
     }
 
     async listStudentClasses(studentAuthUserId: number): Promise<StudentClassRecord[]> {

@@ -1,12 +1,12 @@
 // Module: state.ts
 // Purpose: Central in-memory state and constants used across the extension.
 // Exports a shared `state` object used by listeners and handlers, a
-// `storageManager` singleton instance responsible for encrypted persistence,
+// `storageManager` singleton instance responsible for database persistence,
 // and configuration `CONSTANTS` for thresholds and intervals.
 import { StandardEvent } from './types';
-import { StorageManager } from './storageManager';
+import { DbStorageManager } from './dbStorageManager';
 
-export const storageManager = new StorageManager();
+export const storageManager = new DbStorageManager();
 
 export const state = {
     sessionBuffer: [] as StandardEvent[],
@@ -17,6 +17,8 @@ export const state = {
     currentFocusedFile: '',
     focusStartTime: Date.now(),
     isFlushing: false,
+    clipboardOnBlur: '', 
+    externalCopiedText: '',
 };
 
 export const CONSTANTS = {

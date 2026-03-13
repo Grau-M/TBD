@@ -12,3 +12,7 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+# SECURITY: Never bundle credentials
+.env
+.env.*
+test-db-diagnostic.js

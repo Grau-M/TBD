@@ -15,6 +15,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
   const logsHtml = fs.readFileSync(path.join(viewsRoot, 'logs.html'), 'utf8');
   const settingsHtml = fs.readFileSync(path.join(viewsRoot, 'settings.html'), 'utf8');
   const deletionsHtml = fs.readFileSync(path.join(viewsRoot, 'deletions.html'), 'utf8');
+  const classHtml = fs.readFileSync(path.join(viewsRoot, 'class.html'), 'utf8');
   
 
   return `<!DOCTYPE html>
@@ -29,12 +30,12 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     :root { 
         --bg: #f7fafc; --surface: #ffffff; --muted: #4b5563; --fg: #0f1724; 
         --border: rgba(0,0,0,0.1); --card-shadow: rgba(2,6,23,0.06); 
-        --accent: #2563eb; --accent-2:#7c3aed; 
+      --accent: #2563eb; --accent-2:#7c3aed; --date-icon-filter: invert(14%) sepia(7%) saturate(1516%) hue-rotate(177deg) brightness(93%) contrast(91%);
     }
     .dark, :root.dark { 
         --bg: #071021; --surface: #0b1220; --muted: #9aa4b2; --fg: #e6eef8; 
         --border: rgba(255,255,255,0.08); --card-shadow: rgba(2,6,23,0.6); 
-        --accent: #3b82f6; --accent-2:#8b5cf6; 
+      --accent: #3b82f6; --accent-2:#8b5cf6; --date-icon-filter: invert(95%) sepia(8%) saturate(226%) hue-rotate(180deg) brightness(94%) contrast(95%);
     }
 
     body { background: var(--bg); color: var(--fg); height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
@@ -56,7 +57,41 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--fg); }
     .form-group { margin-bottom: 16px; position: relative; }
     label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9rem; color: var(--muted); }
-    input[type="text"], input[type="number"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; }
+    input[type="text"], input[type="number"], input[type="date"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; min-height: 42px; }
+    input[type="date"] {
+      color-scheme: dark light;
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      caret-color: transparent;
+    }
+    input[type="date"]::-webkit-datetime-edit,
+    input[type="date"]::-webkit-datetime-edit-text,
+    input[type="date"]::-webkit-datetime-edit-month-field,
+    input[type="date"]::-webkit-datetime-edit-day-field,
+    input[type="date"]::-webkit-datetime-edit-year-field {
+      color: var(--fg);
+    }
+    input[type="date"]:invalid::-webkit-datetime-edit {
+      color: var(--muted);
+    }
+    /* WebKit CSS-only strategy: make picker indicator cover the full input area. */
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      cursor: pointer;
+      background: transparent;
+      color: transparent;
+      opacity: 0.01;
+      filter: var(--date-icon-filter);
+    }
     input:focus { outline: 2px solid var(--accent); border-color: transparent; }
     .search-container { position: relative; }
     .search-container input[type="text"] { padding-right: 40px; }
@@ -133,6 +168,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
       ${logsHtml}
       ${deletionsHtml}
       ${settingsHtml}
+      ${classHtml}
 
     </main>
   </div>

@@ -43,7 +43,8 @@
       },
       {
         "command": "tbd-logger.openTeacherView",
-        "title": "TBD Logger: Open Teacher Dashboard"
+        "title": "TBD Logger: Open Teacher Dashboard",
+        "enablement": "tbd.hasTeacherDashboardAccess"
       },
       {
         "command": "tbd-logger.showHiddenDeletions",
@@ -52,8 +53,48 @@
       {
         "command": "tbd-logger.flush",
         "title": "TBD Logger: Flush Events to Disk"
+      },
+      {
+        "command": "tbd-logger.testDbConnection",
+        "title": "TBD Logger: Test Database Connection"
+      },
+      {
+        "command": "tbd-logger.manageClassActivities",
+        "title": "TBD Logger: Manage Class Activities"
+      },
+      {
+        "command": "tbd-logger.authSignIn",
+        "title": "TBD Logger: Login / Register"
+      },
+      {
+        "command": "tbd-logger.signOut",
+        "title": "TBD Logger: Sign Out"
+      },
+      {
+      "command": "tbd-logger.forceSync",
+      "title": "TBD Logger: Force Sync",
+      "icon": "$(sync)"
+      },
+      {
+      "command": "tbd-logger.openStudentSyncView",
+      "title": "TBD Logger: Open Student Dashboard"
       }
-    ]
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "tbd-logger.openTeacherView",
+          "when": "tbd.hasTeacherDashboardAccess"
+        }
+      ],
+      "statusBar/item/context": [
+        {
+          "command": "tbd-logger.signOut",
+          "when": "statusBarItemId == 'tbd-logger.authStatus'",
+          "group": "tbd@1"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -71,6 +112,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
+    "@types/mssql": "^9.1.9",
     "@types/node": "22.x",
     "@types/sinon": "^21.0.0",
     "@types/vscode": "^1.108.1",
@@ -86,5 +128,9 @@
     "typescript-eslint": "^8.52.0",
     "webpack": "^5.104.1",
     "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "mssql": "^12.2.0"
   }
 }

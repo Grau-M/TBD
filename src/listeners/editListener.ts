@@ -45,6 +45,14 @@ export function createEditListener(): vscode.Disposable {
         const fileEdit = path.basename(event.document.fileName);
         const fileView = isIgnoredPath(fileViewRaw) ? '' : fileViewRaw;
 
+        // helper to normalize line endings for clipboard comparison
+        const normalize = (str: string) => str.replace(/\s+/g, '');
+        const isExternalCopy = (text: string) => {
+            if (!state.externalCopiedText) {return false;}
+            // Now compares the raw characters without spaces/tabs breaking it
+            return normalize(state.externalCopiedText).includes(normalize(text));
+        };
+
         // 3. PROCESS CHANGES
         event.contentChanges.forEach((change) => {
             // Skip if the edit itself is in an ignored path (redundant safety)
@@ -57,15 +65,23 @@ export function createEditListener(): vscode.Disposable {
             const isInsert = change.rangeLength === 0 && change.text.length > 0;
 
             // DETERMINE EVENT TYPE
-            if (isDelete) {
+           if (isDelete) {
                 eventType = isFocusMismatch ? 'ai-delete' : 'delete';
             } else if (isReplace) {
-                eventType = isFocusMismatch ? 'ai-replace' : 'replace';
+                if (isExternalCopy(change.text)) {
+                    eventType = 'external-paste';
+                } else {
+                    eventType = isFocusMismatch ? 'ai-replace' : 'replace';
+                }
             } else if (isInsert) {
                 if (change.text.length > 1) {
-                    eventType = isFocusMismatch ? 'ai-paste' : 'paste';
+                    if (isExternalCopy(change.text)) {
+                        eventType = 'external-paste';
+                    } else {
+                        eventType = isFocusMismatch ? 'ai-paste' : 'paste';
+                    }
                 } else {
-                    eventType = isFocusMismatch ? 'ai-paste' : 'input'; // Single char but mismatched focus = AI
+                    eventType = isFocusMismatch ? 'ai-paste' : 'input';
                 }
             } else {
                 eventType = 'input';
@@ -80,8 +96,9 @@ export function createEditListener(): vscode.Disposable {
                 fileView
             };
 
-            // We check if the event involves adding text (paste, replace, or ai-paste) and log the character count
-            if (eventType === 'paste' || eventType === 'ai-paste' || eventType === 'replace' || eventType === 'ai-replace') {
+            // We check if the event involves adding text (paste, replace, or ai-paste) and log the character count for potential AI detection heuristics and understanding paste sizes. 
+            // This helps identify unusually large pastes that may indicate AI usage, especially when combined with focus mismatch.
+            if (['paste', 'external-paste', 'ai-paste', 'replace', 'ai-replace'].includes(eventType)) {
                 logEntry.pasteCharCount = change.text.length;
             }
 

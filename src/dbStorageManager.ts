@@ -252,6 +252,9 @@ export class DbStorageManager {
     private currentUserName = '';
     private currentProjectName = '';
     private offlineQueueDir: vscode.Uri | null = null;
+    private syncTimeout: NodeJS.Timeout | null = null;
+    private currentBackoffMs = OFFLINE_QUEUE_SYNC_INTERVAL_MS;
+    private readonly MAX_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes max wait
     private syncTimer: NodeJS.Timeout | null = null;
     private isSyncing = false;
     private isSyncingUnmonitoredAlerts = false;
@@ -268,68 +271,77 @@ export class DbStorageManager {
     private syncState: SyncState = 'idle';
 
    async init(context: vscode.ExtensionContext): Promise<void> {
-    this.context = context;
+        this.context = context;
 
-    const info = getSessionInfo();
-    this.currentUserName = info.user;
-    this.currentProjectName = info.project;
+        const info = getSessionInfo();
+        this.currentUserName = info.user;
+        this.currentProjectName = info.project;
 
         this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
         await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
-        await this.refreshOfflineQueueCount();
 
         this.unmonitoredAlertQueueDir = vscode.Uri.joinPath(context.globalStorageUri, UNMONITORED_ALERT_QUEUE_DIR);
         await vscode.workspace.fs.createDirectory(this.unmonitoredAlertQueueDir);
 
-        // Start connection in the background (don't await - let it connect while extension operates)
+        await this.refreshOfflineQueueCount();
+
+        if (process.env.CI === 'true') {
+            console.log('[TBD Logger DB] Running in CI mode, skipping DB sync and timers');
+            this.setSyncState('offline');
+            this.initialized = true;
+            void this.syncOfflineQueue();
+            return;
+        }
+
+        // 1. Start connection in the background
         void this.initializeOnlineSessionInBackground();
 
-        this.syncTimer = setInterval(() => {
-            void this.syncOfflineQueue();
-            void this.syncUnmonitoredWorkAlerts();
-        }, OFFLINE_QUEUE_SYNC_INTERVAL_MS);
+        // 2. Start the Exponential Backoff Loop
+        this.scheduleNextSync(this.currentBackoffMs);
+
         context.subscriptions.push({
             dispose: () => {
-                if (this.syncTimer) {
-                    clearInterval(this.syncTimer);
-                    this.syncTimer = null;
+                if (this.syncTimeout) {
+                    clearTimeout(this.syncTimeout);
+                    this.syncTimeout = null;
                 }
             }
         });
-    this.offlineQueueDir = vscode.Uri.joinPath(context.globalStorageUri, 'offline-queue');
-    await vscode.workspace.fs.createDirectory(this.offlineQueueDir);
-    await this.refreshOfflineQueueCount();
 
-    if (process.env.CI === 'true') {
-        console.log('[TBD Logger DB] Running in CI mode, skipping DB sync and timers');
-        this.setSyncState('offline');
         this.initialized = true;
         void this.syncOfflineQueue();
-        void this.syncUnmonitoredWorkAlerts();
-        // Exit early to prevent background timers from starting in CI
-        return;
     }
 
-    // These only run if NOT in CI
-    void this.initializeOnlineSessionInBackground();
-
-    this.syncTimer = setInterval(() => {
-        void this.syncOfflineQueue();
-    }, OFFLINE_QUEUE_SYNC_INTERVAL_MS);
-
-    context.subscriptions.push({
-        dispose: () => {
-            if (this.syncTimer) {
-                clearInterval(this.syncTimer);
-                this.syncTimer = null;
-            }
+/**
+     * Schedules the next sync attempt using the current backoff interval.
+     */
+    private scheduleNextSync(delayMs: number): void {
+        if (this.syncTimeout) {
+            clearTimeout(this.syncTimeout);
         }
-    });
+        console.log(`[TBD Logger DB] (Timer Check) Next sync scheduled in ${delayMs / 1000} seconds.`);
 
-    this.initialized = true;
-    void this.syncOfflineQueue();
-}
+        this.syncTimeout = setTimeout(() => {
+            void this.runScheduledSync();
+        }, delayMs);
+    }
 
+    /**
+     * Wrapper to run the sync and then schedule the next iteration.
+     */
+    private async runScheduledSync(): Promise<void> {
+        await this.syncOfflineQueue();
+       // --- NEW: Guard the next sync step ---
+        // If the queue sync just failed and marked us as offline, DO NOT try to sync alerts!
+        if (this.syncState !== 'offline') {
+            await this.syncUnmonitoredWorkAlerts(); 
+        }
+
+        // Do not endlessly loop if in CI
+        if (process.env.CI !== 'true') {
+            this.scheduleNextSync(this.currentBackoffMs);
+        }
+    }
     /**
      * Initialize database connection in the background without blocking
      * Allows the extension to load while connection is being established
@@ -563,6 +575,23 @@ export class DbStorageManager {
 
         if (newEvents.length === 0) {
             return;
+        }
+
+        // --- NEW: Respect the Offline State ---
+        // If the background timer knows we are offline, don't spam the network on every keystroke/save.
+        if (this.syncState === 'offline') {
+            // console.log('[TBD Logger DB] Currently offline. Queuing flush events directly.');
+            await this.enqueueOfflineBatch({
+                version: 1,
+                queuedAt: new Date().toISOString(),
+                session: {
+                    sessionId: this.currentSessionId,
+                    user: this.currentUserName,
+                    project: this.currentProjectName
+                },
+                events: newEvents
+            });
+            return; // Exit early, let the background timer handle the network retry
         }
 
         try {
@@ -1050,21 +1079,35 @@ export class DbStorageManager {
             const queueFiles = await this.readOfflineQueueFiles();
             this.pendingQueueCount = queueFiles.length;
 
-            if (queueFiles.length === 0) {
-                if (isConnected()) {
-                    this.setSyncState('synced');
-                } else {
-                    this.setSyncState('offline');
+         if (queueFiles.length === 0) {
+                // --- NEW: Force a connection check even if the queue is empty ---
+                try {
+                    await getPool();
+                    if (isConnected()) {
+                        this.setSyncState('synced');
+                    }
+                } catch (err) {
+                    this.setSyncState('offline', String((err as any)?.message || err));
+                    
+                    // Apply backoff math here too!
+                    this.currentBackoffMs = Math.min(this.currentBackoffMs * 2, this.MAX_BACKOFF_MS);
+                    console.log(`[TBD Logger DB] (Empty Queue) Network failure. Backing off for ${this.currentBackoffMs / 1000} seconds.`);
                 }
+                // ----------------------------------------------------------------
                 return;
             }
 
             this.setSyncState('syncing');
 
+            // 👉 CATCH BLOCK 1: Initial Connection Failure (This is where you were failing!)
             try {
                 await getPool();
             } catch (err) {
                 this.setSyncState('offline', String((err as any)?.message || err));
+                
+                // Backoff MUST happen here before it returns
+                this.currentBackoffMs = Math.min(this.currentBackoffMs * 2, this.MAX_BACKOFF_MS);
+                console.log(`[TBD Logger DB] Network throttle/failure. Backing off for ${this.currentBackoffMs / 1000} seconds.`);
                 return;
             }
 
@@ -1089,10 +1132,16 @@ export class DbStorageManager {
 
                     await this.insertEventsWithLatestWins(targetSessionId, batch.events);
                     await vscode.workspace.fs.delete(fileUri);
+                    
+                // 👉 CATCH BLOCK 2: Mid-upload Failure
                 } catch (err) {
                     if (this.isLikelyConnectivityError(err)) {
                         console.warn('[TBD Logger DB] Offline sync paused while network is unavailable:', err);
                         this.setSyncState('offline', String((err as any)?.message || err));
+                        
+                        // Backoff MUST also happen here
+                        this.currentBackoffMs = Math.min(this.currentBackoffMs * 2, this.MAX_BACKOFF_MS);
+                        console.log(`[TBD Logger DB] Network throttle/failure. Backing off for ${this.currentBackoffMs / 1000} seconds.`);
                         break;
                     }
 
@@ -1100,6 +1149,11 @@ export class DbStorageManager {
                     await this.moveQueueFileToFailed(fileUri, fileName, String((err as any)?.message || err));
                     this.setSyncState('conflict', 'One queued upload was invalid and moved to failed queue.');
                 }
+            }
+
+            // --- Reset Backoff on Success ---
+            if (this.syncState !== 'offline') {
+                this.currentBackoffMs = OFFLINE_QUEUE_SYNC_INTERVAL_MS; // Reset to 30 seconds
             }
 
             await this.refreshOfflineQueueCount();
@@ -1111,6 +1165,8 @@ export class DbStorageManager {
             } else if (this.pendingQueueCount >= OFFLINE_QUEUE_WARN_AT) {
                 this.setSyncState('queue-warning', `Offline queue is near limit (${this.pendingQueueCount}/${OFFLINE_QUEUE_MAX_FILES}).`);
             }
+            
+        // 👉 CATCH BLOCK 3: General File System Failure
         } catch (err) {
             this.setSyncState('offline', String((err as any)?.message || err));
         } finally {
@@ -1673,7 +1729,7 @@ export class DbStorageManager {
     }
 
     private async syncUnmonitoredWorkAlerts(): Promise<void> {
-        if (this.isSyncingUnmonitoredAlerts || !this.unmonitoredAlertQueueDir) {
+        if (this.isSyncingUnmonitoredAlerts || !this.unmonitoredAlertQueueDir || this.syncState === 'offline') {
             return;
         }
 
@@ -1701,8 +1757,11 @@ export class DbStorageManager {
                     break;
                 }
             }
-        } catch {
-            // Defer to next timer tick.
+        } catch (err) {
+            // 👉 THE FIX: Apply backoff when this secondary sync fails!
+            this.setSyncState('offline', String((err as any)?.message || err));
+            this.currentBackoffMs = Math.min(this.currentBackoffMs * 2, this.MAX_BACKOFF_MS);
+            console.log(`[TBD Logger DB] Network throttle/failure. Backing off for ${this.currentBackoffMs / 1000} seconds.`);
         } finally {
             this.isSyncingUnmonitoredAlerts = false;
         }
@@ -1863,9 +1922,45 @@ export class DbStorageManager {
                     CONSTRAINT UQ_WorkspaceActivityLinks_StudentWorkspace UNIQUE (StudentAuthUserId, WorkspaceRootPath)
                 );
             END
+
+            IF OBJECT_ID('dbo.UserConsents', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.UserConsents (
+                    Id INT IDENTITY(1,1) PRIMARY KEY,
+                    AuthUserId INT NOT NULL,
+                    PolicyVersion NVARCHAR(50) NOT NULL,
+                    ConsentGivenAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT FK_UserConsents_AuthUser FOREIGN KEY (AuthUserId) REFERENCES dbo.ExtensionAuthUsers(Id)
+                );
+            END
         `);
 
         this.authSchemaReady = true;
+    }
+
+    /**
+     * Checks if a user has consented to a specific policy version.
+     */
+    async checkUserConsent(authUserId: number, policyVersion: string): Promise<boolean> {
+        await this.ensureAuthSchema();
+        const result = await executeQuery(
+            `SELECT TOP 1 Id FROM dbo.UserConsents
+             WHERE AuthUserId = @authUserId AND PolicyVersion = @policyVersion`,
+            { authUserId, policyVersion }
+        );
+        return result.recordset.length > 0;
+    }
+
+    /**
+     * Records the user's consent for a specific policy version.
+     */
+    async recordUserConsent(authUserId: number, policyVersion: string): Promise<void> {
+        await this.ensureAuthSchema();
+        await executeQuery(
+            `INSERT INTO dbo.UserConsents (AuthUserId, PolicyVersion)
+             VALUES (@authUserId, @policyVersion)`,
+            { authUserId, policyVersion }
+        );
     }
 
     async upsertAuthUser(identity: AuthIdentityInput): Promise<UpsertAuthUserResult> {

@@ -19,6 +19,7 @@ export const state = {
     isFlushing: false,
     clipboardOnBlur: '', 
     externalCopiedText: '',
+    isConsentGiven: false,
 };
 
 export const CONSTANTS = {

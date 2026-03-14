@@ -12,6 +12,7 @@ import { state } from '../state';
 // regained when the entire VS Code window is blurred or focused.
 export function createWindowStateListener(): vscode.Disposable {
     return vscode.window.onDidChangeWindowState(async (windowState) => {
+        if (!state.isConsentGiven) {return; }
         if (windowState.focused) {
             if (vscode.window.activeTextEditor) {handleFocusRegained();}
             

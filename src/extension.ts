@@ -91,6 +91,14 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
 
     const session = getWorkspaceAuthSession(context);
     if (session?.authenticated) {
+        if (!state.isConsentGiven) {
+            authItem.text = `$(prohibit) Tracking Disabled`;
+            authItem.tooltip = `Consent declined. Work is NOT being recorded for academic integrity.`;
+            authItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+            authItem.color = new vscode.ThemeColor('statusBarItem.errorForeground');
+            syncTeacherDashboardLock(context);
+            return;
+        }
         authItem.text = `$(account) ${session.role}`;
         authItem.tooltip = `Logged in as ${session.role}. Click to view account details.`;
         authItem.backgroundColor = undefined;
@@ -135,7 +143,38 @@ export async function activate(context: vscode.ExtensionContext) {
             await openAuthView(context, storageManager);
         }
     }
+const CURRENT_POLICY_VERSION = 'v1.0'; 
+    const currentAuth = getWorkspaceAuthSession(context);
+    
+    if (currentAuth?.authenticated && currentAuth.authUserId) {
+        const hasConsented = await storageManager.checkUserConsent(currentAuth.authUserId, CURRENT_POLICY_VERSION);
+        
+        if (!hasConsented) {
+            // Sunny Day: Show non-dismissible modal
+            const choice = await vscode.window.showInformationMessage(
+                'Privacy Policy: Coding activity is being recorded for academic integrity purposes. By continuing, you acknowledge and agree to this tracking as a condition of using TBD Logger.',
+                { modal: true },
+                'I Acknowledge and Agree',
+                'Decline'
+            );
 
+            if (choice === 'I Acknowledge and Agree') {
+                await storageManager.recordUserConsent(currentAuth.authUserId, CURRENT_POLICY_VERSION);
+                state.isConsentGiven = true;
+                updateAuthStatusBar(context); // <-- Update UI
+            } else {
+                // Rainy Day: Declined Consent
+                state.isConsentGiven = false;
+                updateAuthStatusBar(context); // <-- Update UI to show red warning
+                vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded or validated for academic integrity.');
+            }
+        } else {
+            state.isConsentGiven = true;
+        }
+    } else {
+        // Fallback for unauthenticated or offline
+        state.isConsentGiven = false; 
+    }
     // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
         inactivityThresholdMs: 5 * 60 * 1000, // 5 minutes (change if you want)

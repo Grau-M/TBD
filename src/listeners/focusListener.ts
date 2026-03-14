@@ -17,7 +17,7 @@ import { handleFocusLost, handleFocusRegained } from '../handlers/focusHandlers'
 export function createFocusListener(): vscode.Disposable {
     return vscode.window.onDidChangeActiveTextEditor((editor) => {
         state.lastEventTime = Date.now();
-
+        if (!state.isConsentGiven) {return; }
         if (!editor) {
             handleFocusLost();
         } else {

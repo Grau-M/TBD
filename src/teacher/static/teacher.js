@@ -153,10 +153,11 @@
         document.documentElement.classList.toggle("dark");
         isDark = !isDark;
         themeToggle.textContent = isDark ? "🌙" : "☀️";
-        if (vscode.setState)
-          {try {
+        if (vscode.setState) {
+          try {
             vscode.setState({ theme: isDark ? "dark" : "light" });
-          } catch (e) {}}
+          } catch (e) {}
+        }
       });
     }
 
@@ -177,10 +178,11 @@
           });
         } else {
           const existing = document.getElementById("sidebar-backdrop");
-          if (existing)
-            {try {
+          if (existing) {
+            try {
               existing.remove();
-            } catch (e) {}}
+            } catch (e) {}
+          }
         }
       });
     }
@@ -218,9 +220,12 @@
       switchTab("dashboard");
       if (dashboardDataCache && dashboardDataCache.metrics) {
         UI.renderDashboard(dashboardDataCache, handlers);
-        if ($("dashboard-log-name"))
-          {$("dashboard-log-name").textContent = "Viewing: All logs";}
-        if (status) {status.textContent = "Dashboard ready";}
+        if ($("dashboard-log-name")) {
+          $("dashboard-log-name").textContent = "Viewing: All logs";
+        }
+        if (status) {
+          status.textContent = "Dashboard ready";
+        }
         return;
       }
       showDashboardLoading();
@@ -242,21 +247,32 @@
     $("btn-goto-logs")?.addEventListener("click", () => switchTab("logs"));
 
     $("close-log")?.addEventListener("click", () => {
-      if ($("logs-viewer-container"))
-        {$("logs-viewer-container").style.display = "none";}
-      if ($("logs-view")) {$("logs-view").innerHTML = "";}
-      if ($("logs-log-name")) {$("logs-log-name").textContent = "";}
-      if (searchInput) {searchInput.value = "";}
+      if ($("logs-viewer-container")) {
+        $("logs-viewer-container").style.display = "none";
+      }
+      if ($("logs-view")) {
+        $("logs-view").innerHTML = "";
+      }
+      if ($("logs-log-name")) {
+        $("logs-log-name").textContent = "";
+      }
+      if (searchInput) {
+        searchInput.value = "";
+      }
     });
 
     $("refresh-logs")?.addEventListener("click", () => {
-      if (status) {status.textContent = "Refreshing list...";}
+      if (status) {
+        status.textContent = "Refreshing list...";
+      }
       // New/removed logs can change aggregate metrics.
       dashboardDataCache = null;
       post("listLogs");
     });
     $("refreshDeletions")?.addEventListener("click", () => {
-      if (status) {status.textContent = "Fetching deletions...";}
+      if (status) {
+        status.textContent = "Fetching deletions...";
+      }
       post("getDeletions");
     });
 
@@ -279,18 +295,26 @@
       post("saveSettings", { settings });
     });
     $("resetSettings")?.addEventListener("click", () => {
-      if ($("inactivityInput"))
-        {$("inactivityInput").value = defaults.inactivity;}
-      if ($("flightInput")) {$("flightInput").value = defaults.flight;}
-      if ($("pasteLengthInput"))
-        {$("pasteLengthInput").value = defaults.pasteLength;}
-      if ($("flagAiEvents")) {$("flagAiEvents").checked = defaults.flagAiEvents;}
+      if ($("inactivityInput")) {
+        $("inactivityInput").value = defaults.inactivity;
+      }
+      if ($("flightInput")) {
+        $("flightInput").value = defaults.flight;
+      }
+      if ($("pasteLengthInput")) {
+        $("pasteLengthInput").value = defaults.pasteLength;
+      }
+      if ($("flagAiEvents")) {
+        $("flagAiEvents").checked = defaults.flagAiEvents;
+      }
       post("saveSettings", { settings: defaults });
     });
 
     // --- SEARCH & DROPDOWN ---
     function renderSearchDropdown(items) {
-      if (!dropdown) {return;}
+      if (!dropdown) {
+        return;
+      }
       dropdown.innerHTML = "";
       if (!items || items.length === 0) {
         dropdown.innerHTML =
@@ -303,9 +327,13 @@
         div.textContent = name;
         div.addEventListener("mousedown", (e) => {
           e.preventDefault();
-          if (searchInput) {searchInput.value = name;}
+          if (searchInput) {
+            searchInput.value = name;
+          }
           dropdown.classList.remove("show");
-          if (status) {status.textContent = "Decrypting " + name + "...";}
+          if (status) {
+            status.textContent = "Decrypting " + name + "...";
+          }
           post("openLog", { filename: name });
         });
         dropdown.appendChild(div);
@@ -321,13 +349,17 @@
     if (searchInput) {
       searchInput.addEventListener("input", (e) => {
         renderSearchDropdown(filterLogs((e.target.value || "").toLowerCase()));
-        if (dropdown) {dropdown.classList.add("show");}
+        if (dropdown) {
+          dropdown.classList.add("show");
+        }
       });
       searchInput.addEventListener("focus", () => {
         renderSearchDropdown(
           filterLogs((searchInput.value || "").toLowerCase()),
         );
-        if (dropdown) {dropdown.classList.add("show");}
+        if (dropdown) {
+          dropdown.classList.add("show");
+        }
       });
     }
     const clearSearchBtn = $("clear-search");
@@ -359,38 +391,47 @@
       onGenerateTimeline: () => {
         const checks = document.querySelectorAll(".log-checkbox:checked");
         const filenames = Array.from(checks).map((c) => c.value);
-        if (filenames.length === 0)
-          {return (status.textContent =
-            "Error: Select at least 1 log to build a timeline.");}
+        if (filenames.length === 0) {
+          return (status.textContent =
+            "Error: Select at least 1 log to build a timeline.");
+        }
         status.textContent = "Generating Timeline...";
         post("generateTimeline", { filenames });
       },
       onGenerateProfile: () => {
         const checks = document.querySelectorAll(".log-checkbox:checked");
         const filenames = Array.from(checks).map((c) => c.value);
-        if (filenames.length < 2)
-          {return (status.textContent =
-            "Error: Select at least 2 logs to build a profile.");}
+        if (filenames.length < 2) {
+          return (status.textContent =
+            "Error: Select at least 2 logs to build a profile.");
+        }
         status.textContent = "Generating Profile...";
         post("generateProfile", { filenames });
       },
       onExportCsv: (filename) => {
-        if (status) {status.textContent = "Exporting CSV...";}
+        if (status) {
+          status.textContent = "Exporting CSV...";
+        }
         post("exportLog", { format: "csv", filename: filename });
       },
       onExportJson: (filename) => {
-        if (status) {status.textContent = "Exporting JSON...";}
+        if (status) {
+          status.textContent = "Exporting JSON...";
+        }
         post("exportLog", { format: "json", filename: filename });
       },
       onRowClick: (evClick, row, fname, checkCell, nameDiv) => {
         let clickedCell = evClick.target;
-        while (clickedCell && clickedCell.parentNode !== row)
-          {clickedCell = clickedCell.parentNode;}
+        while (clickedCell && clickedCell.parentNode !== row) {
+          clickedCell = clickedCell.parentNode;
+        }
         const cellIndex = Array.from(row.children).indexOf(clickedCell);
 
         if (cellIndex === 0 || cellIndex === 1) {
           const checkbox = checkCell.querySelector("input");
-          if (evClick.target !== checkbox) {checkbox.checked = !checkbox.checked;}
+          if (evClick.target !== checkbox) {
+            checkbox.checked = !checkbox.checked;
+          }
           return;
         }
 
@@ -439,8 +480,9 @@
       switch (msg.command) {
         case "logList":
           logNamesCache = (msg.data || []).slice().sort().reverse();
-          if ($("log-count"))
-            {$("log-count").textContent = logNamesCache.length + " logs found";}
+          if ($("log-count")) {
+            $("log-count").textContent = logNamesCache.length + " logs found";
+          }
           renderSearchDropdown(
             filterLogs((searchInput?.value || "").toLowerCase()),
           );
@@ -449,19 +491,26 @@
         case "dashboardData":
           dashboardDataCache = msg.data || null;
           UI.renderDashboard(msg.data, handlers);
-          if ($("dashboard-log-name"))
-            {$("dashboard-log-name").textContent = "Viewing: All logs";}
-          if (status) {status.textContent = "Dashboard updated";}
+          if ($("dashboard-log-name")) {
+            $("dashboard-log-name").textContent = "Viewing: All logs";
+          }
+          if (status) {
+            status.textContent = "Dashboard updated";
+          }
           break;
 
         case "profileData":
           UI.renderProfile(msg.data);
-          if (status) {status.textContent = "Behavioral profile generated.";}
+          if (status) {
+            status.textContent = "Behavioral profile generated.";
+          }
           break;
 
         case "timelineData":
           UI.renderTimeline(msg.data);
-          if (status) {status.textContent = "Timeline generated.";}
+          if (status) {
+            status.textContent = "Timeline generated.";
+          }
           break;
 
         case "logData":
@@ -478,7 +527,9 @@
               currentSettings,
             );
             requestedDashboardFile = null;
-            if (status) {status.textContent = "Loaded " + msg.filename;}
+            if (status) {
+              status.textContent = "Loaded " + msg.filename;
+            }
           } else {
             UI.renderParsedInLogs(
               msg.data,
@@ -488,7 +539,9 @@
             );
             // Load notes for this log file
             post("loadLogNotes", { filename: msg.filename });
-            if (status) {status.textContent = "Loaded " + msg.filename;}
+            if (status) {
+              status.textContent = "Loaded " + msg.filename;
+            }
           }
           break;
 
@@ -500,7 +553,9 @@
               ? msg.summary
               : "No summary returned.";
           renderStudentSummaryToUI(filename, summaryText);
-          if (status) {status.textContent = "Student summary ready.";}
+          if (status) {
+            status.textContent = "Student summary ready.";
+          }
           break;
         }
 
@@ -536,14 +591,19 @@
           break;
 
         case "rawData":
-          if ($("logs-viewer-container"))
-            {$("logs-viewer-container").style.display = "block";}
-          if ($("logs-view"))
-            {$("logs-view").innerHTML = "<pre>" + msg.data + "</pre>";}
-          if ($("dashboard-view") && currentTab === "dashboard")
-            {$("dashboard-view").innerHTML =
-              '<div class="card"><h2>Raw Data Only</h2><p class="meta">Score unavailable.</p></div>';}
-          if (status) {status.textContent = "Loaded " + msg.filename;}
+          if ($("logs-viewer-container")) {
+            $("logs-viewer-container").style.display = "block";
+          }
+          if ($("logs-view")) {
+            $("logs-view").innerHTML = "<pre>" + msg.data + "</pre>";
+          }
+          if ($("dashboard-view") && currentTab === "dashboard") {
+            $("dashboard-view").innerHTML =
+              '<div class="card"><h2>Raw Data Only</h2><p class="meta">Score unavailable.</p></div>';
+          }
+          if (status) {
+            status.textContent = "Loaded " + msg.filename;
+          }
           break;
 
         case "loadSettings":
@@ -559,26 +619,34 @@
                   ? msg.settings.flagAiEvents
                   : defaults.flagAiEvents,
             };
-            if ($("inactivityInput"))
-              {$("inactivityInput").value = currentSettings.inactivity;}
-            if ($("flightInput"))
-              {$("flightInput").value = currentSettings.flight;}
-            if ($("pasteLengthInput"))
-              {$("pasteLengthInput").value = currentSettings.pasteLength;}
-            if ($("flagAiEvents"))
-              {$("flagAiEvents").checked = currentSettings.flagAiEvents;}
+            if ($("inactivityInput")) {
+              $("inactivityInput").value = currentSettings.inactivity;
+            }
+            if ($("flightInput")) {
+              $("flightInput").value = currentSettings.flight;
+            }
+            if ($("pasteLengthInput")) {
+              $("pasteLengthInput").value = currentSettings.pasteLength;
+            }
+            if ($("flagAiEvents")) {
+              $("flagAiEvents").checked = currentSettings.flagAiEvents;
+            }
           }
           break;
 
         case "settingsSaved":
-          if ($("inactivityInput"))
-            {currentSettings.inactivity = parseInt($("inactivityInput").value);}
-          if ($("flightInput"))
-            {currentSettings.flight = parseInt($("flightInput").value);}
-          if ($("pasteLengthInput"))
-            {currentSettings.pasteLength = parseInt($("pasteLengthInput").value);}
-          if ($("flagAiEvents"))
-            {currentSettings.flagAiEvents = $("flagAiEvents").checked;}
+          if ($("inactivityInput")) {
+            currentSettings.inactivity = parseInt($("inactivityInput").value);
+          }
+          if ($("flightInput")) {
+            currentSettings.flight = parseInt($("flightInput").value);
+          }
+          if ($("pasteLengthInput")) {
+            currentSettings.pasteLength = parseInt($("pasteLengthInput").value);
+          }
+          if ($("flagAiEvents")) {
+            currentSettings.flagAiEvents = $("flagAiEvents").checked;
+          }
           if ($("settings-msg")) {
             $("settings-msg").textContent = "Settings saved successfully!";
             setTimeout(() => ($("settings-msg").textContent = ""), 3000);
@@ -590,7 +658,9 @@
           try {
             const d = msg.data;
             const view = $("deletions-view");
-            if (!view) {break;}
+            if (!view) {
+              break;
+            }
             if (typeof d === "string") {
               view.innerHTML = "<pre>" + d + "</pre>";
             } else {
@@ -626,25 +696,31 @@
                   const row = document.createElement("div");
                   row.className = "card deletion-row";
                   const inferActivityType = (entry) => {
-                    if (entry.activityType)
-                      {return String(entry.activityType).toLowerCase();}
+                    if (entry.activityType) {
+                      return String(entry.activityType).toLowerCase();
+                    }
                     if (
                       entry.deletedFile ||
                       entry.deletedAt ||
                       entry.lastKnownSize
-                    )
-                      {return "deleted";}
-                    if (entry.modifiedFile || entry.modifiedAt)
-                      {return "modified";}
+                    ) {
+                      return "deleted";
+                    }
+                    if (entry.modifiedFile || entry.modifiedAt) {
+                      return "modified";
+                    }
                     const lowerNote = String(
                       entry.note || entry.reason || "",
                     ).toLowerCase();
                     if (
                       lowerNote.includes("manual edit") ||
                       lowerNote.includes("modified")
-                    )
-                      {return "modified";}
-                    if (lowerNote.includes("deleted")) {return "deleted";}
+                    ) {
+                      return "modified";
+                    }
+                    if (lowerNote.includes("deleted")) {
+                      return "deleted";
+                    }
                     return "activity";
                   };
 
@@ -692,22 +768,29 @@
               }
             }
           } catch (err) {
-            if ($("deletions-view"))
-              {$("deletions-view").textContent = "Failed to render deletions.";}
+            if ($("deletions-view")) {
+              $("deletions-view").textContent = "Failed to render deletions.";
+            }
           }
-          if (status) {status.textContent = "Deletions updated";}
+          if (status) {
+            status.textContent = "Deletions updated";
+          }
           break;
 
         case "error":
           if ($("btn-submit-class")) {
             $("btn-submit-class").disabled = false;
-            $("btn-submit-class").textContent = editingClassId ? "Save Class Changes" : "Create Class";
+            $("btn-submit-class").textContent = editingClassId
+              ? "Save Class Changes"
+              : "Create Class";
           }
           if ($("btn-create-assignment")) {
             $("btn-create-assignment").disabled = false;
             $("btn-create-assignment").textContent = "Create Assignment";
           }
-          if (status) {status.textContent = "Error: " + (msg.message || "");}
+          if (status) {
+            status.textContent = "Error: " + (msg.message || "");
+          }
           if (
             msg.message &&
             (msg.message.toLowerCase().includes("mismatch") ||
@@ -726,15 +809,38 @@
 
         case "classList":
           renderClasses(msg.data || []);
-          if (status) { status.textContent = (msg.data || []).length + " class(es) loaded"; }
+          if (status) {
+            status.textContent = (msg.data || []).length + " class(es) loaded";
+          }
           break;
 
         case "classCreated": {
           const btn = $("btn-submit-class");
-          if (btn) { btn.disabled = false; btn.textContent = "Create Class"; }
-          if ($("class-form-card")) { $("class-form-card").style.display = "none"; }
-          ["class-course-name","class-course-code","class-teacher-name","class-meeting-time","class-start-date","class-end-date"].forEach((id) => { const el = $(id); if (el) { el.value = ""; } });
-          if (status) { status.textContent = "Class created! Join code: " + (msg.data?.joinCode || ""); setTimeout(() => (status.textContent = "Ready"), 5000); }
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Create Class";
+          }
+          if ($("class-form-card")) {
+            $("class-form-card").style.display = "none";
+          }
+          [
+            "class-course-name",
+            "class-course-code",
+            "class-teacher-name",
+            "class-meeting-time",
+            "class-start-date",
+            "class-end-date",
+          ].forEach((id) => {
+            const el = $(id);
+            if (el) {
+              el.value = "";
+            }
+          });
+          if (status) {
+            status.textContent =
+              "Class created! Join code: " + (msg.data?.joinCode || "");
+            setTimeout(() => (status.textContent = "Ready"), 5000);
+          }
           editingClassId = null;
           loadClasses();
           break;
@@ -742,51 +848,93 @@
 
         case "classUpdated": {
           const btn = $("btn-submit-class");
-          if (btn) { btn.disabled = false; btn.textContent = "Create Class"; }
-          if ($("class-form-card")) { $("class-form-card").style.display = "none"; }
-          ["class-course-name","class-course-code","class-teacher-name","class-meeting-time","class-start-date","class-end-date"].forEach((id) => { const el = $(id); if (el) { el.value = ""; } });
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Create Class";
+          }
+          if ($("class-form-card")) {
+            $("class-form-card").style.display = "none";
+          }
+          [
+            "class-course-name",
+            "class-course-code",
+            "class-teacher-name",
+            "class-meeting-time",
+            "class-start-date",
+            "class-end-date",
+          ].forEach((id) => {
+            const el = $(id);
+            if (el) {
+              el.value = "";
+            }
+          });
           editingClassId = null;
-          if (status) { status.textContent = "Class updated successfully."; setTimeout(() => (status.textContent = "Ready"), 3000); }
+          if (status) {
+            status.textContent = "Class updated successfully.";
+            setTimeout(() => (status.textContent = "Ready"), 3000);
+          }
           loadClasses();
           break;
         }
 
         case "classDetails": {
           renderClassDetails(msg.data || {});
-          if (status) { status.textContent = "Class details loaded."; }
+          if (status) {
+            status.textContent = "Class details loaded.";
+          }
           break;
         }
 
         case "classAssignmentCreated": {
           const btn = $("btn-create-assignment");
-          if (btn) { btn.disabled = false; btn.textContent = "Create Assignment"; }
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Create Assignment";
+          }
           const errEl = $("assignment-form-error");
-          if (errEl) { errEl.style.display = "none"; }
-          if ($("assignment-name")) { $("assignment-name").value = ""; }
-          if ($("assignment-description")) { $("assignment-description").value = ""; }
-          if ($("assignment-due-date")) { $("assignment-due-date").value = ""; }
+          if (errEl) {
+            errEl.style.display = "none";
+          }
+          if ($("assignment-name")) {
+            $("assignment-name").value = "";
+          }
+          if ($("assignment-description")) {
+            $("assignment-description").value = "";
+          }
+          if ($("assignment-due-date")) {
+            $("assignment-due-date").value = "";
+          }
           if (currentClassId) {
             post("openClass", { classId: currentClassId });
           }
-          if (status) { status.textContent = "Assignment created."; setTimeout(() => (status.textContent = "Ready"), 3000); }
+          if (status) {
+            status.textContent = "Assignment created.";
+            setTimeout(() => (status.textContent = "Ready"), 3000);
+          }
           break;
         }
 
         case "assignmentWorkData": {
           renderAssignmentWork(msg.data || {});
-          if (status) { status.textContent = "Assignment work loaded."; }
+          if (status) {
+            status.textContent = "Assignment work loaded.";
+          }
           break;
         }
 
         case "assignmentStudentSessions": {
           renderAssignmentStudentSessions(msg.data || {});
-          if (status) { status.textContent = "Student sessions loaded."; }
+          if (status) {
+            status.textContent = "Student sessions loaded.";
+          }
           break;
         }
 
         case "classSessionLogData": {
           renderAssignmentSessionLog(msg.data || {});
-          if (status) { status.textContent = "Session log loaded."; }
+          if (status) {
+            status.textContent = "Session log loaded.";
+          }
           break;
         }
       }
@@ -797,25 +945,37 @@
       const listView = $("class-list-view");
       const emptyEl = $("class-list-empty");
       const loadingEl = $("class-list-loading");
-      if (loadingEl) { loadingEl.style.display = "block"; }
-      if (emptyEl) { emptyEl.style.display = "none"; }
-      if (listView) { listView.innerHTML = ""; }
+      if (loadingEl) {
+        loadingEl.style.display = "block";
+      }
+      if (emptyEl) {
+        emptyEl.style.display = "none";
+      }
+      if (listView) {
+        listView.innerHTML = "";
+      }
       post("listClasses");
     }
 
     function setAssignmentFormVisible(show) {
       const formCard = $("assignment-form-card");
-      if (!formCard) { return; }
+      if (!formCard) {
+        return;
+      }
       formCard.style.display = show ? "block" : "none";
       if (!show) {
         const errEl = $("assignment-form-error");
-        if (errEl) { errEl.style.display = "none"; }
+        if (errEl) {
+          errEl.style.display = "none";
+        }
       }
     }
 
     function updateTopClassActionButton() {
       const btn = $("btn-new-class");
-      if (!btn) { return; }
+      if (!btn) {
+        return;
+      }
 
       const inClassDetail = $("class-detail-view")?.style.display === "block";
       if (inClassDetail && currentClassDetailTab === "assignments") {
@@ -831,19 +991,29 @@
       const emptyEl = $("class-list-empty");
       const loadingEl = $("class-list-loading");
       const detailView = $("class-detail-view");
-      if (loadingEl) { loadingEl.style.display = "none"; }
-      if (detailView) { detailView.style.display = "none"; }
+      if (loadingEl) {
+        loadingEl.style.display = "none";
+      }
+      if (detailView) {
+        detailView.style.display = "none";
+      }
       currentClassDetailTab = "students";
       setAssignmentFormVisible(false);
       updateTopClassActionButton();
-      if (!listView) { return; }
+      if (!listView) {
+        return;
+      }
       listView.style.display = "grid";
       listView.innerHTML = "";
       if (!classes || classes.length === 0) {
-        if (emptyEl) { emptyEl.style.display = "block"; }
+        if (emptyEl) {
+          emptyEl.style.display = "block";
+        }
         return;
       }
-      if (emptyEl) { emptyEl.style.display = "none"; }
+      if (emptyEl) {
+        emptyEl.style.display = "none";
+      }
       classes.forEach((cls) => {
         const card = document.createElement("div");
         card.className = "card";
@@ -857,10 +1027,10 @@
             <div style="background:var(--accent); color:white; padding:4px 12px; border-radius:6px; font-size:0.8rem; font-weight:700; white-space:nowrap; letter-spacing:0.05em;">${cls.joinCode}</div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.88rem;">
-            <div><span style="color:var(--muted);">Meeting:</span> ${cls.meetingTime || '—'}</div>
-            <div><span style="color:var(--muted);">Start:</span> ${cls.startDate || '—'}</div>
+            <div><span style="color:var(--muted);">Meeting:</span> ${cls.meetingTime || "—"}</div>
+            <div><span style="color:var(--muted);">Start:</span> ${cls.startDate || "—"}</div>
             <div></div>
-            <div><span style="color:var(--muted);">End:</span> ${cls.endDate || '—'}</div>
+            <div><span style="color:var(--muted);">End:</span> ${cls.endDate || "—"}</div>
           </div>
           <div class="meta" style="font-size:0.78rem;">Join Code: <strong style="font-family:monospace; font-size:0.9rem; color:var(--accent);">${cls.joinCode}</strong> &mdash; share this with students to link their workspace to this class.</div>
           <div style="display:flex; gap:8px; margin-top:2px;">
@@ -876,16 +1046,34 @@
         });
         editBtn?.addEventListener("click", () => {
           editingClassId = cls.id;
-          if ($("class-form-card")) { $("class-form-card").style.display = "block"; }
-          if ($("class-course-name")) { $("class-course-name").value = cls.courseName || ""; }
-          if ($("class-course-code")) { $("class-course-code").value = cls.courseCode || ""; }
-          if ($("class-teacher-name")) { $("class-teacher-name").value = cls.teacherName || ""; }
-          if ($("class-meeting-time")) { $("class-meeting-time").value = cls.meetingTime || ""; }
-          if ($("class-start-date")) { $("class-start-date").value = cls.startDate || ""; }
-          if ($("class-end-date")) { $("class-end-date").value = cls.endDate || ""; }
+          if ($("class-form-card")) {
+            $("class-form-card").style.display = "block";
+          }
+          if ($("class-course-name")) {
+            $("class-course-name").value = cls.courseName || "";
+          }
+          if ($("class-course-code")) {
+            $("class-course-code").value = cls.courseCode || "";
+          }
+          if ($("class-teacher-name")) {
+            $("class-teacher-name").value = cls.teacherName || "";
+          }
+          if ($("class-meeting-time")) {
+            $("class-meeting-time").value = cls.meetingTime || "";
+          }
+          if ($("class-start-date")) {
+            $("class-start-date").value = cls.startDate || "";
+          }
+          if ($("class-end-date")) {
+            $("class-end-date").value = cls.endDate || "";
+          }
           const submitBtn = $("btn-submit-class");
-          if (submitBtn) { submitBtn.textContent = "Save Class Changes"; }
-          if (status) { status.textContent = "Editing class: " + cls.courseName; }
+          if (submitBtn) {
+            submitBtn.textContent = "Save Class Changes";
+          }
+          if (status) {
+            status.textContent = "Editing class: " + cls.courseName;
+          }
         });
         listView.appendChild(card);
       });
@@ -895,23 +1083,45 @@
       const classInfo = payload.classInfo || null;
       const students = payload.students || [];
       const assignments = payload.assignments || [];
-      if (!classInfo) { return; }
+      if (!classInfo) {
+        return;
+      }
 
       currentClassId = classInfo.id;
       currentClassAssignments = assignments;
 
-      if ($("class-list-view")) { $("class-list-view").style.display = "none"; }
-      if ($("class-list-empty")) { $("class-list-empty").style.display = "none"; }
-      if ($("class-detail-view")) { $("class-detail-view").style.display = "block"; }
-
-      if ($("class-detail-title")) { $("class-detail-title").textContent = classInfo.courseName || "Class Detail"; }
-      if ($("class-detail-meta")) {
-        $("class-detail-meta").textContent = (classInfo.courseCode || "") + " • " + (classInfo.teacherName || "") + " • Join Code: " + (classInfo.joinCode || "");
+      if ($("class-list-view")) {
+        $("class-list-view").style.display = "none";
+      }
+      if ($("class-list-empty")) {
+        $("class-list-empty").style.display = "none";
+      }
+      if ($("class-detail-view")) {
+        $("class-detail-view").style.display = "block";
       }
 
-      if ($("assignment-work-view")) { $("assignment-work-view").style.display = "none"; }
-      if ($("assignment-student-view")) { $("assignment-student-view").style.display = "none"; }
-      if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
+      if ($("class-detail-title")) {
+        $("class-detail-title").textContent =
+          classInfo.courseName || "Class Detail";
+      }
+      if ($("class-detail-meta")) {
+        $("class-detail-meta").textContent =
+          (classInfo.courseCode || "") +
+          " • " +
+          (classInfo.teacherName || "") +
+          " • Join Code: " +
+          (classInfo.joinCode || "");
+      }
+
+      if ($("assignment-work-view")) {
+        $("assignment-work-view").style.display = "none";
+      }
+      if ($("assignment-student-view")) {
+        $("assignment-student-view").style.display = "none";
+      }
+      if ($("assignment-session-log-view")) {
+        $("assignment-session-log-view").style.display = "none";
+      }
       currentAssignmentId = null;
       currentAssignmentName = "";
       setAssignmentFormVisible(false);
@@ -929,19 +1139,39 @@
       currentClassDetailTab = tabName;
 
       if (tabName === "students") {
-        if (studentsView) { studentsView.style.display = "block"; }
-        if (assignmentsView) { assignmentsView.style.display = "none"; }
-        if (studentsTab) { studentsTab.style.background = "var(--accent)"; studentsTab.style.color = "white"; }
-        if (assignmentsTab) { assignmentsTab.style.background = "var(--bg)"; assignmentsTab.style.color = "var(--muted)"; }
+        if (studentsView) {
+          studentsView.style.display = "block";
+        }
+        if (assignmentsView) {
+          assignmentsView.style.display = "none";
+        }
+        if (studentsTab) {
+          studentsTab.style.background = "var(--accent)";
+          studentsTab.style.color = "white";
+        }
+        if (assignmentsTab) {
+          assignmentsTab.style.background = "var(--bg)";
+          assignmentsTab.style.color = "var(--muted)";
+        }
         setAssignmentFormVisible(false);
         updateTopClassActionButton();
         return;
       }
 
-      if (studentsView) { studentsView.style.display = "none"; }
-      if (assignmentsView) { assignmentsView.style.display = "block"; }
-      if (assignmentsTab) { assignmentsTab.style.background = "var(--accent)"; assignmentsTab.style.color = "white"; }
-      if (studentsTab) { studentsTab.style.background = "var(--bg)"; studentsTab.style.color = "var(--muted)"; }
+      if (studentsView) {
+        studentsView.style.display = "none";
+      }
+      if (assignmentsView) {
+        assignmentsView.style.display = "block";
+      }
+      if (assignmentsTab) {
+        assignmentsTab.style.background = "var(--accent)";
+        assignmentsTab.style.color = "white";
+      }
+      if (studentsTab) {
+        studentsTab.style.background = "var(--bg)";
+        studentsTab.style.color = "var(--muted)";
+      }
       setAssignmentFormVisible(false);
       updateTopClassActionButton();
     }
@@ -950,13 +1180,17 @@
       const table = $("class-students-table");
       const body = $("class-students-body");
       const empty = $("class-students-empty");
-      if (!table || !body || !empty) { return; }
+      if (!table || !body || !empty) {
+        return;
+      }
 
       body.innerHTML = "";
       const deduped = [];
       const seen = new Set();
       (students || []).forEach((s) => {
-        const key = String(s.authUserId || "") || `${s.studentEmail || ""}|${s.studentName || ""}`;
+        const key =
+          String(s.authUserId || "") ||
+          `${s.studentEmail || ""}|${s.studentName || ""}`;
         if (!seen.has(key)) {
           seen.add(key);
           deduped.push(s);
@@ -989,7 +1223,9 @@
     function renderClassAssignments(assignments) {
       const list = $("class-assignments-list");
       const empty = $("class-assignments-empty");
-      if (!list || !empty) { return; }
+      if (!list || !empty) {
+        return;
+      }
 
       list.innerHTML = "";
       if (!assignments || assignments.length === 0) {
@@ -1013,10 +1249,15 @@
         `;
         const btn = card.querySelector(".assignment-work-btn");
         btn?.addEventListener("click", () => {
-          if (!currentClassId) { return; }
+          if (!currentClassId) {
+            return;
+          }
           currentAssignmentId = a.id;
           currentAssignmentName = a.name || "Assignment";
-          post("openAssignmentWork", { classId: currentClassId, assignmentId: a.id });
+          post("openAssignmentWork", {
+            classId: currentClassId,
+            assignmentId: a.id,
+          });
         });
         list.appendChild(card);
       });
@@ -1032,18 +1273,30 @@
       const meta = $("assignment-work-meta");
       const studentView = $("assignment-student-view");
       const logView = $("assignment-session-log-view");
-      if (!view || !list || !empty || !title || !meta) { return; }
+      const classDetailView = $("class-detail-view");
+
+      if (!view || !list || !empty || !title || !meta) {
+        return;
+      }
 
       currentAssignmentId = assignment.id || currentAssignmentId;
       currentAssignmentName = assignment.name || currentAssignmentName;
 
+      // Hide previous view
+      if (classDetailView) {
+        classDetailView.style.display = "none";
+      }
       view.style.display = "block";
       list.innerHTML = "";
-      if (studentView) { studentView.style.display = "none"; }
-      if (logView) { logView.style.display = "none"; }
+      if (studentView) {
+        studentView.style.display = "none";
+      }
+      if (logView) {
+        logView.style.display = "none";
+      }
 
-      title.textContent = `Assignment Work: ${currentAssignmentName || "Assignment"}`;
-      meta.textContent = `Students linked: ${students.length}`;
+      title.textContent = `Student Work: ${currentAssignmentName || "Assignment"}`;
+      meta.textContent = `Students actively tracking data: ${students.length}`;
 
       if (!students.length) {
         empty.style.display = "block";
@@ -1054,24 +1307,80 @@
       students.forEach((s) => {
         const card = document.createElement("button");
         card.className = "btn btn-secondary";
-        card.style.cssText = "text-align:left; padding:10px; border:1px solid var(--border); background:var(--surface);";
+        card.style.cssText =
+          "text-align:left; padding:16px; border:1px solid var(--border); background:var(--surface); display:flex; flex-direction:column; gap:14px; transition:all 0.2s; cursor:pointer;";
+
+        // Calculate AI / External Paste Probability
+        const aiProb =
+          s.totalEvents > 0
+            ? Math.round((s.aiEventCount / s.totalEvents) * 100)
+            : 0;
+        let aiColor = "var(--fg)";
+        let aiBadgeBg = "var(--bg)";
+        if (aiProb > 15) {
+          aiColor = "#f59e0b";
+          aiBadgeBg = "rgba(245, 158, 11, 0.1)";
+        } // Orange (Suspicious)
+        if (aiProb >= 40) {
+          aiColor = "#ef4444";
+          aiBadgeBg = "rgba(239, 68, 68, 0.1)";
+        } // Red (High Risk)
+
+        const lastActiveStr = s.lastActive
+          ? new Date(s.lastActive).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "Never Started";
+        const pathStr = s.workspaceRootPath || "No workspace linked";
+
         card.innerHTML = `
-          <div style="font-weight:700;">${s.studentName || "Unknown Student"}</div>
-          <div class="meta" style="font-size:0.8rem;">${s.studentEmail || ""}</div>
-          <div style="margin-top:8px; display:flex; justify-content:space-between; gap:8px; font-size:0.85rem;">
-            <span>Role: ${s.role || "Student"}</span>
-            <span><strong>${s.sessionCount || 0}</strong> log(s)</span>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+            <div>
+              <div style="font-weight:800; font-size:1.15rem; color:var(--accent);">${s.studentName || "Unknown Student"}</div>
+              <div class="meta" style="font-size:0.85rem; margin-top:2px;">${s.studentEmail || ""} &bull; ${s.role || "Student"}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:0.85rem; font-weight:700; padding:6px 10px; background:${aiBadgeBg}; color:${aiColor}; border-radius:6px; border:1px solid ${aiColor};">
+                AI Likelihood: ${aiProb}%
+              </div>
+            </div>
+          </div>
+
+          <div class="meta" style="font-size:0.85rem; font-family:monospace; background:var(--bg); padding:8px 12px; border-radius:4px; border:1px solid var(--border); word-break:break-all;">
+            📁 ${pathStr}
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; font-size:0.9rem; background:var(--bg); padding:12px; border-radius:6px; border:1px solid var(--border);">
+            <div style="display:flex; flex-direction:column; align-items:center; border-right:1px solid var(--border);">
+              <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Sessions</span>
+              <strong style="font-size:1.2rem; color:var(--fg);">${s.sessionCount}</strong>
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:center; border-right:1px solid var(--border);">
+              <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Total Events</span>
+              <strong style="font-size:1.2rem; color:var(--fg);">${s.totalEvents}</strong>
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:center;">
+              <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Last Active</span>
+              <strong style="font-size:0.9rem; margin-top:4px; color:var(--fg); text-align:center;">${lastActiveStr}</strong>
+            </div>
           </div>
         `;
+
         card.addEventListener("click", () => {
-          if (!currentClassId || !currentAssignmentId) { return; }
+          if (!currentClassId || !currentAssignmentId) {
+            return;
+          }
           post("openAssignmentStudent", {
             classId: currentClassId,
             assignmentId: currentAssignmentId,
             studentAuthUserId: s.authUserId,
-            studentName: s.studentName || "Unknown Student"
+            studentName: s.studentName || "Unknown Student",
           });
         });
+
         list.appendChild(card);
       });
     }
@@ -1084,12 +1393,20 @@
       const empty = $("assignment-student-sessions-empty");
       const list = $("assignment-student-sessions-list");
       const logView = $("assignment-session-log-view");
-      if (!studentView || !title || !empty || !list) { return; }
-
+      const workView = $("assignment-work-view");
+      if (!studentView || !title || !empty || !list) {
+        return;
+      }
+      // Hide the parent view (student list)
+      if (workView) {
+        workView.style.display = "none";
+      }
       studentView.style.display = "block";
       title.textContent = `${studentName} - Session Logs`;
       list.innerHTML = "";
-      if (logView) { logView.style.display = "none"; }
+      if (logView) {
+        logView.style.display = "none";
+      }
 
       if (!sessions.length) {
         empty.style.display = "block";
@@ -1100,7 +1417,8 @@
       sessions.forEach((s) => {
         const row = document.createElement("button");
         row.className = "btn btn-secondary";
-        row.style.cssText = "text-align:left; border:1px solid var(--border); background:var(--surface); padding:10px;";
+        row.style.cssText =
+          "text-align:left; border:1px solid var(--border); background:var(--surface); padding:10px;";
         row.innerHTML = `
           <div style="font-weight:700;">${s.filename}</div>
           <div class="meta" style="font-size:0.8rem;">${s.workspaceName || ""} • ${s.startedAt || ""} • IDE user: ${s.ideUser || ""}</div>
@@ -1116,7 +1434,9 @@
       const title = $("assignment-session-log-title");
       const content = $("assignment-session-log-content");
       const view = $("assignment-session-log-view");
-      if (!title || !content || !view) { return; }
+      if (!title || !content || !view) {
+        return;
+      }
       title.textContent = payload.filename || "Session Log";
       content.textContent = payload.text || "No log data available.";
       view.style.display = "block";
@@ -1133,21 +1453,32 @@
       if (classForm) {
         editingClassId = null;
         const submitBtn = $("btn-submit-class");
-        if (submitBtn) { submitBtn.textContent = "Create Class"; }
-        classForm.style.display = classForm.style.display === "none" ? "block" : "none";
+        if (submitBtn) {
+          submitBtn.textContent = "Create Class";
+        }
+        classForm.style.display =
+          classForm.style.display === "none" ? "block" : "none";
       }
     });
 
     $("btn-cancel-class")?.addEventListener("click", () => {
-      if ($("class-form-card")) { $("class-form-card").style.display = "none"; }
+      if ($("class-form-card")) {
+        $("class-form-card").style.display = "none";
+      }
       editingClassId = null;
       const submitBtn = $("btn-submit-class");
-      if (submitBtn) { submitBtn.textContent = "Create Class"; }
+      if (submitBtn) {
+        submitBtn.textContent = "Create Class";
+      }
     });
 
     $("btn-back-to-classes")?.addEventListener("click", () => {
-      if ($("class-detail-view")) { $("class-detail-view").style.display = "none"; }
-      if ($("class-list-view")) { $("class-list-view").style.display = "grid"; }
+      if ($("class-detail-view")) {
+        $("class-detail-view").style.display = "none";
+      }
+      if ($("class-list-view")) {
+        $("class-list-view").style.display = "grid";
+      }
       currentClassDetailTab = "students";
       setAssignmentFormVisible(false);
       updateTopClassActionButton();
@@ -1155,26 +1486,44 @@
     });
 
     $("btn-back-to-assignments")?.addEventListener("click", () => {
-      if ($("assignment-work-view")) { $("assignment-work-view").style.display = "none"; }
-      if ($("assignment-student-view")) { $("assignment-student-view").style.display = "none"; }
-      if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
+      if ($("assignment-work-view")) {
+        $("assignment-work-view").style.display = "none";
+      }
+      if ($("assignment-student-view")) {
+        $("assignment-student-view").style.display = "none";
+      }
+      if ($("assignment-session-log-view")) {
+        $("assignment-session-log-view").style.display = "none";
+      }
     });
 
     $("btn-back-to-assignment-students")?.addEventListener("click", () => {
-      if ($("assignment-student-view")) { $("assignment-student-view").style.display = "none"; }
-      if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
+      if ($("assignment-student-view")) {
+        $("assignment-student-view").style.display = "none";
+      }
+      if ($("assignment-session-log-view")) {
+        $("assignment-session-log-view").style.display = "none";
+      }
     });
 
-    $("class-detail-tab-students")?.addEventListener("click", () => switchClassDetailTab("students"));
-    $("class-detail-tab-assignments")?.addEventListener("click", () => switchClassDetailTab("assignments"));
+    $("class-detail-tab-students")?.addEventListener("click", () =>
+      switchClassDetailTab("students"),
+    );
+    $("class-detail-tab-assignments")?.addEventListener("click", () =>
+      switchClassDetailTab("assignments"),
+    );
 
     $("btn-refresh-students")?.addEventListener("click", () => {
-      if (currentClassId) { post("openClass", { classId: currentClassId }); }
+      if (currentClassId) {
+        post("openClass", { classId: currentClassId });
+      }
     });
 
     $("btn-create-assignment")?.addEventListener("click", () => {
       if (!currentClassId) {
-        if (status) { status.textContent = "Open a class first."; }
+        if (status) {
+          status.textContent = "Open a class first.";
+        }
         return;
       }
 
@@ -1184,19 +1533,27 @@
       const errEl = $("assignment-form-error");
 
       if (!name) {
-        if (errEl) { errEl.textContent = "Assignment name is required."; errEl.style.display = "block"; }
+        if (errEl) {
+          errEl.textContent = "Assignment name is required.";
+          errEl.style.display = "block";
+        }
         return;
       }
 
-      if (errEl) { errEl.style.display = "none"; }
+      if (errEl) {
+        errEl.style.display = "none";
+      }
       const btn = $("btn-create-assignment");
-      if (btn) { btn.disabled = true; btn.textContent = "Creating..."; }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Creating...";
+      }
 
       post("createClassAssignment", {
         classId: currentClassId,
         name,
         description: description || "",
-        dueDate: dueDate || ""
+        dueDate: dueDate || "",
       });
     });
 
@@ -1209,23 +1566,58 @@
       const endDate = $("class-end-date")?.value;
       const errEl = $("class-form-error");
 
-      if (!courseName || !courseCode || !teacherName || !startDate || !endDate) {
-        if (errEl) { errEl.textContent = "Course Name, Course Code, Teacher Name, Start Date, and End Date are required."; errEl.style.display = "block"; }
+      if (
+        !courseName ||
+        !courseCode ||
+        !teacherName ||
+        !startDate ||
+        !endDate
+      ) {
+        if (errEl) {
+          errEl.textContent =
+            "Course Name, Course Code, Teacher Name, Start Date, and End Date are required.";
+          errEl.style.display = "block";
+        }
         return;
       }
       if (startDate > endDate) {
-        if (errEl) { errEl.textContent = "End Date must be on or after Start Date."; errEl.style.display = "block"; }
+        if (errEl) {
+          errEl.textContent = "End Date must be on or after Start Date.";
+          errEl.style.display = "block";
+        }
         return;
       }
-      if (errEl) { errEl.style.display = "none"; }
+      if (errEl) {
+        errEl.style.display = "none";
+      }
 
       const btn = $("btn-submit-class");
-      if (btn) { btn.disabled = true; btn.textContent = "Creating..."; }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Creating...";
+      }
       if (editingClassId) {
-        post("updateClass", { classId: editingClassId, courseName, courseCode, teacherName, meetingTime: meetingTime || '', startDate, endDate });
-        if (btn) { btn.textContent = "Saving..."; }
+        post("updateClass", {
+          classId: editingClassId,
+          courseName,
+          courseCode,
+          teacherName,
+          meetingTime: meetingTime || "",
+          startDate,
+          endDate,
+        });
+        if (btn) {
+          btn.textContent = "Saving...";
+        }
       } else {
-        post("createClass", { courseName, courseCode, teacherName, meetingTime: meetingTime || '', startDate, endDate });
+        post("createClass", {
+          courseName,
+          courseCode,
+          teacherName,
+          meetingTime: meetingTime || "",
+          startDate,
+          endDate,
+        });
       }
     });
 

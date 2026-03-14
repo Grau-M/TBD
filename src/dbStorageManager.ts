@@ -189,6 +189,10 @@ export interface AssignmentStudentWorkRecord {
     studentEmail: string;
     role: UserRole;
     sessionCount: number;
+    workspaceRootPath: string; 
+    totalEvents: number;       
+    aiEventCount: number;      
+    lastActive: string;        
 }
 
 export interface AssignmentStudentSessionRecord {
@@ -2430,16 +2434,21 @@ export class DbStorageManager {
                 eau.DisplayName AS StudentName,
                 eau.Email AS StudentEmail,
                 eau.AssignedRole AS AssignedRole,
-                COUNT(DISTINCT s.Id) AS SessionCount
+                swa.WorkspaceRootPath,
+                COUNT(DISTINCT s.Id) AS SessionCount,
+                COUNT(se.Id) AS TotalEvents,
+                SUM(CASE WHEN se.EventType LIKE 'ai-%' OR se.EventType = 'external-paste' THEN 1 ELSE 0 END) AS AiEventCount,
+                MAX(s.StartedAt) AS LastActive
              FROM dbo.StudentWorkspaceAssignments swa
              INNER JOIN dbo.ExtensionAuthUsers eau ON eau.Id = swa.StudentAuthUserId
              INNER JOIN dbo.Classes c ON c.Id = swa.ClassId
              LEFT JOIN dbo.Projects p ON p.Name = swa.WorkspaceName
              LEFT JOIN dbo.Sessions s ON s.ProjectId = p.Id
+             LEFT JOIN dbo.SessionEvents se ON se.SessionId = s.Id
              WHERE swa.ClassId = @classId
                AND swa.AssignmentId = @assignmentId
                AND c.TeacherAuthUserId = @teacherAuthUserId
-             GROUP BY eau.Id, eau.DisplayName, eau.Email, eau.AssignedRole
+             GROUP BY eau.Id, eau.DisplayName, eau.Email, eau.AssignedRole, swa.WorkspaceRootPath
              ORDER BY eau.DisplayName ASC`,
             { classId, assignmentId, teacherAuthUserId }
         );
@@ -2449,7 +2458,11 @@ export class DbStorageManager {
             studentName: row.StudentName || 'Unknown Student',
             studentEmail: row.StudentEmail || '',
             role: (row.AssignedRole || 'Student') as UserRole,
-            sessionCount: Number(row.SessionCount || 0)
+            sessionCount: Number(row.SessionCount || 0),
+            workspaceRootPath: row.WorkspaceRootPath || '',
+            totalEvents: Number(row.TotalEvents || 0),
+            aiEventCount: Number(row.AiEventCount || 0),
+            lastActive: row.LastActive ? new Date(row.LastActive).toISOString() : ''
         }));
     }
 

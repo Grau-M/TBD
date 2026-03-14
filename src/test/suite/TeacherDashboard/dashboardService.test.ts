@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { storageManager } from '../../../state';
-import { handleGenerateProfile, handleGenerateTimeline } from '../../../teacher/services/dashboardService';
+import { handleCompareAssignmentStudents, handleGenerateProfile, handleGenerateTimeline } from '../../../teacher/services/dashboardService';
 
 suite('Teacher Dashboard - Behavioral Profile & Timeline Tests', () => {
     let postedMessages: any[] = [];
@@ -42,10 +42,11 @@ suite('Teacher Dashboard - Behavioral Profile & Timeline Tests', () => {
         };
 
         storageManager.retrieveLogContentWithPassword = async (pwd, uri) => {
-            const filename = uri.fsPath.replace(/\\/g, '/').split('/').pop() || '';
-            // FIXED ESLINT WARNING BELOW: Added curly braces
-            if (mockLogStore[filename]) { 
-                return { text: mockLogStore[filename], partial: false }; 
+            const filename = uri.scheme === 'tbd-db'
+                ? `session-${uri.path.replace(/^\//, '')}`
+                : uri.fsPath.replace(/\\/g, '/').split('/').pop() || '';
+            if (mockLogStore[filename]) {
+                return { text: mockLogStore[filename], partial: false };
             }
             throw new Error("File not found");
         };
@@ -214,5 +215,112 @@ suite('Teacher Dashboard - Behavioral Profile & Timeline Tests', () => {
 
         await handleGenerateTimeline(mockPanel, 'dummy', ['log1.log', 'log2.log'], mockContext);
         assert.ok(postedMessages[0].message.includes('Project mismatch'));
+    });
+
+    test('Assignment comparison: Sunny Day - returns similarity and student payloads', async () => {
+        mockLogStore['session-101'] = JSON.stringify({
+            sessionHeader: { startedBy: 'Keenan', project: 'Capstone', metadata: { extensionVersion: '0.0.3', vscodeVersion: '1.108.1' } },
+            events: [
+                { time: makeTimeStr(0), eventType: 'input' },
+                { time: makeTimeStr(1), eventType: 'input' },
+                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 80, source: 'external' },
+                { time: makeTimeStr(3), eventType: 'run' },
+                { time: makeTimeStr(4), eventType: 'input' }
+            ]
+        });
+        mockLogStore['session-202'] = JSON.stringify({
+            sessionHeader: { startedBy: 'Avery', project: 'Capstone', metadata: { extensionVersion: '0.0.3', vscodeVersion: '1.108.1' } },
+            events: [
+                { time: makeTimeStr(0), eventType: 'input' },
+                { time: makeTimeStr(1), eventType: 'input' },
+                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 72, source: 'external' },
+                { time: makeTimeStr(3), eventType: 'run' },
+                { time: makeTimeStr(4), eventType: 'input' }
+            ]
+        });
+
+        await handleCompareAssignmentStudents(mockPanel, 'dummy', [
+            {
+                studentAuthUserId: 1,
+                studentName: 'Keenan',
+                sessions: [{ sessionId: 101, filename: 'k-session.log', startedAt: '', ideUser: 'keenan', workspaceName: 'Capstone' }]
+            },
+            {
+                studentAuthUserId: 2,
+                studentName: 'Avery',
+                sessions: [{ sessionId: 202, filename: 'a-session.log', startedAt: '', ideUser: 'avery', workspaceName: 'Capstone' }]
+            }
+        ], mockContext);
+
+        assert.strictEqual(postedMessages[0].command, 'assignmentComparisonData');
+        assert.strictEqual(postedMessages[0].data.students.length, 2);
+        assert.ok(postedMessages[0].data.similarity.overall >= 0);
+    });
+
+    test('Assignment comparison: Rainy Day - warns on different extension versions', async () => {
+        mockLogStore['session-301'] = JSON.stringify({
+            sessionHeader: { startedBy: 'Keenan', project: 'Capstone', metadata: { extensionVersion: '0.0.2', vscodeVersion: '1.108.1' } },
+            events: [
+                { time: makeTimeStr(0), eventType: 'input' },
+                { time: makeTimeStr(1), eventType: 'input' },
+                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 55 },
+                { time: makeTimeStr(3), eventType: 'input' },
+                { time: makeTimeStr(4), eventType: 'input' }
+            ]
+        });
+        mockLogStore['session-302'] = JSON.stringify({
+            sessionHeader: { startedBy: 'Avery', project: 'Capstone', metadata: { extensionVersion: '0.0.3', vscodeVersion: '1.108.1' } },
+            events: [
+                { time: makeTimeStr(0), eventType: 'input' },
+                { time: makeTimeStr(1), eventType: 'input' },
+                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 65 },
+                { time: makeTimeStr(3), eventType: 'input' },
+                { time: makeTimeStr(4), eventType: 'input' }
+            ]
+        });
+
+        await handleCompareAssignmentStudents(mockPanel, 'dummy', [
+            {
+                studentAuthUserId: 1,
+                studentName: 'Keenan',
+                sessions: [{ sessionId: 301, filename: 'k-session.log', startedAt: '', ideUser: 'keenan', workspaceName: 'Capstone' }]
+            },
+            {
+                studentAuthUserId: 2,
+                studentName: 'Avery',
+                sessions: [{ sessionId: 302, filename: 'a-session.log', startedAt: '', ideUser: 'avery', workspaceName: 'Capstone' }]
+            }
+        ], mockContext);
+
+        assert.ok(postedMessages[0].data.warnings.some((warning: string) => warning.includes('different versions of the extension')));
+    });
+
+    test('Assignment comparison: Rainy Day - warns when a student has no synced data', async () => {
+        mockLogStore['session-401'] = JSON.stringify({
+            sessionHeader: { startedBy: 'Keenan', project: 'Capstone', metadata: { extensionVersion: '0.0.3', vscodeVersion: '1.108.1' } },
+            events: [
+                { time: makeTimeStr(0), eventType: 'input' },
+                { time: makeTimeStr(1), eventType: 'input' },
+                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 60 },
+                { time: makeTimeStr(3), eventType: 'input' },
+                { time: makeTimeStr(4), eventType: 'input' }
+            ]
+        });
+
+        await handleCompareAssignmentStudents(mockPanel, 'dummy', [
+            {
+                studentAuthUserId: 1,
+                studentName: 'Keenan',
+                sessions: [{ sessionId: 401, filename: 'k-session.log', startedAt: '', ideUser: 'keenan', workspaceName: 'Capstone' }]
+            },
+            {
+                studentAuthUserId: 2,
+                studentName: 'Avery',
+                sessions: []
+            }
+        ], mockContext);
+
+        assert.ok(postedMessages[0].data.warnings.some((warning: string) => warning.includes('Missing data')));
+        assert.strictEqual(postedMessages[0].data.similarity, null);
     });
 });

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { storageManager } from '../state';
 import { getHtml } from './getHtml';
 import { requireRoleAccess, getWorkspaceAuthSession } from '../auth';
-import { handleAnalyzeLogs, handleGenerateProfile, handleGenerateTimeline } from './services/dashboardService';
+import { handleAnalyzeLogs, handleCompareAssignmentStudents, handleGenerateProfile, handleGenerateTimeline } from './services/dashboardService';
 import {
   handleOpenLog,
   handleExportLog,
@@ -281,6 +281,69 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
               sessions
             }
           });
+          break;
+        }
+
+        case 'compareAssignmentStudents': {
+          const session = getWorkspaceAuthSession(context);
+          if (!session?.authenticated) {
+            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
+            break;
+          }
+
+          const classId = Number(message.classId);
+          const assignmentId = Number(message.assignmentId);
+          const requestedStudents = Array.isArray(message.students) ? message.students.slice(0, 2) : [];
+          if (requestedStudents.length < 2) {
+            panel?.webview.postMessage({ command: 'error', message: 'Select two students to compare.' });
+            break;
+          }
+
+          const classInfo = await storageManager.getTeacherClassById(classId, session.authUserId);
+          if (!classInfo) {
+            panel?.webview.postMessage({ command: 'error', message: 'Class not found or access denied.' });
+            break;
+          }
+
+          const assignments = await storageManager.listClassAssignments(classId, session.authUserId);
+          const assignment = assignments.find(a => a.id === assignmentId);
+          if (!assignment) {
+            panel?.webview.postMessage({ command: 'error', message: 'Assignment not found.' });
+            break;
+          }
+
+          const selections = [];
+          for (const requested of requestedStudents) {
+            const studentAuthUserId = Number(requested?.studentAuthUserId);
+            if (!Number.isFinite(studentAuthUserId) || studentAuthUserId <= 0) {
+              continue;
+            }
+
+            const sessions = await storageManager.listAssignmentStudentSessions(
+              classId,
+              assignmentId,
+              studentAuthUserId,
+              session.authUserId
+            );
+
+            // Compare mode prioritizes the most recent sessions to keep response time predictable.
+            const limitedSessions = sessions.slice(0, 12);
+            selections.push({
+              studentAuthUserId,
+              studentName: String(requested?.studentName || 'Student'),
+              sessions: limitedSessions,
+              totalSessionCount: sessions.length
+            });
+          }
+
+          if (selections.length < 2) {
+            panel?.webview.postMessage({ command: 'error', message: 'Two valid students are required for comparison.' });
+            break;
+          }
+
+          if (panel) {
+            await handleCompareAssignmentStudents(panel, SECRET_PASSPHRASE, selections, context);
+          }
           break;
         }
 

@@ -28,7 +28,19 @@
   let currentClassAssignments = [];
   let currentAssignmentId = null;
   let currentAssignmentName = "";
-  let currentClassDetailTab = "students";
+  let currentClassDetailTab = "assignments";
+  let currentAssignmentStudents = [];
+  let selectedComparisonStudentIds = [];
+  let currentAssignmentComparison = null;
+  let currentComparisonFilters = {
+    input: true,
+    edit: true,
+    paste: true,
+    ai: true,
+    focus: true,
+    run: true,
+    other: true,
+  };
 
   window.addEventListener("DOMContentLoaded", () => {
     const $ = (id) => document.getElementById(id);
@@ -708,6 +720,11 @@
             $("btn-create-assignment").textContent = "Create Assignment";
           }
           if (status) {status.textContent = "Error: " + (msg.message || "");}
+          const compareMessage = $("assignment-compare-message");
+          const isCompareLoading = !!compareMessage && compareMessage.style.display !== "none" && /loading/i.test(compareMessage.textContent || "");
+          if (isCompareLoading || (msg.message && msg.message.toLowerCase().includes("compare"))) {
+            showAssignmentCompareMessage(`Comparison failed: ${msg.message || "Unknown error."}`, "error");
+          }
           if (
             msg.message &&
             (msg.message.toLowerCase().includes("mismatch") ||
@@ -784,6 +801,15 @@
           break;
         }
 
+        case "assignmentComparisonData": {
+          renderAssignmentComparison(msg.data || {});
+          showAssignmentCompareMessage((msg.data && msg.data.missingStudents && msg.data.missingStudents.length)
+            ? "Comparison loaded with warnings. Review the notice cards before drawing conclusions."
+            : "Comparison loaded.");
+          if (status) { status.textContent = "Student comparison loaded."; }
+          break;
+        }
+
         case "classSessionLogData": {
           renderAssignmentSessionLog(msg.data || {});
           if (status) { status.textContent = "Session log loaded."; }
@@ -813,6 +839,269 @@
       }
     }
 
+    function defaultComparisonFilters() {
+      return {
+        input: true,
+        edit: true,
+        paste: true,
+        ai: true,
+        focus: true,
+        run: true,
+        other: true,
+      };
+    }
+
+    function showAssignmentCompareMessage(message, tone = "neutral") {
+      const el = $("assignment-compare-message");
+      if (!el) { return; }
+      if (!message) {
+        el.style.display = "none";
+        el.textContent = "";
+        el.style.borderColor = "var(--border)";
+        return;
+      }
+
+      el.style.display = "block";
+      el.textContent = message;
+      if (tone === "warning") {
+        el.style.borderColor = "#f59e0b";
+      } else if (tone === "error") {
+        el.style.borderColor = "#ef4444";
+      } else {
+        el.style.borderColor = "var(--border)";
+      }
+    }
+
+    function clearAssignmentComparisonSelection(options = {}) {
+      const preserveMessage = options.preserveMessage === true;
+      selectedComparisonStudentIds = [];
+      currentAssignmentComparison = null;
+      currentComparisonFilters = defaultComparisonFilters();
+
+      document.querySelectorAll(".assignment-compare-filter").forEach((input) => {
+        input.checked = true;
+      });
+
+      if (!preserveMessage) {
+        showAssignmentCompareMessage("");
+      }
+      if ($("assignment-compare-view")) { $("assignment-compare-view").style.display = "none"; }
+      if ($("assignment-compare-panels")) { $("assignment-compare-panels").innerHTML = ""; }
+      if ($("assignment-compare-warnings")) { $("assignment-compare-warnings").innerHTML = ""; }
+      if ($("assignment-compare-summary")) { $("assignment-compare-summary").textContent = ""; }
+    }
+
+    function selectedComparisonStudents() {
+      return currentAssignmentStudents.filter((student) => selectedComparisonStudentIds.includes(Number(student.authUserId)));
+    }
+
+    function updateAssignmentComparisonControls() {
+      const statusEl = $("assignment-compare-selection-status");
+      const compareBtn = $("btn-compare-assignment-students");
+      const clearBtn = $("btn-clear-assignment-compare");
+      const selectedStudents = selectedComparisonStudents();
+      const selectedCount = selectedStudents.length;
+
+      if (statusEl) {
+        if (selectedCount === 0) {
+          statusEl.textContent = "Select up to 2 students to compare their sessions side by side.";
+        } else {
+          statusEl.textContent = `Selected ${selectedCount}/2: ${selectedStudents.map((student) => student.studentName || "Student").join(" and ")}`;
+        }
+      }
+      if (compareBtn) { compareBtn.disabled = selectedCount !== 2; }
+      if (clearBtn) { clearBtn.disabled = selectedCount === 0; }
+
+      document.querySelectorAll("[data-assignment-student-id]").forEach((node) => {
+        const studentId = Number(node.getAttribute("data-assignment-student-id"));
+        const selected = selectedComparisonStudentIds.includes(studentId);
+        node.style.outline = selected ? "2px solid var(--accent)" : "none";
+        node.style.boxShadow = selected ? "0 0 0 1px rgba(37,99,235,0.2)" : "none";
+
+        const checkbox = node.querySelector(".assignment-compare-checkbox");
+        if (checkbox) {
+          checkbox.checked = selected;
+          checkbox.disabled = !selected && selectedCount >= 2;
+        }
+      });
+    }
+
+    function toggleAssignmentStudentSelection(studentId, shouldSelect) {
+      const normalized = Number(studentId);
+      if (!Number.isFinite(normalized) || normalized <= 0) { return false; }
+
+      if (shouldSelect) {
+        if (!selectedComparisonStudentIds.includes(normalized)) {
+          if (selectedComparisonStudentIds.length >= 2) {
+            showAssignmentCompareMessage("You can compare up to 2 students at a time.", "warning");
+            updateAssignmentComparisonControls();
+            return false;
+          }
+          selectedComparisonStudentIds = selectedComparisonStudentIds.concat(normalized);
+        }
+      } else {
+        selectedComparisonStudentIds = selectedComparisonStudentIds.filter((id) => id !== normalized);
+      }
+
+      if (currentAssignmentComparison) {
+        currentAssignmentComparison = null;
+        if ($("assignment-compare-view")) { $("assignment-compare-view").style.display = "none"; }
+      }
+
+      if (selectedComparisonStudentIds.length === 2) {
+        showAssignmentCompareMessage("Ready to compare the selected students.");
+      } else if (selectedComparisonStudentIds.length === 0) {
+        showAssignmentCompareMessage("");
+      }
+
+      updateAssignmentComparisonControls();
+      return true;
+    }
+
+    function formatComparisonOffset(offsetMs) {
+      const totalSeconds = Math.max(0, Math.round((offsetMs || 0) / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `+${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+    }
+
+    function renderAssignmentComparison(payload) {
+      const view = $("assignment-compare-view");
+      const summary = $("assignment-compare-summary");
+      const warnings = $("assignment-compare-warnings");
+      const panels = $("assignment-compare-panels");
+      if (!view || !summary || !warnings || !panels) { return; }
+
+      currentAssignmentComparison = payload;
+      warnings.innerHTML = "";
+      panels.innerHTML = "";
+      view.style.display = "block";
+
+      const similarity = payload.similarity;
+      const summaryParts = [];
+      if (similarity) {
+        summaryParts.push(`Similarity ${similarity.overall}%`);
+        summaryParts.push(`Event mix ${similarity.distribution}%`);
+        summaryParts.push(`Sequence ${similarity.sequence}%`);
+        summaryParts.push(`Pacing ${similarity.cadence}%`);
+      }
+      if (payload.summary) {
+        summaryParts.push(payload.summary);
+      }
+      summary.textContent = summaryParts.join(" • ");
+
+      (payload.warnings || []).forEach((warningText) => {
+        const warning = document.createElement("div");
+        warning.className = "meta";
+        warning.style.cssText = "padding:10px; border:1px solid #f59e0b; border-radius:8px; background:rgba(245,158,11,0.08);";
+        warning.textContent = warningText;
+        warnings.appendChild(warning);
+      });
+
+      const maxOffsetMs = Math.max(1, Number(payload.maxOffsetMs || 0));
+      (payload.students || []).forEach((student) => {
+        const panel = document.createElement("div");
+        panel.className = "card";
+        panel.style.marginBottom = "0";
+        panel.style.padding = "12px";
+
+        const title = document.createElement("div");
+        title.style.display = "flex";
+        title.style.justifyContent = "space-between";
+        title.style.gap = "8px";
+        title.style.alignItems = "flex-start";
+        title.innerHTML = `
+          <div>
+            <div style="font-weight:700;">${student.studentName || "Student"}</div>
+            <div class="meta" style="font-size:0.8rem; margin-top:4px;">${student.sessionCount || 0} session(s) • ${student.totalEvents || 0} event(s)</div>
+          </div>
+          <div class="meta" style="font-size:0.8rem; text-align:right;">${student.extensionVersions && student.extensionVersions.length ? student.extensionVersions.join(", ") : "Unknown extension version"}</div>
+        `;
+        panel.appendChild(title);
+
+        if (!student.synced) {
+          const missing = document.createElement("div");
+          missing.className = "meta";
+          missing.style.cssText = "margin-top:12px; padding:12px; border:1px solid var(--border); border-radius:8px;";
+          missing.textContent = "No synced session data is available for this student yet. Request a sync and try again.";
+          panel.appendChild(missing);
+          panels.appendChild(panel);
+          return;
+        }
+
+        const stats = document.createElement("div");
+        stats.style.cssText = "display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px;";
+        stats.innerHTML = `
+          <div><div style="font-weight:700;">${student.totalPasteEvents || 0}</div><div class="meta">Paste Events</div></div>
+          <div><div style="font-weight:700;">${student.suspiciousPasteCount || 0}</div><div class="meta">Flagged Pastes</div></div>
+          <div><div style="font-weight:700;">${Math.round((student.activeSpanMs || 0) / 60000)} min</div><div class="meta">Active Span</div></div>
+          <div><div style="font-weight:700;">${Math.round((student.averageGapMs || 0) / 1000)}s</div><div class="meta">Average Gap</div></div>
+        `;
+        panel.appendChild(stats);
+
+        const strip = document.createElement("div");
+        strip.style.cssText = "position:relative; height:42px; margin-top:12px; border:1px solid var(--border); border-radius:8px; background:linear-gradient(90deg, rgba(37,99,235,0.04), rgba(37,99,235,0)); overflow:hidden;";
+        const filteredEvents = (student.timelineEvents || []).filter((event) => currentComparisonFilters[event.category] !== false);
+        filteredEvents.forEach((event) => {
+          const marker = document.createElement("span");
+          const left = Math.min(100, Math.max(0, ((event.offsetMs || 0) / maxOffsetMs) * 100));
+          const colors = {
+            input: "#2563eb",
+            edit: "#0891b2",
+            paste: event.suspiciousPaste ? "#dc2626" : "#f59e0b",
+            ai: "#7c3aed",
+            focus: "#10b981",
+            run: "#1d4ed8",
+            other: "#6b7280",
+          };
+          marker.style.cssText = `position:absolute; left:${left}%; top:10px; width:8px; height:8px; border-radius:999px; background:${colors[event.category]}; transform:translateX(-50%);`;
+          marker.title = `${event.eventType} ${formatComparisonOffset(event.offsetMs)} ${event.sessionLabel}`;
+          strip.appendChild(marker);
+        });
+        panel.appendChild(strip);
+
+        const rows = document.createElement("div");
+        rows.style.cssText = "display:grid; gap:8px; margin-top:12px; max-height:360px; overflow:auto;";
+        filteredEvents.slice(0, 60).forEach((event) => {
+          const row = document.createElement("div");
+          row.style.cssText = "border:1px solid var(--border); border-radius:8px; padding:8px; background:var(--surface);";
+          row.innerHTML = `
+            <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+              <strong>${event.eventType}</strong>
+              <span class="meta">${formatComparisonOffset(event.offsetMs)}</span>
+            </div>
+            <div class="meta" style="margin-top:4px; font-size:0.78rem;">${event.sessionLabel}${event.fileName ? ` • ${event.fileName}` : ""}</div>
+            <div class="meta" style="margin-top:4px; font-size:0.78rem;">${event.category === "paste" ? `Paste length: ${event.pasteLength || 0}` : ""}${event.possibleAiDetection ? ` • ${event.possibleAiDetection}` : ""}</div>
+          `;
+          rows.appendChild(row);
+        });
+
+        if (filteredEvents.length > 60) {
+          const more = document.createElement("div");
+          more.className = "meta";
+          more.textContent = `Showing first 60 matching events of ${filteredEvents.length}.`;
+          rows.appendChild(more);
+        }
+
+        if (!filteredEvents.length) {
+          const noMatches = document.createElement("div");
+          noMatches.className = "meta";
+          noMatches.textContent = "No events match the active filters for this student.";
+          rows.appendChild(noMatches);
+        }
+
+        panel.appendChild(rows);
+        panels.appendChild(panel);
+      });
+    }
+
+
+    function restoreAssignmentListVisibility() {
+      const list = $("class-assignments-list");
+      const empty = $("class-assignments-empty");
+      if (list) { list.style.display = "block"; }
+      if (empty) { empty.style.display = currentClassAssignments.length === 0 ? "block" : "none"; }
+    }
     function updateTopClassActionButton() {
       const btn = $("btn-new-class");
       if (!btn) { return; }
@@ -833,7 +1122,7 @@
       const detailView = $("class-detail-view");
       if (loadingEl) { loadingEl.style.display = "none"; }
       if (detailView) { detailView.style.display = "none"; }
-      currentClassDetailTab = "students";
+      currentClassDetailTab = "assignments";
       setAssignmentFormVisible(false);
       updateTopClassActionButton();
       if (!listView) { return; }
@@ -899,6 +1188,7 @@
 
       currentClassId = classInfo.id;
       currentClassAssignments = assignments;
+      currentAssignmentStudents = [];
 
       if ($("class-list-view")) { $("class-list-view").style.display = "none"; }
       if ($("class-list-empty")) { $("class-list-empty").style.display = "none"; }
@@ -914,9 +1204,10 @@
       if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
       currentAssignmentId = null;
       currentAssignmentName = "";
+      clearAssignmentComparisonSelection();
       setAssignmentFormVisible(false);
 
-      switchClassDetailTab("students");
+      switchClassDetailTab("assignments");
       renderClassStudents(students);
       renderClassAssignments(assignments);
     }
@@ -991,6 +1282,7 @@
       const empty = $("class-assignments-empty");
       if (!list || !empty) { return; }
 
+      list.style.display = "block";
       list.innerHTML = "";
       if (!assignments || assignments.length === 0) {
         empty.style.display = "block";
@@ -1008,7 +1300,7 @@
           <div class="meta" style="margin-top:4px;">${a.description || "No description"}</div>
           <div class="meta" style="margin-top:6px;">Due: ${a.dueDate || "No due date"}</div>
           <div style="margin-top:10px;">
-            <button class="btn btn-primary assignment-work-btn" style="padding:6px 10px;">View Student Work</button>
+            <button class="btn btn-primary assignment-work-btn" style="padding:6px 10px;">View More Info</button>
           </div>
         `;
         const btn = card.querySelector(".assignment-work-btn");
@@ -1036,34 +1328,52 @@
 
       currentAssignmentId = assignment.id || currentAssignmentId;
       currentAssignmentName = assignment.name || currentAssignmentName;
+      currentAssignmentStudents = Array.isArray(students) ? students : [];
+      clearAssignmentComparisonSelection();
 
       view.style.display = "block";
       list.innerHTML = "";
+      if ($("class-assignments-list")) { $("class-assignments-list").style.display = "none"; }
+      if ($("class-assignments-empty")) { $("class-assignments-empty").style.display = "none"; }
       if (studentView) { studentView.style.display = "none"; }
       if (logView) { logView.style.display = "none"; }
 
-      title.textContent = `Assignment Work: ${currentAssignmentName || "Assignment"}`;
-      meta.textContent = `Students linked: ${students.length}`;
+      title.textContent = `Assignment Details: ${currentAssignmentName || "Assignment"}`;
+      meta.textContent = `Students who started: ${students.length}`;
 
       if (!students.length) {
         empty.style.display = "block";
+        updateAssignmentComparisonControls();
         return;
       }
       empty.style.display = "none";
 
       students.forEach((s) => {
-        const card = document.createElement("button");
-        card.className = "btn btn-secondary";
-        card.style.cssText = "text-align:left; padding:10px; border:1px solid var(--border); background:var(--surface);";
+        const card = document.createElement("div");
+        card.className = "card";
+        card.setAttribute("data-assignment-student-id", String(s.authUserId || 0));
+        card.style.cssText = "margin-bottom:0; padding:12px;";
         card.innerHTML = `
-          <div style="font-weight:700;">${s.studentName || "Unknown Student"}</div>
-          <div class="meta" style="font-size:0.8rem;">${s.studentEmail || ""}</div>
-          <div style="margin-top:8px; display:flex; justify-content:space-between; gap:8px; font-size:0.85rem;">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+            <div>
+              <div style="font-weight:700;">${s.studentName || "Unknown Student"}</div>
+              <div class="meta" style="font-size:0.8rem;">${s.studentEmail || ""}</div>
+            </div>
+            <label class="meta" style="font-size:0.8rem; display:flex; align-items:center; gap:6px; white-space:nowrap;">
+              <input type="checkbox" class="assignment-compare-checkbox" /> Compare
+            </label>
+          </div>
+          <div style="margin-top:8px; display:flex; justify-content:space-between; gap:8px; font-size:0.85rem; flex-wrap:wrap;">
             <span>Role: ${s.role || "Student"}</span>
             <span><strong>${s.sessionCount || 0}</strong> log(s)</span>
           </div>
+          <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-secondary assignment-open-student-btn" style="padding:6px 10px;">View Sessions</button>
+          </div>
         `;
-        card.addEventListener("click", () => {
+        const openButton = card.querySelector(".assignment-open-student-btn");
+        const checkbox = card.querySelector(".assignment-compare-checkbox");
+        openButton?.addEventListener("click", () => {
           if (!currentClassId || !currentAssignmentId) { return; }
           post("openAssignmentStudent", {
             classId: currentClassId,
@@ -1072,8 +1382,15 @@
             studentName: s.studentName || "Unknown Student"
           });
         });
+        checkbox?.addEventListener("change", (event) => {
+          const selected = toggleAssignmentStudentSelection(s.authUserId, !!event.target.checked);
+          if (!selected) {
+            event.target.checked = false;
+          }
+        });
         list.appendChild(card);
       });
+      updateAssignmentComparisonControls();
     }
 
     function renderAssignmentStudentSessions(payload) {
@@ -1148,7 +1465,7 @@
     $("btn-back-to-classes")?.addEventListener("click", () => {
       if ($("class-detail-view")) { $("class-detail-view").style.display = "none"; }
       if ($("class-list-view")) { $("class-list-view").style.display = "grid"; }
-      currentClassDetailTab = "students";
+      currentClassDetailTab = "assignments";
       setAssignmentFormVisible(false);
       updateTopClassActionButton();
       loadClasses();
@@ -1158,6 +1475,8 @@
       if ($("assignment-work-view")) { $("assignment-work-view").style.display = "none"; }
       if ($("assignment-student-view")) { $("assignment-student-view").style.display = "none"; }
       if ($("assignment-session-log-view")) { $("assignment-session-log-view").style.display = "none"; }
+      clearAssignmentComparisonSelection();
+      restoreAssignmentListVisibility();
     });
 
     $("btn-back-to-assignment-students")?.addEventListener("click", () => {
@@ -1170,6 +1489,43 @@
 
     $("btn-refresh-students")?.addEventListener("click", () => {
       if (currentClassId) { post("openClass", { classId: currentClassId }); }
+    });
+
+    $("btn-clear-assignment-compare")?.addEventListener("click", () => {
+      clearAssignmentComparisonSelection();
+      updateAssignmentComparisonControls();
+    });
+
+    $("btn-compare-assignment-students")?.addEventListener("click", () => {
+      if (!currentClassId || !currentAssignmentId) {
+        showAssignmentCompareMessage("Open an assignment first.", "error");
+        return;
+      }
+
+      const selectedStudents = selectedComparisonStudents();
+      if (selectedStudents.length !== 2) {
+        showAssignmentCompareMessage("Select exactly 2 students to compare.", "warning");
+        return;
+      }
+
+      showAssignmentCompareMessage("Loading synchronized comparison view...");
+      post("compareAssignmentStudents", {
+        classId: currentClassId,
+        assignmentId: currentAssignmentId,
+        students: selectedStudents.map((student) => ({
+          studentAuthUserId: student.authUserId,
+          studentName: student.studentName || "Student",
+        })),
+      });
+    });
+
+    document.querySelectorAll(".assignment-compare-filter").forEach((input) => {
+      input.addEventListener("change", () => {
+        currentComparisonFilters[input.dataset.category] = !!input.checked;
+        if (currentAssignmentComparison) {
+          renderAssignmentComparison(currentAssignmentComparison);
+        }
+      });
     });
 
     $("btn-create-assignment")?.addEventListener("click", () => {

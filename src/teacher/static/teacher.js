@@ -2107,6 +2107,24 @@
         return;
       }
 
+      //Check if either student has 0 sessions
+      const unstartedStudents = selectedStudents.filter(
+        (s) => !s.sessionCount || s.sessionCount === 0,
+      );
+      if (unstartedStudents.length > 0) {
+        const names = unstartedStudents
+          .map((s) => s.studentName || s.studentEmail || "A selected student")
+          .join(" and ");
+        showAssignmentCompareMessage(
+          `Cannot compare: ${names} has not started any sessions yet.`,
+          "error",
+        );
+        // Hide the comparison view if it was previously open
+        if ($("assignment-compare-view")) {
+          $("assignment-compare-view").style.display = "none";
+        }
+        return;
+      }
       showAssignmentCompareMessage("Loading synchronized comparison view...");
       post("compareAssignmentStudents", {
         classId: currentClassId,

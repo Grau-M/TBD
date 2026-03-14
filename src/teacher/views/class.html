@@ -251,86 +251,110 @@
       <div id="class-assignments-list" style="margin-bottom: 20px"></div>
     </div>
   </div>
-  <div
-    id="assignment-work-view"
-    class="card"
-    style="display: none; padding: 14px; margin-top: 16px"
-  >
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 12px;
-      "
-    >
+<div id="assignment-work-view" class="card" style="display: none; padding: 16px; margin-top: 16px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
       <div>
-        <h3 id="assignment-work-title" style="margin: 0">Assignment Details</h3>
-        <div
-          id="assignment-work-meta"
-          class="meta"
-          style="margin-top: 4px"
-        ></div>
+        <h3 id="assignment-work-title" style="margin: 0; font-size: 1.25rem;">Assignment Details</h3>
+        <div id="assignment-work-meta" class="meta" style="margin-top: 4px;"></div>
       </div>
       <button id="btn-back-to-assignments" class="btn btn-secondary">
         Back to Assignments
       </button>
     </div>
 
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 12px;
-      "
-    >
-      <div id="assignment-compare-selection-status" class="meta">
+<div style="display: flex; gap: 16px; margin-bottom: 20px; align-items: center; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+      
+      <div style="flex: 1; position: relative; min-width: 0;">
+        <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); opacity: 0.6; font-size: 0.9rem;">🔍</span>
+        
+        <input
+          type="text"
+          id="assignment-student-search"
+          placeholder="Search students by name or email..."
+          style="width: 100%; box-sizing: border-box; padding: 10px 32px 10px 36px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); font-size: 0.95rem;"
+        />
+        
+        <span id="assignment-search-clear" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; opacity: 0.6; display: none; font-size: 1.2rem; font-weight: bold; line-height: 1;">&times;</span>
+        
+        <div id="assignment-student-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; width: 100%; max-height: 250px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 1000;"></div>
+      </div>
+
+      <div style="flex-shrink: 0; width: 220px;">
+        <select
+          id="assignment-student-sort"
+          style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); cursor: pointer; font-size: 0.95rem;"
+        >
+          <option value="nameAsc">Alphabet (A-Z)</option>
+          <option value="nameDesc">Alphabet (Z-A)</option>
+          <option value="timeDesc">Last Active (Newest)</option>
+          <option value="timeAsc">Last Active (Oldest)</option>
+          <option value="sessionsDesc">Sessions (High-Low)</option>
+          <option value="eventsDesc">Total Events (High-Low)</option>
+        </select>
+      </div>
+
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+      <div id="assignment-compare-selection-status" style="font-size: 0.9rem; color: var(--fg); font-weight: 500;">
         Select up to 2 students to compare their sessions side by side.
       </div>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap">
-        <button id="btn-clear-assignment-compare" class="btn btn-secondary">
-          Clear Selection
-        </button>
-        <button
-          id="btn-compare-assignment-students"
-          class="btn btn-primary"
-          disabled
-        >
-          Compare Sessions
-        </button>
+      <div style="display: flex; gap: 8px;">
+        <button id="btn-clear-assignment-compare" class="btn btn-secondary" disabled>Clear Selection</button>
+        <button id="btn-compare-assignment-students" class="btn btn-primary" disabled>Compare Sessions</button>
       </div>
     </div>
+
     <div
       id="assignment-compare-message"
       class="meta"
-      style="
-        display: none;
-        margin-bottom: 12px;
-        padding: 10px;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-      "
+      style="display: none; margin-bottom: 16px; padding: 10px; border: 1px solid var(--border); border-radius: 8px;"
     ></div>
 
     <div
       id="assignment-work-empty"
       class="meta"
-      style="display: none; padding: 16px 0; text-align: center"
+      style="display: none; padding: 24px 0; text-align: center; font-size: 1rem;"
     >
       No students have started this assignment yet.
     </div>
 
-    <div id="assignment-work-list" style="display: grid; gap: 10px"></div>
+    <div id="assignment-work-list" style="display: grid; gap: 12px;"></div>
 
     <div
       id="assignment-compare-view"
       class="card"
-      style="display: none; margin-top: 12px; margin-bottom: 0; padding: 14px"
+      style="display: none; margin-top: 16px; margin-bottom: 0; padding: 14px; background: var(--bg);"
+    >
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+        <div>
+          <h4 style="margin: 0;">Side-by-Side Session Comparison</h4>
+          <div id="assignment-compare-summary" class="meta" style="margin-top: 4px;"></div>
+        </div>
+      </div>
+      
+      <div id="assignment-compare-warnings" style="display: grid; gap: 8px; margin-bottom: 12px;"></div>
+      
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; font-size: 0.9rem; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+        <label><input type="checkbox" class="assignment-compare-filter" data-category="input" checked /> Typing</label>
+        <label><input type="checkbox" class="assignment-compare-filter" data-category="edit" checked /> Edits</label>
+        <label><input type="checkbox" class="assignment-compare-filter" data-category="paste" checked /> Copy/Paste</label>
+        <label><input type="checkbox" class="assignment-compare-filter" data-category="ai" checked /> AI</label>
+        <label><input type="checkbox" class="assignment-compare-filter" data-category="focus" checked /> Focus/Save</label>
+        <label><input type="checkbox" class="assignment-compare-filter" data-category="run" checked /> Run/Debug</label>
+        <label><input type="checkbox" class="assignment-compare-filter" data-category="other" checked /> Other</label>
+      </div>
+      
+      <div
+        id="assignment-compare-panels"
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;"
+      ></div>
+    </div>
+  </div>
+    <div
+      id="assignment-student-view"
+      class="card"
+      style="display: none; padding: 14px; margin-top: 16px"
     >
       <div
         style="
@@ -342,159 +366,50 @@
           margin-bottom: 12px;
         "
       >
-        <div>
-          <h4 style="margin: 0">Side-by-Side Session Comparison</h4>
-          <div
-            id="assignment-compare-summary"
-            class="meta"
-            style="margin-top: 4px"
-          ></div>
-        </div>
+        <h3 id="assignment-student-title" style="margin: 0">
+          Student Sessions
+        </h3>
+        <button id="btn-back-to-assignment-students" class="btn btn-secondary">
+          Back to Students
+        </button>
       </div>
       <div
-        id="assignment-compare-warnings"
-        style="display: grid; gap: 8px; margin-bottom: 12px"
-      ></div>
-      <div
-        style="
-          display: flex;
-          gap: 12px;
-          flex-wrap: wrap;
-          margin-bottom: 12px;
-          font-size: 0.9rem;
-        "
+        id="assignment-student-sessions-empty"
+        class="meta"
+        style="display: none; padding: 16px 0; text-align: center"
       >
-        <label
-          ><input
-            type="checkbox"
-            class="assignment-compare-filter"
-            data-category="input"
-            checked
-          />
-          Typing</label
-        >
-        <label
-          ><input
-            type="checkbox"
-            class="assignment-compare-filter"
-            data-category="edit"
-            checked
-          />
-          Edits</label
-        >
-        <label
-          ><input
-            type="checkbox"
-            class="assignment-compare-filter"
-            data-category="paste"
-            checked
-          />
-          Copy/Paste</label
-        >
-        <label
-          ><input
-            type="checkbox"
-            class="assignment-compare-filter"
-            data-category="ai"
-            checked
-          />
-          AI</label
-        >
-        <label
-          ><input
-            type="checkbox"
-            class="assignment-compare-filter"
-            data-category="focus"
-            checked
-          />
-          Focus/Save</label
-        >
-        <label
-          ><input
-            type="checkbox"
-            class="assignment-compare-filter"
-            data-category="run"
-            checked
-          />
-          Run/Debug</label
-        >
-        <label
-          ><input
-            type="checkbox"
-            class="assignment-compare-filter"
-            data-category="other"
-            checked
-          />
-          Other</label
-        >
+        No session logs are available for this student yet.
       </div>
       <div
-        id="assignment-compare-panels"
+        id="assignment-student-sessions-list"
+        style="display: grid; gap: 10px"
+      ></div>
+    </div>
+
+    <div
+      id="assignment-session-log-view"
+      class="card"
+      style="display: none; padding: 14px; margin-top: 16px"
+    >
+      <h3
+        id="assignment-session-log-title"
+        style="margin-top: 0; margin-bottom: 10px"
+      >
+        Session Log
+      </h3>
+      <div
+        id="assignment-session-log-content"
         style="
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 12px;
+          background: var(--bg);
+          border: 1px solid var(--border);
+          padding: 10px;
+          border-radius: 6px;
+          font-family: monospace;
+          white-space: pre-wrap;
+          max-height: 400px;
+          overflow-y: auto;
         "
       ></div>
     </div>
-  </div>
-
-  <div
-    id="assignment-student-view"
-    class="card"
-    style="display: none; padding: 14px; margin-top: 16px"
-  >
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 12px;
-      "
-    >
-      <h3 id="assignment-student-title" style="margin: 0">Student Sessions</h3>
-      <button id="btn-back-to-assignment-students" class="btn btn-secondary">
-        Back to Students
-      </button>
-    </div>
-    <div
-      id="assignment-student-sessions-empty"
-      class="meta"
-      style="display: none; padding: 16px 0; text-align: center"
-    >
-      No session logs are available for this student yet.
-    </div>
-    <div
-      id="assignment-student-sessions-list"
-      style="display: grid; gap: 10px"
-    ></div>
-  </div>
-
-  <div
-    id="assignment-session-log-view"
-    class="card"
-    style="display: none; padding: 14px; margin-top: 16px"
-  >
-    <h3
-      id="assignment-session-log-title"
-      style="margin-top: 0; margin-bottom: 10px"
-    >
-      Session Log
-    </h3>
-    <div
-      id="assignment-session-log-content"
-      style="
-        background: var(--bg);
-        border: 1px solid var(--border);
-        padding: 10px;
-        border-radius: 6px;
-        font-family: monospace;
-        white-space: pre-wrap;
-        max-height: 400px;
-        overflow-y: auto;
-      "
-    ></div>
   </div>
 </div>

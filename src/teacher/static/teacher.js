@@ -50,6 +50,98 @@
     const themeToggle = $("themeToggle");
     const hamburgerBtn = $("hamburger");
     const sidebarEl = document.querySelector(".sidebar");
+    const assignSearchInput = $("assignment-student-search");
+    const assignSearchClear = $("assignment-search-clear");
+    const assignSearchDropdown = $("assignment-student-dropdown");
+    const assignSortSelect = $("assignment-student-sort");
+
+    // Helper to draw and filter the autocomplete dropdown
+    function updateAssignmentSearchDropdown() {
+      if (!assignSearchDropdown || !assignSearchInput) return;
+      const term = assignSearchInput.value.toLowerCase();
+
+      // Toggle "X" clear button
+      if (assignSearchClear) {
+        assignSearchClear.style.display = term ? "block" : "none";
+      }
+
+      assignSearchDropdown.innerHTML = "";
+      const students = currentAssignmentStudents || [];
+      const filtered = students.filter((s) => {
+        const name = (s.studentName || "").toLowerCase();
+        const email = (s.studentEmail || "").toLowerCase();
+        return name.includes(term) || email.includes(term);
+      });
+
+      if (filtered.length === 0) {
+        assignSearchDropdown.innerHTML =
+          '<div style="padding: 10px 14px; color: var(--muted); font-size: 0.9rem;">No students found</div>';
+      } else {
+        filtered.forEach((s) => {
+          const div = document.createElement("div");
+          div.style.cssText =
+            "padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 0.9rem;";
+          div.innerHTML = `<strong>${s.studentName || "Unknown"}</strong> <span class="meta" style="font-size: 0.8rem; margin-left: 6px;">${s.studentEmail || ""}</span>`;
+
+          // Hover effect
+          div.onmouseover = () => (div.style.background = "var(--bg)");
+          div.onmouseout = () => (div.style.background = "transparent");
+
+          // On click: set value, hide dropdown, and update UI
+          div.addEventListener("mousedown", (e) => {
+            e.preventDefault(); // Prevents input from losing focus
+            assignSearchInput.value = s.studentName || s.studentEmail || "";
+            assignSearchDropdown.style.display = "none";
+            if (assignSearchClear) assignSearchClear.style.display = "block";
+            renderAssignmentStudentCards();
+          });
+          assignSearchDropdown.appendChild(div);
+        });
+      }
+      assignSearchDropdown.style.display = "block";
+    }
+
+    // Attach listeners for Search Input
+    if (assignSearchInput) {
+      assignSearchInput.addEventListener(
+        "focus",
+        updateAssignmentSearchDropdown,
+      );
+      assignSearchInput.addEventListener("input", () => {
+        updateAssignmentSearchDropdown();
+        renderAssignmentStudentCards();
+      });
+    }
+
+    // Attach listeners for "X" Clear Button
+    if (assignSearchClear) {
+      assignSearchClear.addEventListener("click", () => {
+        if (assignSearchInput) {
+          assignSearchInput.value = "";
+          assignSearchInput.focus();
+        }
+        assignSearchClear.style.display = "none";
+        updateAssignmentSearchDropdown();
+        renderAssignmentStudentCards();
+      });
+    }
+
+    // Attach listeners for Sort Dropdown
+    if (assignSortSelect) {
+      assignSortSelect.addEventListener("change", renderAssignmentStudentCards);
+    }
+
+    // Close the autocomplete dropdown if the user clicks anywhere else on the screen
+    document.addEventListener("click", (e) => {
+      if (
+        assignSearchInput &&
+        assignSearchDropdown &&
+        !assignSearchInput.contains(e.target) &&
+        !assignSearchDropdown.contains(e.target)
+      ) {
+        assignSearchDropdown.style.display = "none";
+      }
+    });
 
     function post(command, payload = {}) {
       try {
@@ -1633,7 +1725,7 @@
 
       const view = $("assignment-work-view");
 
-      // BULLETPROOF FIX 1: If there are duplicate IDs from a dirty merge, force it to use the LAST one (the visible one)
+      // If there are duplicate IDs from a dirty merge, force it to use the LAST one (the visible one)
       const allLists = document.querySelectorAll("#assignment-work-list");
       const list = allLists.length > 0 ? allLists[allLists.length - 1] : null;
 
@@ -1654,21 +1746,13 @@
       clearAssignmentComparisonSelection();
 
       // Hide previous views
-      if (classDetailView) {
-        classDetailView.style.display = "none";
-      }
-      if ($("class-assignments-list")) {
+      if (classDetailView) classDetailView.style.display = "none";
+      if ($("class-assignments-list"))
         $("class-assignments-list").style.display = "none";
-      }
-      if ($("class-assignments-empty")) {
+      if ($("class-assignments-empty"))
         $("class-assignments-empty").style.display = "none";
-      }
-      if (studentView) {
-        studentView.style.display = "none";
-      }
-      if (logView) {
-        logView.style.display = "none";
-      }
+      if (studentView) studentView.style.display = "none";
+      if (logView) logView.style.display = "none";
 
       view.style.display = "block";
       list.innerHTML = "";
@@ -1676,15 +1760,77 @@
       title.textContent = `Assignment Details: ${currentAssignmentName || "Assignment"}`;
       meta.textContent = `Students who started: ${students.length || 0}`;
 
-      if (!students.length) {
+      // Reset search and sort when opening a new assignment
+      if ($("assignment-student-search"))
+        $("assignment-student-search").value = "";
+      if ($("assignment-student-sort"))
+        $("assignment-student-sort").value = "nameAsc";
+
+      renderAssignmentStudentCards();
+    } // <--- THIS CLOSING BRACE IS SUPER IMPORTANT!
+
+    // Handles filtering, sorting, and drawing the actual cards
+    function renderAssignmentStudentCards() {
+      // BULLETPROOF FIX 1: If there are duplicate IDs from a dirty merge, force it to use the LAST one
+      const allLists = document.querySelectorAll("#assignment-work-list");
+      const list = allLists.length > 0 ? allLists[allLists.length - 1] : null;
+      const empty = $("assignment-work-empty");
+
+      if (!list || !empty) return;
+      list.innerHTML = "";
+
+      if (
+        !currentAssignmentStudents ||
+        currentAssignmentStudents.length === 0
+      ) {
         empty.style.display = "block";
+        empty.textContent = "No students have started this assignment yet.";
+        updateAssignmentComparisonControls();
+        return;
+      }
+
+      // 1. Apply Search
+      const searchTerm = (
+        $("assignment-student-search")?.value || ""
+      ).toLowerCase();
+      let filtered = currentAssignmentStudents.filter((s) => {
+        const name = (s.studentName || "").toLowerCase();
+        const email = (s.studentEmail || "").toLowerCase();
+        return name.includes(searchTerm) || email.includes(searchTerm);
+      });
+
+      // 2. Apply Sorting
+      const sortVal = $("assignment-student-sort")?.value || "nameAsc";
+      filtered.sort((a, b) => {
+        if (sortVal === "nameAsc")
+          return (a.studentName || "").localeCompare(b.studentName || "");
+        if (sortVal === "nameDesc")
+          return (b.studentName || "").localeCompare(a.studentName || "");
+        if (sortVal === "sessionsDesc")
+          return (b.sessionCount || 0) - (a.sessionCount || 0);
+        if (sortVal === "eventsDesc")
+          return (b.totalEvents || 0) - (a.totalEvents || 0);
+        if (sortVal === "timeDesc" || sortVal === "timeAsc") {
+          const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+          const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+          const validA = !isNaN(timeA) ? timeA : 0;
+          const validB = !isNaN(timeB) ? timeB : 0;
+          return sortVal === "timeDesc" ? validB - validA : validA - validB;
+        }
+        return 0;
+      });
+
+      // 3. Handle Empty Filter Results
+      if (!filtered.length) {
+        empty.style.display = "block";
+        empty.textContent = "No students match the search filter.";
         updateAssignmentComparisonControls();
         return;
       }
       empty.style.display = "none";
 
-      students.forEach((s) => {
-        // BULLETPROOF FIX 2: Wrap the render in a try-catch so one bad row doesn't crash the whole UI
+      // 4. Draw Cards (Notice we use `filtered.forEach` now, not `students.forEach`)
+      filtered.forEach((s) => {
         try {
           if (!s) return;
 
@@ -1713,7 +1859,7 @@
             aiBadgeBg = "rgba(239, 68, 68, 0.1)";
           }
 
-          // BULLETPROOF FIX 3: Safe date parsing to prevent Chromium RangeError crashes
+          // Safe date parsing to prevent Chromium RangeError crashes
           let lastActiveStr = "Never Started";
           if (s.lastActive) {
             const parsedDate = new Date(s.lastActive);

@@ -2475,7 +2475,7 @@ export class DbStorageManager {
         await this.ensureClassesSchema();
 
         const result = await executeQuery(
-            `SELECT DISTINCT
+            `SELECT
                 s.Id AS SessionId,
                 ISNULL(slf.OriginalFilename,
                     CONCAT(u.Username, '-', p.Name, '-Session', s.Id, '-integrity.log')) AS FileName,
@@ -2487,12 +2487,17 @@ export class DbStorageManager {
              INNER JOIN dbo.Projects p ON p.Name = swa.WorkspaceName
              INNER JOIN dbo.Sessions s ON s.ProjectId = p.Id
              INNER JOIN dbo.Users u ON u.Id = s.UserId
-             LEFT JOIN dbo.SessionLogFiles slf ON slf.SessionId = s.Id
+             OUTER APPLY (
+                SELECT TOP 1 OriginalFilename
+                FROM dbo.SessionLogFiles slf
+                WHERE slf.SessionId = s.Id
+                ORDER BY slf.Id DESC
+             ) slf
              WHERE swa.ClassId = @classId
                AND swa.AssignmentId = @assignmentId
                AND swa.StudentAuthUserId = @studentAuthUserId
                AND c.TeacherAuthUserId = @teacherAuthUserId
-             ORDER BY s.StartedAt DESC`,
+             ORDER BY s.StartedAt DESC, s.Id DESC`,
             { classId, assignmentId, studentAuthUserId, teacherAuthUserId }
         );
 

@@ -1629,9 +1629,14 @@
 
     function renderAssignmentWork(payload) {
       const assignment = payload.assignment || {};
-      const students = payload.students || [];
+      const students = Array.isArray(payload.students) ? payload.students : [];
+
       const view = $("assignment-work-view");
-      const list = $("assignment-work-list");
+
+      // BULLETPROOF FIX 1: If there are duplicate IDs from a dirty merge, force it to use the LAST one (the visible one)
+      const allLists = document.querySelectorAll("#assignment-work-list");
+      const list = allLists.length > 0 ? allLists[allLists.length - 1] : null;
+
       const empty = $("assignment-work-empty");
       const title = $("assignment-work-title");
       const meta = $("assignment-work-meta");
@@ -1645,7 +1650,7 @@
 
       currentAssignmentId = assignment.id || currentAssignmentId;
       currentAssignmentName = assignment.name || currentAssignmentName;
-      currentAssignmentStudents = Array.isArray(students) ? students : [];
+      currentAssignmentStudents = students;
       clearAssignmentComparisonSelection();
 
       // Hide previous views
@@ -1668,8 +1673,8 @@
       view.style.display = "block";
       list.innerHTML = "";
 
-      title.textContent = `Student Work: ${currentAssignmentName || "Assignment"}`;
-      meta.textContent = `Students actively tracking data: ${students.length}`;
+      title.textContent = `Assignment Details: ${currentAssignmentName || "Assignment"}`;
+      meta.textContent = `Students who started: ${students.length || 0}`;
 
       if (!students.length) {
         empty.style.display = "block";
@@ -1679,108 +1684,116 @@
       empty.style.display = "none";
 
       students.forEach((s) => {
-        // We use a div container so the checkbox click doesn't bubble incorrectly
-        const card = document.createElement("div");
-        card.className = "card";
-        card.setAttribute(
-          "data-assignment-student-id",
-          String(s.authUserId || 0),
-        );
-        card.style.cssText =
-          "padding:16px; border:1px solid var(--border); background:var(--surface); display:flex; flex-direction:column; gap:14px;";
+        // BULLETPROOF FIX 2: Wrap the render in a try-catch so one bad row doesn't crash the whole UI
+        try {
+          if (!s) return;
 
-        // Calculate AI / External Paste Probability
-        const aiProb =
-          s.totalEvents > 0
-            ? Math.round((s.aiEventCount / s.totalEvents) * 100)
-            : 0;
-        let aiColor = "var(--fg)";
-        let aiBadgeBg = "var(--bg)";
-        if (aiProb > 15) {
-          aiColor = "#f59e0b";
-          aiBadgeBg = "rgba(245, 158, 11, 0.1)";
-        } // Orange (Suspicious)
-        if (aiProb >= 40) {
-          aiColor = "#ef4444";
-          aiBadgeBg = "rgba(239, 68, 68, 0.1)";
-        } // Red (High Risk)
-
-        const lastActiveStr = s.lastActive
-          ? new Date(s.lastActive).toLocaleString(undefined, {
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "Never Started";
-        const pathStr = s.workspaceRootPath || "No workspace linked";
-
-        card.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
-            <div>
-              <div style="font-weight:800; font-size:1.15rem; color:var(--accent);">${s.studentName || "Unknown Student"}</div>
-              <div class="meta" style="font-size:0.85rem; margin-top:2px;">${s.studentEmail || ""} &bull; ${s.role || "Student"}</div>
-            </div>
-            <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
-              <div style="font-size:0.85rem; font-weight:700; padding:6px 10px; background:${aiBadgeBg}; color:${aiColor}; border-radius:6px; border:1px solid ${aiColor};">
-                AI Likelihood: ${aiProb}%
-              </div>
-              <label class="meta" style="font-size:0.8rem; display:flex; align-items:center; gap:6px; cursor:pointer;">
-                <input type="checkbox" class="assignment-compare-checkbox" /> Compare
-              </label>
-            </div>
-          </div>
-
-          <div class="meta" style="font-size:0.85rem; font-family:monospace; background:var(--bg); padding:8px 12px; border-radius:4px; border:1px solid var(--border); word-break:break-all;">
-            📁 ${pathStr}
-          </div>
-
-          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; font-size:0.9rem; background:var(--bg); padding:12px; border-radius:6px; border:1px solid var(--border);">
-            <div style="display:flex; flex-direction:column; align-items:center; border-right:1px solid var(--border);">
-              <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Sessions</span>
-              <strong style="font-size:1.2rem; color:var(--fg);">${s.sessionCount}</strong>
-            </div>
-            <div style="display:flex; flex-direction:column; align-items:center; border-right:1px solid var(--border);">
-              <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Total Events</span>
-              <strong style="font-size:1.2rem; color:var(--fg);">${s.totalEvents}</strong>
-            </div>
-            <div style="display:flex; flex-direction:column; align-items:center;">
-              <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Last Active</span>
-              <strong style="font-size:0.9rem; margin-top:4px; color:var(--fg); text-align:center;">${lastActiveStr}</strong>
-            </div>
-          </div>
-          
-          <div style="margin-top:2px;">
-            <button class="btn btn-secondary assignment-open-student-btn" style="width:100%; padding:10px;">View Sessions</button>
-          </div>
-        `;
-
-        const openButton = card.querySelector(".assignment-open-student-btn");
-        const checkbox = card.querySelector(".assignment-compare-checkbox");
-
-        openButton?.addEventListener("click", () => {
-          if (!currentClassId || !currentAssignmentId) {
-            return;
-          }
-          post("openAssignmentStudent", {
-            classId: currentClassId,
-            assignmentId: currentAssignmentId,
-            studentAuthUserId: s.authUserId,
-            studentName: s.studentName || "Unknown Student",
-          });
-        });
-
-        checkbox?.addEventListener("change", (event) => {
-          const selected = toggleAssignmentStudentSelection(
-            s.authUserId,
-            !!event.target.checked,
+          const card = document.createElement("div");
+          card.className = "card";
+          card.setAttribute(
+            "data-assignment-student-id",
+            String(s.authUserId || 0),
           );
-          if (!selected) {
-            event.target.checked = false;
-          }
-        });
+          card.style.cssText =
+            "padding:16px; border:1px solid var(--border); background:var(--surface); display:flex; flex-direction:column; gap:14px;";
 
-        list.appendChild(card);
+          // Calculate AI / External Paste Probability
+          const aiProb =
+            s.totalEvents > 0
+              ? Math.round((s.aiEventCount / s.totalEvents) * 100)
+              : 0;
+          let aiColor = "var(--fg)";
+          let aiBadgeBg = "var(--bg)";
+          if (aiProb > 15) {
+            aiColor = "#f59e0b";
+            aiBadgeBg = "rgba(245, 158, 11, 0.1)";
+          }
+          if (aiProb >= 40) {
+            aiColor = "#ef4444";
+            aiBadgeBg = "rgba(239, 68, 68, 0.1)";
+          }
+
+          // BULLETPROOF FIX 3: Safe date parsing to prevent Chromium RangeError crashes
+          let lastActiveStr = "Never Started";
+          if (s.lastActive) {
+            const parsedDate = new Date(s.lastActive);
+            if (!isNaN(parsedDate.getTime())) {
+              lastActiveStr = parsedDate.toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+            }
+          }
+
+          const pathStr = s.workspaceRootPath || "No workspace linked";
+
+          card.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
+              <div>
+                <div style="font-weight:800; font-size:1.15rem; color:var(--accent);">${s.studentName || "Unknown Student"}</div>
+                <div class="meta" style="font-size:0.85rem; margin-top:2px;">${s.studentEmail || ""} &bull; ${s.role || "Student"}</div>
+              </div>
+              <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+                <div style="font-size:0.85rem; font-weight:700; padding:6px 10px; background:${aiBadgeBg}; color:${aiColor}; border-radius:6px; border:1px solid ${aiColor};">
+                  AI Likelihood: ${aiProb}%
+                </div>
+                <label class="meta" style="font-size:0.8rem; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="checkbox" class="assignment-compare-checkbox" /> Compare
+                </label>
+              </div>
+            </div>
+
+            <div class="meta" style="font-size:0.85rem; font-family:monospace; background:var(--bg); padding:8px 12px; border-radius:4px; border:1px solid var(--border); word-break:break-all;">
+              📁 ${pathStr}
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; font-size:0.9rem; background:var(--bg); padding:12px; border-radius:6px; border:1px solid var(--border);">
+              <div style="display:flex; flex-direction:column; align-items:center; border-right:1px solid var(--border);">
+                <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Sessions</span>
+                <strong style="font-size:1.2rem; color:var(--fg);">${s.sessionCount || 0}</strong>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; border-right:1px solid var(--border);">
+                <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Total Events</span>
+                <strong style="font-size:1.2rem; color:var(--fg);">${s.totalEvents || 0}</strong>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center;">
+                <span class="meta" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px;">Last Active</span>
+                <strong style="font-size:0.9rem; margin-top:4px; color:var(--fg); text-align:center;">${lastActiveStr}</strong>
+              </div>
+            </div>
+            
+            <div style="margin-top:2px;">
+              <button class="btn btn-secondary assignment-open-student-btn" style="width:100%; padding:10px;">View Sessions</button>
+            </div>
+          `;
+
+          const openButton = card.querySelector(".assignment-open-student-btn");
+          const checkbox = card.querySelector(".assignment-compare-checkbox");
+
+          openButton?.addEventListener("click", () => {
+            if (!currentClassId || !currentAssignmentId) return;
+            post("openAssignmentStudent", {
+              classId: currentClassId,
+              assignmentId: currentAssignmentId,
+              studentAuthUserId: s.authUserId,
+              studentName: s.studentName || "Unknown Student",
+            });
+          });
+
+          checkbox?.addEventListener("change", (event) => {
+            const selected = toggleAssignmentStudentSelection(
+              s.authUserId,
+              !!event.target.checked,
+            );
+            if (!selected) event.target.checked = false;
+          });
+
+          list.appendChild(card);
+        } catch (err) {
+          console.error("Failed to render student card:", err);
+        }
       });
 
       updateAssignmentComparisonControls();
@@ -1887,14 +1900,17 @@
     });
 
     $("btn-back-to-assignments")?.addEventListener("click", () => {
-      if ($("assignment-work-view")) {
-        $("assignment-work-view").style.display = "none";
-      }
       if ($("assignment-student-view")) {
         $("assignment-student-view").style.display = "none";
       }
       if ($("assignment-session-log-view")) {
         $("assignment-session-log-view").style.display = "none";
+      }
+      if ($("class-detail-view")) {
+        $("class-detail-view").style.display = "block";
+      }
+      if ($("assignment-work-view")) {
+        $("assignment-work-view").style.display = "none";
       }
       clearAssignmentComparisonSelection();
       restoreAssignmentListVisibility();
@@ -1906,6 +1922,9 @@
       }
       if ($("assignment-session-log-view")) {
         $("assignment-session-log-view").style.display = "none";
+      }
+      if ($("assignment-work-view")) {
+        $("assignment-work-view").style.display = "block";
       }
     });
 

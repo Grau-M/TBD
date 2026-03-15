@@ -1131,7 +1131,7 @@ export class DbStorageManager {
     }
 
     private async insertEventsWithLatestWins(sessionId: number, events: StandardEvent[]): Promise<{ inserted: number; dropped: number }> {
-        if (!events || events.length === 0) return { inserted: 0, dropped: 0 };
+        if (!events || events.length === 0) {return { inserted: 0, dropped: 0 };}
 
         // 1. Fetch existing events from the cloud
         // 👉 IMPORTANT: Change 'EventData' to whatever column name stores your JSON string in the SessionEvents table!

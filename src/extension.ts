@@ -174,6 +174,10 @@ export async function activate(context: vscode.ExtensionContext) {
     } else {
         state.isConsentGiven = false; 
     }
+    if (process.env.CI === 'true') {
+        console.log('[TBD Logger] CI environment detected: Auto-granting consent for automated tests.');
+        state.isConsentGiven = true;
+    }
     // 👉 END OF CONSENT GATE
     // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {

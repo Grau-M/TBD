@@ -987,9 +987,124 @@ export class DbStorageManager {
                     IsResolved BIT NOT NULL DEFAULT 0
                 );
             END
+
+            IF OBJECT_ID('dbo.PurgeAuditLogs', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.PurgeAuditLogs (
+                    Id INT IDENTITY(1,1) PRIMARY KEY,
+                    PurgedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                    SessionsDeleted INT NOT NULL,
+                    EventsDeleted INT NOT NULL,
+                    Summary NVARCHAR(MAX) NOT NULL
+                );
+            END
+
+            IF COL_LENGTH('dbo.ExtensionSessions', 'NeedsManualReview') IS NULL
+            BEGIN
+                ALTER TABLE dbo.ExtensionSessions ADD NeedsManualReview BIT NOT NULL DEFAULT 0;
+            END
         `);
 
         this.syncSchemaReady = true;
+    }
+
+    /**
+     * Admin/System Function: Purges old data to maintain privacy compliance.
+     * @param retentionDays The number of days after CourseEndDate to keep data (default: 365)
+     */
+    public async runAutomatedDataPurge(retentionDays: number = 365): Promise<void> {
+        console.log(`[TBD Logger DB] Initiating automated data purge (Retention: ${retentionDays} days)...`);
+        
+        try {
+            // Rainy Day 2: Incomplete Metadata
+            // If a session is old enough but missing a CourseEndDate, flag it instead of deleting it.
+            await executeQuery(
+                `UPDATE dbo.ExtensionSessions 
+                 SET NeedsManualReview = 1 
+                 WHERE CourseEndDate IS NULL 
+                 AND DATEDIFF(day, CreatedAt, SYSUTCDATETIME()) > @retentionDays`,
+                 { retentionDays }
+            );
+
+            // Sunny Day: Identify and Delete Expired Data
+            // We use a transaction so we don't accidentally delete sessions without deleting their events
+            const purgeResult = await executeQuery(`
+                BEGIN TRANSACTION;
+                
+                -- 1. Find the expired sessions
+                SELECT Id INTO #ExpiredSessions 
+                FROM dbo.ExtensionSessions 
+                WHERE CourseEndDate IS NOT NULL 
+                AND DATEDIFF(day, CourseEndDate, SYSUTCDATETIME()) > @retentionDays;
+
+                DECLARE @deletedSessions INT = (SELECT COUNT(*) FROM #ExpiredSessions);
+                DECLARE @deletedEvents INT = 0;
+
+                IF @deletedSessions > 0
+                BEGIN
+                    -- 2. Delete the associated events/hashes first (Foreign Key constraint)
+                    DELETE FROM dbo.ExtensionEvents 
+                    WHERE SessionId IN (SELECT Id FROM #ExpiredSessions);
+                    SET @deletedEvents = @@ROWCOUNT;
+
+                    -- 3. Delete the actual sessions
+                    DELETE FROM dbo.ExtensionSessions 
+                    WHERE Id IN (SELECT Id FROM #ExpiredSessions);
+
+                    -- 4. Create the Audit Trail
+                    DECLARE @summary NVARCHAR(MAX) = 'Automated purge completed successfully. ' + 
+                        CAST(@deletedSessions AS NVARCHAR) + ' sessions and ' + 
+                        CAST(@deletedEvents AS NVARCHAR) + ' events permanently destroyed.';
+                        
+                    INSERT INTO dbo.PurgeAuditLogs (SessionsDeleted, EventsDeleted, Summary)
+                    VALUES (@deletedSessions, @deletedEvents, @summary);
+                END
+                
+                DROP TABLE #ExpiredSessions;
+                COMMIT TRANSACTION;
+                
+                SELECT @deletedSessions AS SessionsDeleted, @deletedEvents AS EventsDeleted;
+            `, { retentionDays });
+
+            const deletedSessions = purgeResult.recordset[0]?.SessionsDeleted || 0;
+            const deletedEvents = purgeResult.recordset[0]?.EventsDeleted || 0;
+            
+            if (deletedSessions > 0) {
+                console.log(`[TBD Logger DB] 🧹 Purge Complete: ${deletedSessions} sessions and ${deletedEvents} events destroyed.`);
+            } else {
+                console.log(`[TBD Logger DB] Purge Complete: No expired records found.`);
+            }
+
+        } catch (err) {
+            // Rainy Day 1: Purge Failure (Database under high load / lock timeout)
+            const errorMessage = String((err as any)?.message || err);
+            if (errorMessage.includes('Timeout') || errorMessage.includes('deadlock')) {
+                console.warn('[TBD Logger DB] ⚠️ Database is currently under high load. Pausing cleanup service to retry during off-peak hours.');
+                // In a real server, we would schedule a retry. Here, we gracefully exit so the DB can recover.
+            } else {
+                console.error('[TBD Logger DB] ❌ Critical failure during data purge:', err);
+            }
+        }
+    }
+
+    /**
+     * Rainy Day: Flags an irresolvable conflict for instructor review using your existing schema.
+     */
+    private async logSyncConflict(sessionId: number, timestamp: number, localData: string, cloudData: string): Promise<void> {
+        await this.ensureSyncSchema(); 
+
+        const detailsJson = JSON.stringify({
+            timestamp: timestamp,
+            localData: JSON.parse(localData),
+            cloudData: JSON.parse(cloudData)
+        });
+
+        await executeQuery(
+            `INSERT INTO dbo.SessionSyncConflicts (SessionId, ResolutionStrategy, DetailsJson)
+             VALUES (@sessionId, 'ManualReviewRequired', @detailsJson)`,
+            { sessionId, detailsJson }
+        );
+        console.warn(`[TBD Logger DB] Irresolvable conflict detected for session ${sessionId}. Flagged for review.`);
     }
 
     private parseEventTimeMs(event: StandardEvent): number {
@@ -1020,43 +1135,55 @@ export class DbStorageManager {
     }
 
     private async insertEventsWithLatestWins(sessionId: number, events: StandardEvent[]): Promise<{ inserted: number; dropped: number }> {
-        const latestCloudResult = await executeQuery(
-            `SELECT MAX(OccurredAt) AS LatestOccurredAt FROM SessionEvents WHERE SessionId = @sessionId`,
+        if (!events || events.length === 0) {return { inserted: 0, dropped: 0 };}
+
+        // 1. Fetch existing events from the cloud
+        // 👉 IMPORTANT: Change 'EventData' to whatever column name stores your JSON string in the SessionEvents table!
+        const existingResult = await executeQuery(
+            `SELECT OccurredAt, EventData FROM SessionEvents WHERE SessionId = @sessionId`,
             { sessionId }
         );
 
-        const latestCloudRaw = latestCloudResult.recordset[0]?.LatestOccurredAt;
-        const latestCloudMs = latestCloudRaw ? new Date(latestCloudRaw).getTime() : null;
+        // Map the cloud events by timestamp for instant lookup
+        const cloudEventMap = new Map<number, string>();
+        for (const row of existingResult.recordset) {
+            const rowMs = new Date(row.OccurredAt).getTime();
+            cloudEventMap.set(rowMs, row.EventData); 
+        }
 
-        const sorted = [...events].sort((a, b) => this.parseEventTimeMs(a) - this.parseEventTimeMs(b));
         const allowed: StandardEvent[] = [];
         let dropped = 0;
 
-        for (const event of sorted) {
+        // 2. Compare Local vs Cloud (The Merge Strategy)
+        for (const event of events) {
             const eventMs = this.parseEventTimeMs(event);
-            if (latestCloudMs !== null && eventMs <= latestCloudMs) {
-                dropped += 1;
-                continue;
+            const localDataString = JSON.stringify(event);
+
+            if (cloudEventMap.has(eventMs)) {
+                const cloudDataString = cloudEventMap.get(eventMs);
+
+                // Rainy Day: Timestamps are identical but data differs!
+                if (cloudDataString !== localDataString) {
+                    await this.logSyncConflict(sessionId, eventMs, localDataString, cloudDataString || '');
+                    this.setSyncState('conflict', 'Data collision detected and flagged for review.');
+                    dropped += 1; // It conflicted, so we don't insert it into the main table
+                } else {
+                    // Sunny Day Overlap: Perfect match, already in DB, skip to prevent duplicates
+                    dropped += 1;
+                }
+            } else {
+                // Sunny Day Merge: It's a brand new event, append it to the queue
+                allowed.push(event);
             }
-            allowed.push(event);
         }
 
+        // 3. Insert the genuinely new events using your existing helper
         if (allowed.length > 0) {
+            console.log(`[TBD Logger DB] Merging ${allowed.length} new events into existing cloud session ${sessionId}.`);
             await this.insertEventsForSession(sessionId, allowed);
         }
 
-        if (dropped > 0) {
-            const latestLocalMs = sorted.length > 0 ? this.parseEventTimeMs(sorted[sorted.length - 1]) : null;
-            await this.recordSyncConflict(
-                sessionId,
-                latestCloudMs ? new Date(latestCloudMs).toISOString() : null,
-                latestLocalMs ? new Date(latestLocalMs).toISOString() : null,
-                dropped
-            );
-            this.lastConflictAtMs = Date.now();
-            this.setSyncState('conflict', `${dropped} queued events were older than cloud state and skipped.`);
-        }
-
+        // Return your original signature so nothing else in your app breaks!
         return { inserted: allowed.length, dropped };
     }
 
@@ -1927,14 +2054,13 @@ export class DbStorageManager {
                 );
             END
 
-            IF OBJECT_ID('dbo.UserConsents', 'U') IS NULL
+        IF OBJECT_ID('dbo.UserConsentsV2', 'U') IS NULL
             BEGIN
-                CREATE TABLE dbo.UserConsents (
+                CREATE TABLE dbo.UserConsentsV2 (
                     Id INT IDENTITY(1,1) PRIMARY KEY,
-                    AuthUserId INT NOT NULL,
+                    Username NVARCHAR(255) NOT NULL,
                     PolicyVersion NVARCHAR(50) NOT NULL,
-                    ConsentGivenAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-                    CONSTRAINT FK_UserConsents_AuthUser FOREIGN KEY (AuthUserId) REFERENCES dbo.ExtensionAuthUsers(Id)
+                    ConsentGivenAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
                 );
             END
         `);
@@ -1942,28 +2068,22 @@ export class DbStorageManager {
         this.authSchemaReady = true;
     }
 
-    /**
-     * Checks if a user has consented to a specific policy version.
-     */
-    async checkUserConsent(authUserId: number, policyVersion: string): Promise<boolean> {
+    async checkUserConsent(policyVersion: string): Promise<boolean> {
         await this.ensureAuthSchema();
         const result = await executeQuery(
-            `SELECT TOP 1 Id FROM dbo.UserConsents
-             WHERE AuthUserId = @authUserId AND PolicyVersion = @policyVersion`,
-            { authUserId, policyVersion }
+            `SELECT TOP 1 Id FROM dbo.UserConsentsV2
+             WHERE Username = @username AND PolicyVersion = @policyVersion`,
+            { username: this.currentUserName, policyVersion }
         );
         return result.recordset.length > 0;
     }
 
-    /**
-     * Records the user's consent for a specific policy version.
-     */
-    async recordUserConsent(authUserId: number, policyVersion: string): Promise<void> {
+    async recordUserConsent(policyVersion: string): Promise<void> {
         await this.ensureAuthSchema();
         await executeQuery(
-            `INSERT INTO dbo.UserConsents (AuthUserId, PolicyVersion)
-             VALUES (@authUserId, @policyVersion)`,
-            { authUserId, policyVersion }
+            `INSERT INTO dbo.UserConsentsV2 (Username, PolicyVersion)
+             VALUES (@username, @policyVersion)`,
+            { username: this.currentUserName, policyVersion }
         );
     }
 

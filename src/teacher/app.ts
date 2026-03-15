@@ -52,6 +52,28 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     panel = undefined;
   }, null, context.subscriptions);
 
+  // Auto-Heals the connection if the cloud database was recently wiped or recreated
+  const getValidTeacherId = async (): Promise<number> => {
+    // Cast to 'any' to dynamically pull whatever data is available in the local cache
+    const session = getWorkspaceAuthSession(context) as any;
+    if (!session?.authenticated) {
+      throw new Error('Not authenticated. Please restart the extension and log in.');
+    }
+
+    // Force-register the local cached user into the new database to get a valid Foreign Key ID
+    const authResult = await storageManager.upsertAuthUser({
+      provider: session.provider || 'local-cache',
+      subjectId: session.subjectId || session.email || 'teacher-sync',
+      email: session.email || 'teacher@example.com',
+      displayName: session.displayName || session.name || 'Teacher'
+    });
+
+    // Ensure the new database recognizes this ID as a Teacher
+    await storageManager.updateAuthUserRole(authResult.authUserId, 'Teacher');
+
+    return authResult.authUserId; // Returns the fresh, valid ID for the new database!
+  };
+
   panel.webview.onDidReceiveMessage(async message => {
     try {
       switch (message.command) {
@@ -127,24 +149,16 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         case 'listClasses': {
-          const session = getWorkspaceAuthSession(context);
-          if (!session?.authenticated) {
-            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
-            break;
-          }
-          const classes = await storageManager.listTeacherClasses(session.authUserId);
+          const teacherId = await getValidTeacherId();
+          const classes = await storageManager.listTeacherClasses(teacherId);
           panel?.webview.postMessage({ command: 'classList', data: classes });
           break;
         }
 
         case 'createClass': {
-          const session = getWorkspaceAuthSession(context);
-          if (!session?.authenticated) {
-            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
-            break;
-          }
+          const teacherId = await getValidTeacherId();
           const newClass = await storageManager.createClass({
-            teacherAuthUserId: session.authUserId,
+            teacherAuthUserId: teacherId, 
             courseName: message.courseName,
             courseCode: message.courseCode,
             teacherName: message.teacherName,
@@ -157,14 +171,10 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         case 'updateClass': {
-          const session = getWorkspaceAuthSession(context);
-          if (!session?.authenticated) {
-            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
-            break;
-          }
+          const teacherId = await getValidTeacherId();
           await storageManager.updateClass({
             classId: Number(message.classId),
-            teacherAuthUserId: session.authUserId,
+            teacherAuthUserId: teacherId, 
             courseName: message.courseName,
             courseCode: message.courseCode,
             teacherName: message.teacherName,
@@ -177,43 +187,30 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         case 'openClass': {
-          const session = getWorkspaceAuthSession(context);
-          if (!session?.authenticated) {
-            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
-            break;
-          }
-
+          const teacherId = await getValidTeacherId();
           const classId = Number(message.classId);
-          const classInfo = await storageManager.getTeacherClassById(classId, session.authUserId);
+          
+          const classInfo = await storageManager.getTeacherClassById(classId, teacherId);
           if (!classInfo) {
             panel?.webview.postMessage({ command: 'error', message: 'Class not found or access denied.' });
             break;
           }
 
-          const students = await storageManager.listClassStudentsSummary(classId, session.authUserId);
-          const assignments = await storageManager.listClassAssignments(classId, session.authUserId);
+          const students = await storageManager.listClassStudentsSummary(classId, teacherId);
+          const assignments = await storageManager.listClassAssignments(classId, teacherId);
 
           panel?.webview.postMessage({
             command: 'classDetails',
-            data: {
-              classInfo,
-              students,
-              assignments
-            }
+            data: { classInfo, students, assignments }
           });
           break;
         }
 
         case 'createClassAssignment': {
-          const session = getWorkspaceAuthSession(context);
-          if (!session?.authenticated) {
-            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
-            break;
-          }
-
+          const teacherId = await getValidTeacherId();
           const assignment = await storageManager.createClassAssignment({
             classId: Number(message.classId),
-            teacherAuthUserId: session.authUserId,
+            teacherAuthUserId: teacherId,
             name: message.name,
             description: message.description || '',
             dueDate: message.dueDate || undefined
@@ -224,28 +221,24 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         case 'openAssignmentWork': {
-          const session = getWorkspaceAuthSession(context);
-          if (!session?.authenticated) {
-            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
-            break;
-          }
-
+          const teacherId = await getValidTeacherId();
           const classId = Number(message.classId);
           const assignmentId = Number(message.assignmentId);
-          const classInfo = await storageManager.getTeacherClassById(classId, session.authUserId);
+          
+          const classInfo = await storageManager.getTeacherClassById(classId, teacherId);
           if (!classInfo) {
             panel?.webview.postMessage({ command: 'error', message: 'Class not found or access denied.' });
             break;
           }
 
-          const assignments = await storageManager.listClassAssignments(classId, session.authUserId);
+          const assignments = await storageManager.listClassAssignments(classId, teacherId);
           const assignment = assignments.find(a => a.id === assignmentId);
           if (!assignment) {
             panel?.webview.postMessage({ command: 'error', message: 'Assignment not found.' });
             break;
           }
 
-          const students = await storageManager.listAssignmentStudentWork(classId, assignmentId, session.authUserId);
+          const students = await storageManager.listAssignmentStudentWork(classId, assignmentId, teacherId);
           panel?.webview.postMessage({
             command: 'assignmentWorkData',
             data: { classInfo, assignment, students }
@@ -254,12 +247,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         case 'openAssignmentStudent': {
-          const session = getWorkspaceAuthSession(context);
-          if (!session?.authenticated) {
-            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
-            break;
-          }
-
+          const teacherId = await getValidTeacherId();
           const classId = Number(message.classId);
           const assignmentId = Number(message.assignmentId);
           const studentAuthUserId = Number(message.studentAuthUserId);
@@ -268,7 +256,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             classId,
             assignmentId,
             studentAuthUserId,
-            session.authUserId
+            teacherId
           );
 
           panel?.webview.postMessage({
@@ -285,27 +273,23 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         case 'compareAssignmentStudents': {
-          const session = getWorkspaceAuthSession(context);
-          if (!session?.authenticated) {
-            panel?.webview.postMessage({ command: 'error', message: 'Not authenticated.' });
-            break;
-          }
-
+          const teacherId = await getValidTeacherId();
           const classId = Number(message.classId);
           const assignmentId = Number(message.assignmentId);
           const requestedStudents = Array.isArray(message.students) ? message.students.slice(0, 2) : [];
+          
           if (requestedStudents.length < 2) {
             panel?.webview.postMessage({ command: 'error', message: 'Select two students to compare.' });
             break;
           }
 
-          const classInfo = await storageManager.getTeacherClassById(classId, session.authUserId);
+          const classInfo = await storageManager.getTeacherClassById(classId, teacherId);
           if (!classInfo) {
             panel?.webview.postMessage({ command: 'error', message: 'Class not found or access denied.' });
             break;
           }
 
-          const assignments = await storageManager.listClassAssignments(classId, session.authUserId);
+          const assignments = await storageManager.listClassAssignments(classId, teacherId);
           const assignment = assignments.find(a => a.id === assignmentId);
           if (!assignment) {
             panel?.webview.postMessage({ command: 'error', message: 'Assignment not found.' });
@@ -315,18 +299,15 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           const selections = [];
           for (const requested of requestedStudents) {
             const studentAuthUserId = Number(requested?.studentAuthUserId);
-            if (!Number.isFinite(studentAuthUserId) || studentAuthUserId <= 0) {
-              continue;
-            }
+            if (!Number.isFinite(studentAuthUserId) || studentAuthUserId <= 0) continue;
 
             const sessions = await storageManager.listAssignmentStudentSessions(
               classId,
               assignmentId,
               studentAuthUserId,
-              session.authUserId
+              teacherId
             );
 
-            // Compare mode prioritizes the most recent sessions to keep response time predictable.
             const limitedSessions = sessions.slice(0, 12);
             selections.push({
               studentAuthUserId,

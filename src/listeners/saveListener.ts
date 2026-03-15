@@ -20,7 +20,7 @@ export function createSaveListener(): vscode.Disposable {
         const currentTime = Date.now();
         const timeDiff = currentTime - state.lastEventTime;
         state.lastEventTime = currentTime;
-
+        if (!state.isConsentGiven) {return; }
         const formattedTime = formatTimestamp(currentTime);
         const fileEdit = doc ? vscode.workspace.asRelativePath(doc.uri, false) : '';
         const active = vscode.window.activeTextEditor;

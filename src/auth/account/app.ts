@@ -26,9 +26,17 @@ async function promptStudentClassJoin(storageManager: DbStorageManager, authUser
         return false;
     }
 
-    await storageManager.enrollStudentInClass(authUserId, linkedClass);
-    vscode.window.showInformationMessage(`Joined ${linkedClass.courseName} (${linkedClass.courseCode}).`);
-    return true;
+    //see if they were already in the class
+    const isNewEnrollment = await storageManager.enrollStudentInClass(authUserId, linkedClass);
+    
+    if (isNewEnrollment) {
+        vscode.window.showInformationMessage(`Successfully joined ${linkedClass.courseName} (${linkedClass.courseCode}).`);
+    } else {
+        // RAINY DAY: Double Enrollment Message
+        vscode.window.showInformationMessage(`You are already enrolled in ${linkedClass.courseName}.`);
+    }
+    
+    return true; // We return true because the end state (being in the class) is successful
 }
 
 export async function openAccountView(

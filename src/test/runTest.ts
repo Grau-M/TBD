@@ -13,6 +13,7 @@ async function main() {
 	let linkRoot = '';
 	let userDataDir = '';
 	let extensionsDir = '';
+	process.env.CI = process.env.CI || 'true';
 	try {
 		const workspaceRoot = path.resolve(__dirname, '../../');
 		linkRoot = createTempJunction(workspaceRoot);

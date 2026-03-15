@@ -143,14 +143,15 @@ export async function activate(context: vscode.ExtensionContext) {
             await openAuthView(context, storageManager);
         }
     }
-const CURRENT_POLICY_VERSION = 'v1.0'; 
+// 👉 UPDATED CONSENT GATE
+    const CURRENT_POLICY_VERSION = 'v1.0'; 
     const currentAuth = getWorkspaceAuthSession(context);
     
-    if (currentAuth?.authenticated && currentAuth.authUserId) {
-        const hasConsented = await storageManager.checkUserConsent(currentAuth.authUserId, CURRENT_POLICY_VERSION);
+    if (currentAuth?.authenticated) {
+        // We now just check consent using the policy version
+        const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
         
         if (!hasConsented) {
-            // Sunny Day: Show non-dismissible modal
             const choice = await vscode.window.showInformationMessage(
                 'Privacy Policy: Coding activity is being recorded for academic integrity purposes. By continuing, you acknowledge and agree to this tracking as a condition of using TBD Logger.',
                 { modal: true },
@@ -159,22 +160,21 @@ const CURRENT_POLICY_VERSION = 'v1.0';
             );
 
             if (choice === 'I Acknowledge and Agree') {
-                await storageManager.recordUserConsent(currentAuth.authUserId, CURRENT_POLICY_VERSION);
+                await storageManager.recordUserConsent(CURRENT_POLICY_VERSION);
                 state.isConsentGiven = true;
-                updateAuthStatusBar(context); // <-- Update UI
+                updateAuthStatusBar(context);
             } else {
-                // Rainy Day: Declined Consent
                 state.isConsentGiven = false;
-                updateAuthStatusBar(context); // <-- Update UI to show red warning
-                vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded or validated for academic integrity.');
+                updateAuthStatusBar(context);
+                vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded.');
             }
         } else {
             state.isConsentGiven = true;
         }
     } else {
-        // Fallback for unauthenticated or offline
         state.isConsentGiven = false; 
     }
+    // 👉 END OF CONSENT GATE
     // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
         inactivityThresholdMs: 5 * 60 * 1000, // 5 minutes (change if you want)
@@ -532,8 +532,16 @@ const forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync',
 
     context.subscriptions.push(openSyncViewCommand); //
 
+    // Admin Command to manually trigger the Data Purge (For Capstone Demo)
+    context.subscriptions.push(vscode.commands.registerCommand('tbd.admin.runPurge', async () => {
+        vscode.window.showInformationMessage('TBD Logger: Initiating data purge. Check console for details.');
+        // You can change '365' to '0' during your demo if you want it to delete EVERYTHING for a live demonstration!
+        await storageManager.runAutomatedDataPurge(365); 
+    }));
+
     //Return the internals so the Test Suite can see them
     return { state, storageManager };
+    
     
 }
 

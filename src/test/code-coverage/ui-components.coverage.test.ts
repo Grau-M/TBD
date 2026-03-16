@@ -179,6 +179,12 @@ suite('Code Coverage: UI Components', () => {
             assert.ok(result.flags.includes('NO_DATA'), 'Should flag NO_DATA');
         });
 
+        test('computeConfidence handles non-array input defensively', () => {
+            const result = computeConfidence('not-an-array' as any);
+            assert.strictEqual(result.label, 'Low', 'Should treat invalid input as no data');
+            assert.strictEqual(result.stats.eventCount, 0, 'Event count should default to 0 for invalid input');
+        });
+
         test('computeConfidence handles low volume', () => {
             const events = Array.from({length: 30}, (_, i) => ({
                 time: new Date(Date.now() - i * 1000).toISOString()
@@ -223,6 +229,19 @@ suite('Code Coverage: UI Components', () => {
             assert.ok(result.stats.integrityWarnings > 0, 'Should detect integrity warnings');
         });
 
+        test('computeConfidence detects corrupt/tamper integrity keyword variants', () => {
+            const events = [
+                { time: new Date().toISOString(), possibleAiDetection: 'log appears corrupt' },
+                { time: new Date().toISOString(), possibleAiDetection: 'tamper evidence present' },
+                ...Array.from({ length: 120 }, (_, i) => ({
+                    time: new Date(Date.now() - i * 1000).toISOString()
+                }))
+            ];
+
+            const result = computeConfidence(events);
+            assert.ok(result.stats.integrityWarnings >= 2, 'Should count corrupt/tamper keywords as integrity warnings');
+        });
+
         test('computeConfidence clamps score', () => {
             const events = [
                 {
@@ -234,6 +253,79 @@ suite('Code Coverage: UI Components', () => {
             
             const result = computeConfidence(events);
             assert.ok(result.score >= 0 && result.score <= 100, 'Score should be 0-100');
+        });
+
+        test('computeConfidence returns clean OK result when data is complete', () => {
+            const now = Date.now();
+            const events = Array.from({ length: 220 }, (_, i) => ({
+                time: new Date(now - i * 1000).toISOString(),
+                fileView: 'active.ts'
+            }));
+
+            const result = computeConfidence(events);
+            assert.strictEqual(result.label, 'High', 'Should stay High with strong data');
+            assert.strictEqual(result.score, 100, 'Should remain at full score');
+            assert.ok(result.flags.includes('OK'), 'Should mark clean logs as OK');
+        });
+
+        test('computeConfidence reaches Medium label for moderate penalties', () => {
+            const now = Date.now();
+            const events: Array<{ time: string; fileView?: string }> = [];
+
+            // Cluster 1
+            for (let i = 0; i < 40; i++) {
+                events.push({ time: new Date(now - i * 1000).toISOString(), fileView: 'main.ts' });
+            }
+            // Gap > 30m
+            for (let i = 0; i < 30; i++) {
+                events.push({ time: new Date(now - 40 * 60 * 1000 - i * 1000).toISOString(), fileView: 'main.ts' });
+            }
+            // Another gap > 30m
+            for (let i = 0; i < 30; i++) {
+                events.push({ time: new Date(now - 80 * 60 * 1000 - i * 1000).toISOString(), fileView: 'main.ts' });
+            }
+
+            events.push({ time: new Date(now - 3000).toISOString(), fileView: '[INTERRUPTION] Session Paused' });
+            events.push({ time: new Date(now - 4000).toISOString(), fileView: '[INTERRUPTION] Session Paused' });
+            events.push({ time: new Date(now - 5000).toISOString(), fileView: '[INTERRUPTION] Session Paused' });
+
+            const result = computeConfidence(events);
+            assert.strictEqual(result.label, 'Medium', 'Should downgrade to Medium for stacked moderate penalties');
+            assert.ok(result.flags.includes('MED_VOLUME'), 'Should include medium volume flag');
+            assert.ok(result.flags.includes('MED_GAPS'), 'Should include medium gaps flag');
+            assert.ok(result.flags.includes('SOME_PAUSES'), 'Should include some pauses flag');
+        });
+
+        test('computeConfidence handles invalid timestamp entries safely', () => {
+            const events = [
+                { time: 'not-a-timestamp', fileView: 'main.ts' },
+                { time: new Date().toISOString(), fileView: 'main.ts' },
+                { fileView: 'main.ts' } as any
+            ];
+
+            const result = computeConfidence(events);
+            assert.ok(result.score >= 0 && result.score <= 100, 'Should still return valid score with malformed times');
+        });
+
+        test('computeConfidence reaches Low label when penalties stack heavily', () => {
+            const now = Date.now();
+            const events: Array<{ time: string; fileView?: string; possibleAiDetection?: string }> = [];
+
+            for (let i = 0; i < 20; i++) {
+                events.push({ time: new Date(now - i * 1000).toISOString(), fileView: 'main.ts' });
+            }
+            for (let i = 0; i < 10; i++) {
+                events.push({
+                    time: new Date(now - 3 * 60 * 60 * 1000 - i * 1000).toISOString(),
+                    fileView: '[INTERRUPTION] Session Paused',
+                    possibleAiDetection: 'integrity warning'
+                });
+            }
+
+            const result = computeConfidence(events);
+            assert.strictEqual(result.label, 'Low', 'Should drop to Low when severe penalties stack');
+            assert.ok(result.flags.includes('LARGE_GAPS'), 'Should include large gaps flag');
+            assert.ok(result.flags.includes('INTEGRITY_WARNING'), 'Should include integrity warning flag');
         });
     });
 });

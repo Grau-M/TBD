@@ -34,6 +34,12 @@
   "contributes": {
     "commands": [
       {
+        "command": "tbd.admin.runPurge",
+        "title": "TBD Logger: Run Automated Data Purge",
+        "category": "Admin"
+      },
+      
+      {
         "command": "tbd-logger.helloWorld",
         "title": "Hello World"
       },
@@ -107,7 +113,7 @@
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "node ./out/test/runTest.js",
-    "test:coverage": "c8 --reporter=html --reporter=text --reporter=lcov npm test",
+    "test:coverage": "node ./run-coverage.js",
     "generate-test-log": "node ./test/scripts/generate_test_log.js"
   },
   "devDependencies": {

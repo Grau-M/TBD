@@ -21,7 +21,7 @@ export function createEditListener(): vscode.Disposable {
     return vscode.workspace.onDidChangeTextDocument((event) => {
         // 1. IGNORE CHECKS
         if (event.contentChanges.length === 0) { return; }
-        //if (!state.isConsentGiven) {return; }
+        if (!state.isConsentGiven) {return; }
         // Use relative path to check for ignored files (logs, enc, etc.)
         const docPath = vscode.workspace.asRelativePath(event.document.uri, false);
         if (isIgnoredPath(docPath)) {return;}

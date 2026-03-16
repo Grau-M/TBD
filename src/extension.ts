@@ -144,7 +144,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     }
 // 👉 UPDATED CONSENT GATE
-    const CURRENT_POLICY_VERSION = 'v1.0'; 
+    const CURRENT_POLICY_VERSION = 'v1.1'; 
     const currentAuth = getWorkspaceAuthSession(context);
     
     if (currentAuth?.authenticated) {

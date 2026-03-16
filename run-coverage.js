@@ -46,6 +46,42 @@ function scoreClass(score) {
   return 'score-danger';
 }
 
+function collectProgramSourceFiles(dirPath) {
+  const files = [];
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'test') {
+        continue;
+      }
+      files.push(...collectProgramSourceFiles(fullPath));
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    if (!entry.name.endsWith('.ts')) {
+      continue;
+    }
+    if (entry.name.endsWith('.d.ts') || entry.name.endsWith('.test.ts')) {
+      continue;
+    }
+
+    files.push(fullPath);
+  }
+
+  return files;
+}
+
+const EXCLUDED_PROGRAM_FILES = new Set([
+  'storageManager.ts',
+  'types.ts',
+]);
+
 run('npm', ['run', 'compile-tests']);
 run('npm', ['run', 'compile']);
 run('npx', ['c8', '--clean', '--reporter=json-summary', 'node', './out/test/runTest.js']);
@@ -58,34 +94,51 @@ if (!fs.existsSync(summaryPath)) {
 
 const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
 const runtimeSourcePrefix = `${path.join(process.cwd(), 'dist', 'tbd-logger', 'src')}${path.sep}`;
+const directSourcePrefix = `${path.join(process.cwd(), 'src')}${path.sep}`;
 
-const runtimeEntries = Object.entries(summary).filter(([filePath]) => filePath.startsWith(runtimeSourcePrefix));
-if (runtimeEntries.length === 0) {
-  console.error('No extension runtime source files were found in the coverage summary.');
+const sourceEntries = Object.entries(summary).filter(
+  ([filePath]) => filePath.startsWith(runtimeSourcePrefix) || filePath.startsWith(directSourcePrefix)
+);
+if (sourceEntries.length === 0) {
+  console.error('No extension source files were found in the coverage summary.');
   process.exit(1);
 }
 
-const totals = {
-  lines: { total: 0, covered: 0 },
-  functions: { total: 0, covered: 0 },
-  branches: { total: 0, covered: 0 },
-  statements: { total: 0, covered: 0 },
-};
+const programSourceRoot = path.join(process.cwd(), 'src');
+const expectedProgramFiles = collectProgramSourceFiles(programSourceRoot)
+  .map((filePath) => path.relative(programSourceRoot, filePath).replace(/\\/g, '/'))
+  .filter((filePath) => !EXCLUDED_PROGRAM_FILES.has(filePath))
+  .sort((a, b) => a.localeCompare(b));
 
-for (const [, metrics] of runtimeEntries) {
-  totals.lines.total += metrics.lines.total;
-  totals.lines.covered += metrics.lines.covered;
-  totals.functions.total += metrics.functions.total;
-  totals.functions.covered += metrics.functions.covered;
-  totals.branches.total += metrics.branches.total;
-  totals.branches.covered += metrics.branches.covered;
-  totals.statements.total += metrics.statements.total;
-  totals.statements.covered += metrics.statements.covered;
+const runtimeMetricsByFile = new Map();
+for (const [filePath, metrics] of sourceEntries) {
+  if (!filePath.startsWith(directSourcePrefix)) {
+    continue;
+  }
+  const relativeFile = path.relative(directSourcePrefix, filePath).replace(/\\/g, '/');
+  if (!runtimeMetricsByFile.has(relativeFile)) {
+    runtimeMetricsByFile.set(relativeFile, metrics);
+  }
 }
 
-const detailRows = runtimeEntries
-  .map(([filePath, metrics]) => {
-    const displayPath = path.relative(runtimeSourcePrefix, filePath).replace(/\\/g, '/');
+for (const [filePath, metrics] of sourceEntries) {
+  if (!filePath.startsWith(runtimeSourcePrefix)) {
+    continue;
+  }
+  const relativeFile = path.relative(runtimeSourcePrefix, filePath).replace(/\\/g, '/');
+  runtimeMetricsByFile.set(relativeFile, metrics);
+}
+
+const missingCoverageFiles = expectedProgramFiles.filter((filePath) => !runtimeMetricsByFile.has(filePath));
+
+const detailRows = expectedProgramFiles
+  .map((displayPath) => {
+    const metrics = runtimeMetricsByFile.get(displayPath) || {
+      lines: { total: 1, covered: 0 },
+      functions: { total: 1, covered: 0 },
+      branches: { total: 1, covered: 0 },
+      statements: { total: 1, covered: 0 },
+    };
     const stmtPct = pct(metrics.statements.covered, metrics.statements.total);
     const branchPct = pct(metrics.branches.covered, metrics.branches.total);
     const funcPct = pct(metrics.functions.covered, metrics.functions.total);
@@ -106,10 +159,11 @@ const detailRows = runtimeEntries
   })
   .sort((a, b) => a.file.localeCompare(b.file));
 
-const linePct = pct(totals.lines.covered, totals.lines.total);
-const functionPct = pct(totals.functions.covered, totals.functions.total);
-const branchPct = pct(totals.branches.covered, totals.branches.total);
-const statementPct = pct(totals.statements.covered, totals.statements.total);
+const sum = (values) => values.reduce((acc, value) => acc + value, 0);
+const linePct = Number((sum(detailRows.map((row) => row.lines)) / detailRows.length).toFixed(2));
+const functionPct = Number((sum(detailRows.map((row) => row.funcs)) / detailRows.length).toFixed(2));
+const branchPct = Number((sum(detailRows.map((row) => row.branch)) / detailRows.length).toFixed(2));
+const statementPct = Number((sum(detailRows.map((row) => row.stmts)) / detailRows.length).toFixed(2));
 
 console.log('\nExtension Runtime Coverage Summary');
 console.log(`Lines: ${linePct}%`);
@@ -211,6 +265,12 @@ const allPerfect =
   statementPct === 100;
 
 if (!allPerfect) {
+  if (missingCoverageFiles.length > 0) {
+    console.error('\nMissing coverage entries for program files:');
+    for (const filePath of missingCoverageFiles) {
+      console.error(`- ${filePath}`);
+    }
+  }
   console.error('\nCoverage check failed: extension runtime coverage must be 100% across all metrics.');
   process.exit(1);
 }

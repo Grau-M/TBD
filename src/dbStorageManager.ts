@@ -1140,7 +1140,7 @@ export class DbStorageManager {
         // 1. Fetch existing events from the cloud
         // 👉 IMPORTANT: Change 'EventData' to whatever column name stores your JSON string in the SessionEvents table!
         const existingResult = await executeQuery(
-            `SELECT OccurredAt, EventData FROM SessionEvents WHERE SessionId = @sessionId`,
+            `SELECT OccurredAt, EventData FROM SessionEvents WHERE SessionId = @sessionId`,// have a tighet query and where clause
             { sessionId }
         );
 

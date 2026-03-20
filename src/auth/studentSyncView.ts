@@ -39,7 +39,7 @@ function getStudentSyncHtml(session: any, assignment: any) {
     const isLinked = !!assignment;
     const statusText = isLinked ? "✅ Correct Assignment Linked" : "⚠️ Workspace Not Linked";
     const statusColor = isLinked ? "var(--success)" : "var(--error)";
-
+//add alt text to the logo for accessibility
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -155,7 +155,7 @@ function getStudentSyncHtml(session: any, assignment: any) {
                 }, 3000);
             } else if (message.command === 'syncError') {
                 syncBtn.disabled = false;
-                syncBtn.innerText = '❌ Sync Failed';
+                syncBtn.innerText = '❌ Sync Failed'; 
                 syncBtn.style.background = 'var(--error)';
             }
         });

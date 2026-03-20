@@ -273,6 +273,7 @@ export class DbStorageManager {
     private lastConflictAtMs: number | null = null;
     private lastQueueWarningAtMs: number | null = null;
     private syncState: SyncState = 'idle';
+    private readonly LOCAL_CONSENT_KEY_PREFIX = 'tbd.logger.localConsent';
 
    async init(context: vscode.ExtensionContext): Promise<void> {
         this.context = context;
@@ -2068,23 +2069,57 @@ export class DbStorageManager {
         this.authSchemaReady = true;
     }
 
+    private getLocalConsentKey(policyVersion: string): string {
+        const user = this.currentUserName || 'unknown-user';
+        return `${this.LOCAL_CONSENT_KEY_PREFIX}.${user}.${policyVersion}`;
+    }
+
+    private async getLocalConsent(policyVersion: string): Promise<boolean> {
+        if (!this.context) {
+            return false;
+        }
+        return this.context.workspaceState.get<boolean>(this.getLocalConsentKey(policyVersion), false);
+    }
+
+    private async setLocalConsent(policyVersion: string, consented: boolean): Promise<void> {
+        if (!this.context) {
+            return;
+        }
+        await this.context.workspaceState.update(this.getLocalConsentKey(policyVersion), consented);
+    }
+
     async checkUserConsent(policyVersion: string): Promise<boolean> {
-        await this.ensureAuthSchema();
-        const result = await executeQuery(
-            `SELECT TOP 1 Id FROM dbo.UserConsentsV2
-             WHERE Username = @username AND PolicyVersion = @policyVersion`,
-            { username: this.currentUserName, policyVersion }
-        );
-        return result.recordset.length > 0;
+        try {
+            await this.ensureAuthSchema();
+            const result = await executeQuery(
+                `SELECT TOP 1 Id FROM dbo.UserConsentsV2
+                 WHERE Username = @username AND PolicyVersion = @policyVersion`,
+                { username: this.currentUserName, policyVersion }
+            );
+            const consented = result.recordset.length > 0;
+            if (consented) {
+                await this.setLocalConsent(policyVersion, true);
+            }
+            return consented || await this.getLocalConsent(policyVersion);
+        } catch (err) {
+            console.warn('[TBD Logger DB] Consent lookup unavailable. Falling back to local consent state.', err);
+            return this.getLocalConsent(policyVersion);
+        }
     }
 
     async recordUserConsent(policyVersion: string): Promise<void> {
-        await this.ensureAuthSchema();
-        await executeQuery(
-            `INSERT INTO dbo.UserConsentsV2 (Username, PolicyVersion)
-             VALUES (@username, @policyVersion)`,
-            { username: this.currentUserName, policyVersion }
-        );
+        try {
+            await this.ensureAuthSchema();
+            await executeQuery(
+                `INSERT INTO dbo.UserConsentsV2 (Username, PolicyVersion)
+                 VALUES (@username, @policyVersion)`,
+                { username: this.currentUserName, policyVersion }
+            );
+        } catch (err) {
+            console.warn('[TBD Logger DB] Consent write unavailable. Storing local consent until database recovers.', err);
+        } finally {
+            await this.setLocalConsent(policyVersion, true);
+        }
     }
 
     async upsertAuthUser(identity: AuthIdentityInput): Promise<UpsertAuthUserResult> {

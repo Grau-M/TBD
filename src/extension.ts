@@ -140,7 +140,12 @@ export async function activate(context: vscode.ExtensionContext) {
         if (process.env.CI === 'true') {
             console.log('[TBD Logger] CI environment detected: Skipping authentication webview block.');
         } else {
-            await openAuthView(context, storageManager);
+            try {
+                await openAuthView(context, storageManager);
+            } catch (err) {
+                console.warn('[TBD Logger] Authentication view failed during startup. Continuing in offline mode.', err);
+                vscode.window.showWarningMessage('TBD Logger could not reach the database for sign-in. Monitoring will continue offline.');
+            }
         }
     }
 // 👉 UPDATED CONSENT GATE
@@ -148,28 +153,35 @@ export async function activate(context: vscode.ExtensionContext) {
     const currentAuth = getWorkspaceAuthSession(context);
     
     if (currentAuth?.authenticated) {
-        // We now just check consent using the policy version
-        const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
-        
-        if (!hasConsented) {
-            const choice = await vscode.window.showInformationMessage(
-                'Privacy Policy: Coding activity is being recorded for academic integrity purposes. By continuing, you acknowledge and agree to this tracking as a condition of using TBD Logger.',
-                { modal: true },
-                'I Acknowledge and Agree',
-                'Decline'
-            );
+        try {
+            // We now just check consent using the policy version
+            const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
 
-            if (choice === 'I Acknowledge and Agree') {
-                await storageManager.recordUserConsent(CURRENT_POLICY_VERSION);
-                state.isConsentGiven = true;
-                updateAuthStatusBar(context);
+            if (!hasConsented) {
+                const choice = await vscode.window.showInformationMessage(
+                    'Privacy Policy: Coding activity is being recorded for academic integrity purposes. By continuing, you acknowledge and agree to this tracking as a condition of using TBD Logger.',
+                    { modal: true },
+                    'I Acknowledge and Agree',
+                    'Decline'
+                );
+
+                if (choice === 'I Acknowledge and Agree') {
+                    await storageManager.recordUserConsent(CURRENT_POLICY_VERSION);
+                    state.isConsentGiven = true;
+                    updateAuthStatusBar(context);
+                } else {
+                    state.isConsentGiven = false;
+                    updateAuthStatusBar(context);
+                    vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded.');
+                }
             } else {
-                state.isConsentGiven = false;
-                updateAuthStatusBar(context);
-                vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded.');
+                state.isConsentGiven = true;
             }
-        } else {
-            state.isConsentGiven = true;
+        } catch (err) {
+            console.warn('[TBD Logger] Consent check failed. Continuing with local offline mode.', err);
+            state.isConsentGiven = false;
+            updateAuthStatusBar(context);
+            vscode.window.showWarningMessage('TBD Logger could not verify consent with the database. Please retry sign-in/consent once connectivity is restored.');
         }
     } else {
         state.isConsentGiven = false; 

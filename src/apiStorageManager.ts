@@ -41,6 +41,15 @@ export class ApiStorageManager {
         return undefined;
     }
 
+    private generateJoinCode(): string {
+        const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let suffix = '';
+        for (let i = 0; i < 6; i++) {
+            suffix += charset.charAt(Math.floor(Math.random() * charset.length));
+        }
+        return `TBD-${suffix}`;
+    }
+
     private async apiGetFirst(paths: string[]): Promise<any> {
         let lastError: unknown;
         const tried: string[] = [];
@@ -264,6 +273,8 @@ export class ApiStorageManager {
             return undefined;
         }
         const result = await this.apiGetFirst([
+            `/api/classes/join-code/${encodeURIComponent(joinCode.trim())}`,
+            `/api/class/join-code/${encodeURIComponent(joinCode.trim())}`,
             `/api/classes/by-join-code?joinCode=${encodeURIComponent(joinCode.trim())}`,
             `/api/classes/join-code?joinCode=${encodeURIComponent(joinCode.trim())}`,
             `/api/class-activities/by-join-code?joinCode=${encodeURIComponent(joinCode.trim())}`
@@ -361,16 +372,55 @@ export class ApiStorageManager {
     }
 
     async listTeacherClasses(teacherAuthUserId: number): Promise<any[]> {
-        const result = await this.apiGetFirst([
-            `/api/classes?teacherAuthUserId=${teacherAuthUserId}`,
-            `/api/classes?teacherId=${teacherAuthUserId}`,
-            `/api/class-activities?teacherAuthUserId=${teacherAuthUserId}`
-        ]);
-        const rows = Array.isArray(result)
-            ? result
-            : (Array.isArray(result?.classes) ? result.classes : (Array.isArray(result?.data) ? result.data : []));
+        let rows: any[] = [];
 
-        return rows.map((row: any) => ({
+        try {
+            const result = await this.apiGetFirst([
+                `/api/classes/teacher/${teacherAuthUserId}`,
+                `/api/class/teacher/${teacherAuthUserId}`,
+                `/api/classes?teacherAuthUserId=${teacherAuthUserId}`,
+                `/api/classes?teacherId=${teacherAuthUserId}`,
+                '/api/classes',
+                `/api/class-activities?teacherAuthUserId=${teacherAuthUserId}`,
+                '/api/class-activities'
+            ]);
+
+            rows = Array.isArray(result)
+                ? result
+                : (Array.isArray(result?.classes) ? result.classes : (Array.isArray(result?.data) ? result.data : []));
+        } catch (_getError) {
+            // Some backends expose list routes as POST instead of GET.
+            try {
+                const postResult = await this.apiPostFirst([
+                    '/api/classes/list',
+                    '/api/class/list',
+                    '/api/class-activities/list',
+                    '/api/classes/search',
+                    '/api/class-activities/search'
+                ], {
+                    teacherAuthUserId,
+                    TeacherAuthUserId: teacherAuthUserId,
+                    teacherId: teacherAuthUserId,
+                    TeacherId: teacherAuthUserId
+                });
+
+                rows = Array.isArray(postResult)
+                    ? postResult
+                    : (Array.isArray(postResult?.classes) ? postResult.classes : (Array.isArray(postResult?.data) ? postResult.data : []));
+            } catch (postError: any) {
+                // Return empty list if no known listing route exists instead of crashing class tab.
+                console.warn('Unable to list teacher classes from API:', String(postError?.message || postError));
+                return [];
+            }
+        }
+
+        return rows
+            .filter((row: any) => {
+                const rowTeacherId = Number(this.pick(row, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0);
+                // If backend already filtered by teacher, keep rows that omit teacher id too.
+                return !rowTeacherId || rowTeacherId === teacherAuthUserId;
+            })
+            .map((row: any) => ({
             id: Number(this.pick(row, ['id', 'Id', 'classId', 'ClassId']) ?? 0),
             courseName: String(this.pick(row, ['courseName', 'CourseName', 'name', 'Name']) || ''),
             courseCode: String(this.pick(row, ['courseCode', 'CourseCode']) || ''),
@@ -384,6 +434,7 @@ export class ApiStorageManager {
     }
 
     async createClass(input: any): Promise<any> {
+        const joinCode = String(input?.joinCode ?? input?.JoinCode ?? '').trim() || this.generateJoinCode();
         const payload = {
             teacherAuthUserId: Number(input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? 0),
             TeacherAuthUserId: Number(input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? 0),
@@ -399,6 +450,8 @@ export class ApiStorageManager {
             StartDate: String(input?.startDate ?? input?.StartDate ?? ''),
             endDate: String(input?.endDate ?? input?.EndDate ?? ''),
             EndDate: String(input?.endDate ?? input?.EndDate ?? ''),
+            joinCode,
+            JoinCode: joinCode,
             name: String(input?.courseName ?? input?.CourseName ?? input?.name ?? input?.Name ?? ''),
             Name: String(input?.courseName ?? input?.CourseName ?? input?.name ?? input?.Name ?? ''),
             description: String(input?.description ?? input?.Description ?? ''),

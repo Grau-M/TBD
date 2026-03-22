@@ -10,40 +10,11 @@
       } catch (e) {}
     }
 
-    // ── Theme toggle ──────────────────────────────────────────────
-    const themeToggle = $("auth-theme-toggle");
-    let isDark = false;
-    try {
-      const st =
-        typeof vscode.getState === "function" ? vscode.getState() : undefined;
-      if (st && st.theme === "dark") {
-        isDark = true;
-      } else if (
-        window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-      ) {
-        isDark = true;
-      }
-    } catch (e) {
-      isDark = !!(
-        window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-      );
-    }
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-    }
-    if (themeToggle) {
-      themeToggle.textContent = isDark ? "🌙" : "☀️";
-      themeToggle.addEventListener("click", () => {
-        document.documentElement.classList.toggle("dark");
-        isDark = !isDark;
-        themeToggle.textContent = isDark ? "🌙" : "☀️";
-        try {
-          vscode.setState({ theme: isDark ? "dark" : "light" });
-        } catch (e) {}
-      });
-    }
+    // ── Shared theme preference (set in Account page) ────────────
+    const themePreference = String(window.__TBD_THEME_PREFERENCE__ || "system").toLowerCase();
+    const shouldUseDark = themePreference === "dark" ||
+      (themePreference === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark", !!shouldUseDark);
 
     // ── Tab switching ─────────────────────────────────────────────
     function switchTab(tab) {

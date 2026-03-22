@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getThemePreference } from '../themePreference';
 
 export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {
   const nonce = getNonce();
+  const themePreference = getThemePreference(context);
   // add a cache-busting query so updated static script is always loaded in development
   const scriptFile = vscode.Uri.file(context.asAbsolutePath('src/teacher/static/teacher.js')).with({ query: `v=${Date.now()}` });
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'src', 'teacher', 'static', 'teacher.js'));
@@ -161,7 +163,6 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
           <button id="hamburger" class="btn btn-secondary" style="min-width:40px; height:36px; padding:6px 8px; border-radius:8px;">☰</button>
           <div></div>
         </div>
-        <button id="themeToggle" class="btn btn-secondary" style="min-width:40px; height:36px; padding:6px 8px; border-radius:8px;">🌓</button>
       </div>
 
       ${dashboardHtml}
@@ -174,6 +175,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
   </div>
 
   <script nonce="${nonce}" src="${renderersUri}"></script>
+  <script nonce="${nonce}">window.__TBD_THEME_PREFERENCE__ = '${themePreference}';</script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

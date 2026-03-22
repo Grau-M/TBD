@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { StandardEvent } from './types';
+import { apiGet, apiPost } from './api';
 
 interface ApiSyncStatus {
     state: 'synced' | 'syncing' | 'offline' | 'queue-warning' | 'conflict' | 'idle';
@@ -9,12 +10,7 @@ interface ApiSyncStatus {
     lastConflictAt: string | null;
 }
 
-interface SimpleAuthUser {
-    authUserId: number;
-    email: string;
-    displayName: string;
-    role: 'Student' | 'Teacher' | 'Admin';
-}
+type UserRole = 'Student' | 'Teacher' | 'Admin';
 
 export class ApiStorageManager {
     private context: vscode.ExtensionContext | null = null;
@@ -25,8 +21,25 @@ export class ApiStorageManager {
         lastError: null,
         lastConflictAt: null
     };
-    private nextAuthUserId = 1;
-    private authUsersByEmail = new Map<string, SimpleAuthUser>();
+
+    private normalizeRole(value: unknown): UserRole {
+        const v = String(value || '').trim().toLowerCase();
+        if (v === 'teacher') { return 'Teacher'; }
+        if (v === 'admin') { return 'Admin'; }
+        return 'Student';
+    }
+
+    private pick(obj: any, keys: string[]): any {
+        if (!obj || typeof obj !== 'object') {
+            return undefined;
+        }
+        for (const key of keys) {
+            if (obj[key] !== undefined && obj[key] !== null) {
+                return obj[key];
+            }
+        }
+        return undefined;
+    }
 
     async init(context: vscode.ExtensionContext): Promise<void> {
         this.context = context;
@@ -112,59 +125,95 @@ export class ApiStorageManager {
         // Intentionally no-op in API-only mode.
     }
 
-    async upsertAuthUser(identity: { email: string; displayName: string; [key: string]: any }): Promise<{ authUserId: number; role: 'Student' | 'Teacher' | 'Admin'; isNew: boolean }> {
-        const key = String(identity.email || '').toLowerCase();
-        const existing = this.authUsersByEmail.get(key);
-        if (existing) {
-            return {
-                authUserId: existing.authUserId,
-                role: existing.role,
-                isNew: false
-            };
-        }
+    async upsertAuthUser(identity: { email: string; displayName: string; [key: string]: any }): Promise<{ authUserId: number; role: UserRole; isNew: boolean }> {
+        const email = String(identity.email || '').toLowerCase();
+        const displayName = String(identity.displayName || '').trim();
+        const provider = String(identity.provider || 'email').toLowerCase();
+        const subjectId = String(identity.subjectId || email).trim();
+        const username = String(identity.username || email).trim();
+        const password = identity.password ? String(identity.password) : undefined;
+        const role = identity.role ? this.normalizeRole(identity.role) : undefined;
 
-        const created: SimpleAuthUser = {
-            authUserId: this.nextAuthUserId++,
-            email: key,
-            displayName: identity.displayName,
-            role: 'Student'
+        const payload = {
+            provider,
+            Provider: provider,
+            subjectId,
+            SubjectId: subjectId,
+            email,
+            Email: email,
+            username,
+            Username: username,
+            displayName,
+            DisplayName: displayName,
+            password,
+            Password: password,
+            role,
+            Role: role
         };
-        this.authUsersByEmail.set(key, created);
 
+        const result = await apiPost('/api/auth/upsert-user', payload);
+        const user = result?.user ?? result;
         return {
-            authUserId: created.authUserId,
-            role: created.role,
-            isNew: true
+            authUserId: Number(this.pick(result, ['authUserId', 'AuthUserId']) ?? this.pick(user, ['id', 'Id', 'authUserId', 'AuthUserId']) ?? 0),
+            role: this.normalizeRole(this.pick(result, ['role', 'Role']) ?? this.pick(user, ['role', 'Role'])),
+            isNew: Boolean(this.pick(result, ['isNew', 'IsNew']) ?? false)
         };
     }
 
-    async updateAuthUserRole(authUserId: number, role: 'Student' | 'Teacher' | 'Admin'): Promise<void> {
-        for (const [email, user] of this.authUsersByEmail.entries()) {
-            if (user.authUserId === authUserId) {
-                this.authUsersByEmail.set(email, { ...user, role });
-                return;
-            }
-        }
+    async updateAuthUserRole(authUserId: number, role: UserRole): Promise<void> {
+        await apiPost('/api/auth/update-role', {
+            authUserId,
+            AuthUserId: authUserId,
+            role,
+            Role: role
+        });
     }
 
-    async updateAuthUserDisplayName(authUserId: number, displayName: string): Promise<void> {
-        for (const [email, user] of this.authUsersByEmail.entries()) {
-            if (user.authUserId === authUserId) {
-                this.authUsersByEmail.set(email, { ...user, displayName });
-                return;
-            }
-        }
+    async updateAuthUserDisplayName(authUserId: number, displayName: string, email?: string): Promise<void> {
+        await apiPost('/api/auth/update-display-name', {
+            authUserId,
+            userId: authUserId,
+            id: authUserId,
+            AuthUserId: authUserId,
+            displayName,
+            DisplayName: displayName,
+            email: email?.toLowerCase(),
+            Email: email?.toLowerCase()
+        });
     }
 
-    async findAuthUserByEmail(email: string): Promise<{ authUserId: number; role: 'Student' | 'Teacher' | 'Admin'; displayName: string } | null> {
-        const found = this.authUsersByEmail.get(email.toLowerCase());
-        if (!found) {
+    async findAuthUserByEmail(email: string): Promise<{ authUserId: number; role: UserRole; displayName: string } | null> {
+        const result = await apiGet(`/api/auth/user-by-email?email=${encodeURIComponent(email.toLowerCase())}`);
+        const user = result?.user ?? result;
+        const authUserId = Number(this.pick(user, ['authUserId', 'AuthUserId', 'id', 'Id']) ?? 0);
+        if (!authUserId) {
             return null;
         }
         return {
-            authUserId: found.authUserId,
-            role: found.role,
-            displayName: found.displayName
+            authUserId,
+            role: this.normalizeRole(this.pick(user, ['role', 'Role'])),
+            displayName: String(this.pick(user, ['displayName', 'DisplayName', 'username', 'Username', 'email', 'Email']) || 'user')
+        };
+    }
+
+    async authenticateEmailPassword(email: string, password: string): Promise<{ authUserId: number; role: UserRole; displayName: string } | null> {
+        const result = await apiPost('/api/auth/login', {
+            email: email.toLowerCase(),
+            Email: email.toLowerCase(),
+            password,
+            Password: password
+        });
+
+        const user = result?.user ?? result;
+        const authUserId = Number(this.pick(user, ['authUserId', 'AuthUserId', 'id', 'Id']) ?? 0);
+        if (!authUserId) {
+            return null;
+        }
+
+        return {
+            authUserId,
+            role: this.normalizeRole(this.pick(user, ['role', 'Role'])),
+            displayName: String(this.pick(user, ['displayName', 'DisplayName', 'username', 'Username']) || email)
         };
     }
 

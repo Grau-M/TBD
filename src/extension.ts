@@ -27,6 +27,7 @@ import * as path from 'path';
 import { openStudentSyncView } from './auth/studentSyncView';
 
 const SESSION_ID_KEY = 'sessionId';
+const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
 const API_TOKEN_SECRET_KEY = 'tbd.api.sessionToken.v1';
 
 // Function to update database status bar item
@@ -238,16 +239,38 @@ context.subscriptions.push(enterApiKeyCommand);
         }
     };
 
-    const startSession = async (): Promise<number | undefined> => {
+    const ensureProject = async (): Promise<number | undefined> => {
+        const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+        const workspaceName = vscode.workspace.name || 'Unknown Workspace';
+
+        try {
+            const project = await withApiTokenRetry(() => apiPost('/api/projects', {
+                name: workspaceName,
+                workspacePath
+            }));
+
+            const projectId = Number(project?.id ?? project?.Id);
+            if (!Number.isFinite(projectId) || projectId <= 0) {
+                throw new Error('Project API did not return a valid id.');
+            }
+
+            return projectId;
+        } catch (error) {
+            console.warn('[TBD Logger] Unable to ensure API project.', error);
+            return undefined;
+        }
+    };
+
+    const startSession = async (userId: number, projectId: number, sessionNumber: number): Promise<number | undefined> => {
         try {
             const session = await withApiTokenRetry(() => apiPost('/api/sessions', {
-                userId: 2,
-                projectId: 1,
-                sessionNumber: 1,
+                userId,
+                projectId,
+                sessionNumber,
                 startedAt: new Date().toISOString()
             }));
 
-            const sessionId = Number(session?.id);
+            const sessionId = Number(session?.id ?? session?.Id);
             if (!Number.isFinite(sessionId) || sessionId <= 0) {
                 throw new Error('Session API did not return a valid id.');
             }
@@ -256,7 +279,8 @@ context.subscriptions.push(enterApiKeyCommand);
             return sessionId;
         } catch (error) {
             await context.workspaceState.update(SESSION_ID_KEY, undefined);
-            console.warn('[TBD Logger] Unable to start API session.', error);
+            const details = error instanceof ApiHttpError ? error.responseBody : String(error);
+            console.warn('[TBD Logger] Unable to start API session.', details);
             return undefined;
         }
     };
@@ -286,14 +310,6 @@ context.subscriptions.push(enterApiKeyCommand);
     // Initialize storage manager (creates/ensures encrypted file)
     await storageManager.init(context);
 
-    const startedSessionId = await startSession();
-    if (startedSessionId) {
-        void logEvent('session_start', {
-            workspaceName: vscode.workspace.name || 'Unknown Workspace',
-            workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
-        });
-    }
-
     // Unified workspace authentication + role assignment + student activity mapping.
     // Open the auth GUI webview if the workspace is not yet authenticated.
     const existingSession = getWorkspaceAuthSession(context);
@@ -313,6 +329,21 @@ context.subscriptions.push(enterApiKeyCommand);
 //  UPDATED CONSENT GATE
     const CURRENT_POLICY_VERSION = 'v1.1'; 
     const currentAuth = getWorkspaceAuthSession(context);
+
+    if (currentAuth?.authenticated) {
+        const projectId = await ensureProject();
+        if (projectId) {
+            const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
+            const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
+            if (startedSessionId) {
+                await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
+                void logEvent('session_start', {
+                    workspaceName: vscode.workspace.name || 'Unknown Workspace',
+                    workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
+                });
+            }
+        }
+    }
     
     if (currentAuth?.authenticated) {
         try {

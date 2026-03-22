@@ -10,7 +10,7 @@
       <nav class="sidebar-nav" aria-label="Dashboard sections">
         <button id="nav-account" class="sidebar-nav-btn active" type="button" data-view="account">
           <strong>Account</strong>
-          <span>Profile, role, provider, and workspace details.</span>
+          <span>Profile details and account settings.</span>
         </button>
         <button id="nav-classes" class="sidebar-nav-btn hidden" type="button" data-view="classes">
           <strong>Classes</strong>
@@ -19,9 +19,6 @@
       </nav>
 
       <div class="sidebar-meta">
-        <button id="account-theme-toggle" class="top-theme-btn" title="Toggle theme">🌓</button>
-        <div class="meta-chip"><span>Role:</span> <strong id="sidebar-role-label">Student</strong></div>
-        <div class="meta-chip"><span>Provider:</span> <strong id="sidebar-provider-label">Email</strong></div>
       </div>
     </aside>
 
@@ -43,38 +40,30 @@
             <input type="text" id="account-display-name" placeholder="Your display name" />
           </div>
 
-          <div class="grid-2">
-            <div class="form-group">
-              <label for="account-role">Role (Read Only)</label>
-              <input type="text" id="account-role" readonly />
-            </div>
-            <div class="form-group">
-              <label for="account-provider">Provider</label>
-              <input type="text" id="account-provider" readonly />
-            </div>
-          </div>
-
           <div class="form-group">
             <label for="account-email">Email</label>
             <input type="text" id="account-email" readonly />
           </div>
 
-          <div class="grid-2">
-            <div class="form-group">
-              <label for="account-ide-user">IDE User</label>
-              <input type="text" id="account-ide-user" readonly />
-            </div>
-            <div class="form-group">
-              <label for="account-workspace">Workspace</label>
-              <input type="text" id="account-workspace" readonly />
-            </div>
+          <div class="form-group">
+            <label for="account-role">Role</label>
+            <input type="text" id="account-role" readonly />
+          </div>
+
+          <div class="form-group">
+            <label for="account-theme-preference">Theme</label>
+            <select id="account-theme-preference">
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
           </div>
 
           <div id="account-error" class="account-error hidden"></div>
           <div id="account-success" class="account-success hidden"></div>
 
           <div class="actions">
-            <button id="btn-save-account" class="btn-primary">Save Display Name</button>
+            <button id="btn-save-account" class="btn-primary">Save</button>
           </div>
         </div>
       </section>

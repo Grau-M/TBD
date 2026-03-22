@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { UserRole } from '../dbStorageManager';
 import { WorkspaceAuthSession } from '../auth';
 import { getAuthHtml } from './getHtml';
+import { ApiHttpError } from '../api';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
@@ -169,12 +170,14 @@ export async function openAuthView(
                     case 'signIn': {
                         let session: WorkspaceAuthSession;
                         try {
-                            const user = await storageManager.findAuthUserByEmail(message.email as string);
+                            const email = String(message.email || '').toLowerCase();
+                            const password = String(message.password || '');
+                            const user = await storageManager.authenticateEmailPassword(email, password);
                             if (!user) {
                                 authPanel?.webview.postMessage({
                                     command: 'authError',
                                     form: 'signin',
-                                    message: 'No account found with that email. Please register first.'
+                                    message: 'Invalid credentials. Please try again.'
                                 });
                                 return;
                             }
@@ -185,7 +188,7 @@ export async function openAuthView(
                                 role: user.role,
                                 provider: 'email',
                                 displayName: user.displayName,
-                                email: message.email as string
+                                email
                             };
                         } catch (error) {
                             if (!isLegacySqlDisabledError(error)) {
@@ -220,33 +223,66 @@ export async function openAuthView(
                         const role = message.role as UserRole;
                         let session: WorkspaceAuthSession;
                         try {
+                            const email = String(message.email || '').toLowerCase();
+                            const password = String(message.password || '');
+                            const displayName = String(message.displayName || '').trim();
                             const result = await storageManager.upsertAuthUser({
                                 provider: 'email',
-                                subjectId: (message.email as string).toLowerCase(),
-                                email: (message.email as string).toLowerCase(),
-                                displayName: message.displayName as string
+                                subjectId: email,
+                                username: email,
+                                email,
+                                displayName,
+                                password,
+                                role
                             });
 
                             if (!result.isNew) {
-                                authPanel?.webview.postMessage({
-                                    command: 'authError',
-                                    form: 'register',
-                                    message: 'An account with that email already exists. Please sign in instead.'
-                                });
-                                return;
+                                // Some backends may create the user but return isNew=false.
+                                // Verify credentials and continue with sign-in when valid.
+                                const existingUser = await storageManager.authenticateEmailPassword(email, password);
+                                if (!existingUser) {
+                                    authPanel?.webview.postMessage({
+                                        command: 'authError',
+                                        form: 'register',
+                                        message: 'An account with that email already exists. Please sign in instead.'
+                                    });
+                                    return;
+                                }
+
+                                session = {
+                                    authenticated: true,
+                                    authUserId: existingUser.authUserId,
+                                    role: existingUser.role,
+                                    provider: 'email',
+                                    displayName: existingUser.displayName || displayName,
+                                    email
+                                };
+                            } else {
+                                try {
+                                    await storageManager.updateAuthUserRole(result.authUserId, role);
+                                } catch (roleError) {
+                                    // Keep registration successful even if role update fails.
+                                    console.warn('Role update failed after registration:', roleError);
+                                }
+
+                                session = {
+                                    authenticated: true,
+                                    authUserId: result.authUserId,
+                                    role,
+                                    provider: 'email',
+                                    displayName,
+                                    email
+                                };
                             }
-
-                            await storageManager.updateAuthUserRole(result.authUserId, role);
-
-                            session = {
-                                authenticated: true,
-                                authUserId: result.authUserId,
-                                role,
-                                provider: 'email',
-                                displayName: message.displayName as string,
-                                email: (message.email as string).toLowerCase()
-                            };
                         } catch (error) {
+                            // If it's an API HTTP error (like 500), show the response body for debugging
+                            if (error instanceof ApiHttpError) {
+                                console.error('Registration API error:', {
+                                    status: error.status,
+                                    body: error.responseBody
+                                });
+                                throw error;
+                            }
                             if (!isLegacySqlDisabledError(error)) {
                                 throw error;
                             }
@@ -273,10 +309,16 @@ export async function openAuthView(
                     }
                 }
             } catch (e: any) {
+                // If it's an API HTTP error (like 500), show the response body for debugging
+                let errorMessage = String(e?.message || e);
+                if (e instanceof ApiHttpError) {
+                    errorMessage = `API Error ${e.status}: ${e.responseBody}`;
+                    console.error('Auth API error:', { status: e.status, body: e.responseBody });
+                }
                 authPanel?.webview.postMessage({
                     command: 'authError',
                     form: message.command === 'register' ? 'register' : 'signin',
-                    message: String(e?.message || e)
+                    message: errorMessage
                 });
             }
         }, undefined, context.subscriptions);

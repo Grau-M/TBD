@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { DbStorageManager } from '../../dbStorageManager';
 import { WorkspaceAuthSession } from '../../auth';
 import { getAccountHtml } from './getHtml';
 
@@ -8,7 +7,7 @@ const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let accountPanel: vscode.WebviewPanel | undefined;
 
-async function promptStudentClassJoin(storageManager: DbStorageManager, authUserId: number): Promise<boolean> {
+async function promptStudentClassJoin(storageManager: any, authUserId: number): Promise<boolean> {
     const joinCode = await vscode.window.showInputBox({
         title: 'Join Class',
         prompt: 'Enter the class join code provided by your teacher',
@@ -41,7 +40,7 @@ async function promptStudentClassJoin(storageManager: DbStorageManager, authUser
 
 export async function openAccountView(
     context: vscode.ExtensionContext,
-    storageManager: DbStorageManager,
+    storageManager: any,
     details: { ideUser: string; workspaceName: string }
 ): Promise<WorkspaceAuthSession | undefined> {
     const session = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
@@ -170,7 +169,7 @@ export async function openAccountView(
                         }
 
                         const assignments = await storageManager.listStudentAssignmentsForClass(currentSession.authUserId, classId);
-                        const target = assignments.find(a => a.assignmentId === assignmentId);
+                        const target = assignments.find((a: any) => a.assignmentId === assignmentId);
                         if (!target) {
                             accountPanel?.webview.postMessage({ command: 'accountError', message: 'Assignment not found for this class.' });
                             return;

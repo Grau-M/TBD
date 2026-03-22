@@ -924,7 +924,12 @@ export class DbStorageManager {
 
     private setSyncState(state: SyncState, error?: string | null): void {
         this.syncState = state;
-        this.lastSyncError = error ?? null;
+        const raw = error ?? null;
+        if (raw && raw.includes('Direct Azure SQL connectivity is disabled in this extension build')) {
+            this.lastSyncError = null;
+            return;
+        }
+        this.lastSyncError = raw;
     }
 
     private formatMsIso(ms: number | null): string | null {

@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getThemePreference } from '../themePreference';
 
 export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {
   const nonce = getNonce();
+  const themePreference = getThemePreference(context);
   const scriptUri = webview.asWebviewUri(
     vscode.Uri.joinPath(context.extensionUri, 'src', 'auth', 'static', 'auth.js')
   );
@@ -59,22 +61,6 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       margin: 0;
       padding: 24px;
     }
-
-    .top-theme-btn {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 7px 10px;
-      cursor: pointer;
-      font-size: 1.1rem;
-      color: var(--fg);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      line-height: 1;
-    }
-    .top-theme-btn:hover { opacity: 0.85; }
 
     .auth-container {
       width: 100%;
@@ -308,6 +294,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
 </head>
 <body>
   ${loginHtml}
+  <script nonce="${nonce}">window.__TBD_THEME_PREFERENCE__ = '${themePreference}';</script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

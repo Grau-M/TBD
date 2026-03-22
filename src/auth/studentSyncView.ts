@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getWorkspaceAuthSession } from '../auth';
 import { storageManager } from '../state';
+import { getThemePreference } from '../themePreference';
 
 export async function openStudentSyncView(context: vscode.ExtensionContext) {
     const session = getWorkspaceAuthSession(context);
@@ -19,7 +20,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     );
 
     // Pass the fetched assignment information to the HTML
-    panel.webview.html = getStudentSyncHtml(session, assignmentInfo);
+    panel.webview.html = getStudentSyncHtml(session, assignmentInfo, getThemePreference(context));
 
     panel.webview.onDidReceiveMessage(async (message) => {
         if (message.command === 'forceSync') {
@@ -35,7 +36,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     });
 }
 
-function getStudentSyncHtml(session: any, assignment: any) {
+function getStudentSyncHtml(session: any, assignment: any, themePreference: 'system' | 'light' | 'dark') {
     const isLinked = !!assignment;
     const statusText = isLinked ? "✅ Correct Assignment Linked" : "⚠️ Workspace Not Linked";
     const statusColor = isLinked ? "var(--success)" : "var(--error)";
@@ -59,13 +60,6 @@ function getStudentSyncHtml(session: any, assignment: any) {
             background: var(--bg); color: var(--fg);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0; padding: 24px; display: flex; align-items: center; justify-content: center; min-height: 100vh;
-        }
-
-        .top-theme-btn {
-            position: fixed; top: 16px; right: 16px;
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 8px; padding: 8px; cursor: pointer; color: var(--fg);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
 
         .card {
@@ -99,8 +93,6 @@ function getStudentSyncHtml(session: any, assignment: any) {
     </style>
 </head>
 <body>
-    <button id="theme-toggle" class="top-theme-btn" title="Toggle theme">🌓</button>
-
     <div class="card">
         <div class="header">
             <span class="logo">🛡️</span>
@@ -131,11 +123,10 @@ function getStudentSyncHtml(session: any, assignment: any) {
     <script>
         const vscode = acquireVsCodeApi();
         const syncBtn = document.getElementById('syncBtn');
-        const themeBtn = document.getElementById('theme-toggle');
-
-        themeBtn.addEventListener('click', () => {
-            document.documentElement.classList.toggle('dark');
-        });
+        const themePreference = '${themePreference}';
+        const shouldUseDark = themePreference === 'dark' ||
+            (themePreference === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', !!shouldUseDark);
 
         syncBtn.addEventListener('click', () => {
             syncBtn.disabled = true;

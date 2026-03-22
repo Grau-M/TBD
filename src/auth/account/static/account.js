@@ -25,6 +25,21 @@
       el.classList.toggle("hidden", !show);
     }
 
+    function normalizeThemePreference(value) {
+      const v = String(value || "").trim().toLowerCase();
+      if (v === "light" || v === "dark" || v === "system") {
+        return v;
+      }
+      return "system";
+    }
+
+    function applyThemePreference(pref) {
+      const normalized = normalizeThemePreference(pref);
+      const shouldUseDark = normalized === "dark" ||
+        (normalized === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.classList.toggle("dark", !!shouldUseDark);
+    }
+
     function clearMessages() {
       const err = $("account-error");
       const ok = $("account-success");
@@ -70,23 +85,6 @@
       }
       ok.textContent = msg;
       setVisible(ok, true);
-    }
-
-    function formatProvider(value) {
-      const normalized = String(value || "").trim().toLowerCase();
-      if (normalized === "microsoft") {
-        return "Microsoft";
-      }
-      if (normalized === "google") {
-        return "Google";
-      }
-      if (normalized === "email") {
-        return "Email";
-      }
-      if (!normalized) {
-        return "Unknown";
-      }
-      return normalized.charAt(0).toUpperCase() + normalized.slice(1);
     }
 
     function escapeHtml(value) {
@@ -322,52 +320,14 @@
     if ($("account-role")) {
       $("account-role").value = data.role || "";
     }
-    if ($("account-provider")) {
-      $("account-provider").value = formatProvider(data.provider);
+    if ($("account-theme-preference")) {
+      $("account-theme-preference").value = normalizeThemePreference(data.themePreference);
     }
     if ($("account-email")) {
       $("account-email").value = data.email || "";
     }
-    if ($("account-ide-user")) {
-      $("account-ide-user").value = data.ideUser || "";
-    }
-    if ($("account-workspace")) {
-      $("account-workspace").value = data.workspaceName || "";
-    }
-    if ($("sidebar-role-label")) {
-      $("sidebar-role-label").textContent = data.role || "Unknown";
-    }
-    if ($("sidebar-provider-label")) {
-      $("sidebar-provider-label").textContent = formatProvider(data.provider);
-    }
     setNavVisibility(data);
-
-    const themeToggle = $("account-theme-toggle");
-    let isDark = false;
-    try {
-      const st = typeof vscode.getState === "function" ? vscode.getState() : undefined;
-      if (st && st.theme === "dark") {
-        isDark = true;
-      } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        isDark = true;
-      }
-    } catch (e) {
-      isDark = false;
-    }
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-    }
-    if (themeToggle) {
-      themeToggle.textContent = isDark ? "🌙" : "☀️";
-      themeToggle.addEventListener("click", () => {
-        document.documentElement.classList.toggle("dark");
-        isDark = !isDark;
-        themeToggle.textContent = isDark ? "🌙" : "☀️";
-        if (vscode.setState) {
-          try { vscode.setState({ theme: isDark ? "dark" : "light" }); } catch (e) {}
-        }
-      });
-    }
+    applyThemePreference(data.themePreference);
 
     $("nav-account")?.addEventListener("click", () => setActiveView("account"));
     $("nav-classes")?.addEventListener("click", () => setActiveView("classes"));
@@ -392,7 +352,10 @@
       }
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving...";
-      post("saveAccount", { displayName });
+      post("saveAccount", {
+        displayName,
+        themePreference: $("account-theme-preference")?.value || "system",
+      });
     });
 
     $("account-display-name")?.addEventListener("keydown", (e) => {
@@ -409,9 +372,13 @@
           const save = $("btn-save-account");
           if (save) {
             save.disabled = false;
-            save.textContent = "Save Display Name";
+            save.textContent = "Save";
           }
-          showSuccess("Display name updated successfully.");
+          showSuccess("Your data has been successfully updated.");
+          break;
+        }
+        case "themePreferenceApplied": {
+          applyThemePreference(msg.themePreference);
           break;
         }
         case "accountError": {
@@ -424,7 +391,7 @@
           const save = $("btn-save-account");
           if (save) {
             save.disabled = false;
-            save.textContent = "Save Display Name";
+            save.textContent = "Save";
           }
           const joinBtn = $("btn-join-class");
           if (joinBtn) {

@@ -47,7 +47,6 @@
     const status = $("status");
     const searchInput = $("log-search-input");
     const dropdown = $("log-dropdown");
-    const themeToggle = $("themeToggle");
     const hamburgerBtn = $("hamburger");
     const sidebarEl = document.querySelector(".sidebar");
     const assignSearchInput = $("assignment-student-search");
@@ -227,43 +226,11 @@
     // Make post available globally for note handlers + student summary button
     window.postTeacherMessage = post;
 
-    // --- UI & THEME TOGGLES ---
-    let isDark = false;
-    try {
-      const st =
-        typeof vscode.getState === "function" ? vscode.getState() : undefined;
-      if (st && st.theme === "dark") {
-        isDark = true;
-      } else if (document.documentElement.classList.contains("dark")) {
-        isDark = true;
-      } else if (
-        window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-      ) {
-        isDark = true;
-      }
-    } catch (e) {
-      isDark =
-        document.documentElement.classList.contains("dark") ||
-        (window.matchMedia &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches);
-    }
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-    }
-    if (themeToggle) {
-      themeToggle.textContent = isDark ? "🌙" : "☀️";
-      themeToggle.addEventListener("click", () => {
-        document.documentElement.classList.toggle("dark");
-        isDark = !isDark;
-        themeToggle.textContent = isDark ? "🌙" : "☀️";
-        if (vscode.setState) {
-          try {
-            vscode.setState({ theme: isDark ? "dark" : "light" });
-          } catch (e) {}
-        }
-      });
-    }
+    // --- Shared theme preference (set in Account page) ---
+    const themePreference = String(window.__TBD_THEME_PREFERENCE__ || "system").toLowerCase();
+    const shouldUseDark = themePreference === "dark" ||
+      (themePreference === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark", !!shouldUseDark);
 
     if (hamburgerBtn && sidebarEl) {
       let backdrop = null;

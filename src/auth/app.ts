@@ -1,11 +1,32 @@
 import * as vscode from 'vscode';
-import { DbStorageManager, UserRole } from '../dbStorageManager';
+import { UserRole } from '../dbStorageManager';
 import { WorkspaceAuthSession } from '../auth';
 import { getAuthHtml } from './getHtml';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let authPanel: vscode.WebviewPanel | undefined;
+
+function isLegacySqlDisabledError(error: unknown): boolean {
+    const message = String((error as any)?.message || error || '');
+    return message.includes('Direct Azure SQL connectivity is disabled in this extension build');
+}
+
+function buildLocalSession(params: {
+    role: UserRole;
+    provider: 'microsoft' | 'google' | 'email';
+    displayName: string;
+    email: string;
+}): WorkspaceAuthSession {
+    return {
+        authenticated: true,
+        authUserId: -1,
+        role: params.role,
+        provider: params.provider,
+        displayName: params.displayName,
+        email: params.email
+    };
+}
 
 async function pickRoleForNewUser(): Promise<UserRole | undefined> {
     const selected = await vscode.window.showQuickPick([
@@ -26,7 +47,7 @@ async function pickRoleForNewUser(): Promise<UserRole | undefined> {
  */
 export async function openAuthView(
     context: vscode.ExtensionContext,
-    storageManager: DbStorageManager
+    storageManager: any
 ): Promise<WorkspaceAuthSession | undefined> {
     // If the panel is already open, just reveal it and wait for its resolution.
     if (authPanel) {
@@ -86,36 +107,51 @@ export async function openAuthView(
                             ? accountName.toLowerCase()
                             : `${oauthSession.account.id}@${provider}.local`;
 
-                        const result = await storageManager.upsertAuthUser({
-                            provider,
-                            subjectId: oauthSession.account.id,
-                            email: emailGuess,
-                            displayName: accountName
-                        });
+                        let signedSession: WorkspaceAuthSession;
+                        try {
+                            const result = await storageManager.upsertAuthUser({
+                                provider,
+                                subjectId: oauthSession.account.id,
+                                email: emailGuess,
+                                displayName: accountName
+                            });
 
-                        let resolvedRole = result.role;
-                        if (result.isNew) {
-                            const chosenRole = await pickRoleForNewUser();
-                            if (!chosenRole) {
-                                authPanel?.webview.postMessage({
-                                    command: 'authError',
-                                    form: 'signin',
-                                    message: 'Role assignment was cancelled.'
-                                });
-                                return;
+                            let resolvedRole = result.role;
+                            if (result.isNew) {
+                                const chosenRole = await pickRoleForNewUser();
+                                if (!chosenRole) {
+                                    authPanel?.webview.postMessage({
+                                        command: 'authError',
+                                        form: 'signin',
+                                        message: 'Role assignment was cancelled.'
+                                    });
+                                    return;
+                                }
+                                resolvedRole = chosenRole;
+                                await storageManager.updateAuthUserRole(result.authUserId, chosenRole);
                             }
-                            resolvedRole = chosenRole;
-                            await storageManager.updateAuthUserRole(result.authUserId, chosenRole);
-                        }
 
-                        const signedSession: WorkspaceAuthSession = {
-                            authenticated: true,
-                            authUserId: result.authUserId,
-                            role: resolvedRole,
-                            provider: provider as 'microsoft' | 'google',
-                            displayName: accountName,
-                            email: emailGuess
-                        };
+                            signedSession = {
+                                authenticated: true,
+                                authUserId: result.authUserId,
+                                role: resolvedRole,
+                                provider: provider as 'microsoft' | 'google',
+                                displayName: accountName,
+                                email: emailGuess
+                            };
+                        } catch (error) {
+                            if (!isLegacySqlDisabledError(error)) {
+                                throw error;
+                            }
+                            const fallbackRole = await pickRoleForNewUser() || 'Student';
+                            signedSession = buildLocalSession({
+                                role: fallbackRole,
+                                provider: provider as 'microsoft' | 'google',
+                                displayName: accountName,
+                                email: emailGuess
+                            });
+                            vscode.window.showInformationMessage('TBD Logger is running in API-only mode. Local auth session created.');
+                        }
 
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, signedSession);
                         authPanel?.webview.postMessage({
@@ -131,24 +167,41 @@ export async function openAuthView(
                     }
 
                     case 'signIn': {
-                        const user = await storageManager.findAuthUserByEmail(message.email as string);
-                        if (!user) {
-                            authPanel?.webview.postMessage({
-                                command: 'authError',
-                                form: 'signin',
-                                message: 'No account found with that email. Please register first.'
+                        let session: WorkspaceAuthSession;
+                        try {
+                            const user = await storageManager.findAuthUserByEmail(message.email as string);
+                            if (!user) {
+                                authPanel?.webview.postMessage({
+                                    command: 'authError',
+                                    form: 'signin',
+                                    message: 'No account found with that email. Please register first.'
+                                });
+                                return;
+                            }
+
+                            session = {
+                                authenticated: true,
+                                authUserId: user.authUserId,
+                                role: user.role,
+                                provider: 'email',
+                                displayName: user.displayName,
+                                email: message.email as string
+                            };
+                        } catch (error) {
+                            if (!isLegacySqlDisabledError(error)) {
+                                throw error;
+                            }
+                            const email = String(message.email || '').toLowerCase();
+                            const displayName = email.split('@')[0] || email || 'student';
+                            session = buildLocalSession({
+                                role: 'Student',
+                                provider: 'email',
+                                displayName,
+                                email
                             });
-                            return;
+                            vscode.window.showInformationMessage('TBD Logger is running in API-only mode. Local sign-in session created.');
                         }
 
-                        const session: WorkspaceAuthSession = {
-                            authenticated: true,
-                            authUserId: user.authUserId,
-                            role: user.role,
-                            provider: 'email',
-                            displayName: user.displayName,
-                            email: message.email as string
-                        };
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
                         authPanel?.webview.postMessage({
                             command: 'authSuccess',
@@ -164,33 +217,48 @@ export async function openAuthView(
                     }
 
                     case 'register': {
-                        const result = await storageManager.upsertAuthUser({
-                            provider: 'email',
-                            subjectId: (message.email as string).toLowerCase(),
-                            email: (message.email as string).toLowerCase(),
-                            displayName: message.displayName as string
-                        });
-
-                        if (!result.isNew) {
-                            authPanel?.webview.postMessage({
-                                command: 'authError',
-                                form: 'register',
-                                message: 'An account with that email already exists. Please sign in instead.'
+                        const role = message.role as UserRole;
+                        let session: WorkspaceAuthSession;
+                        try {
+                            const result = await storageManager.upsertAuthUser({
+                                provider: 'email',
+                                subjectId: (message.email as string).toLowerCase(),
+                                email: (message.email as string).toLowerCase(),
+                                displayName: message.displayName as string
                             });
-                            return;
+
+                            if (!result.isNew) {
+                                authPanel?.webview.postMessage({
+                                    command: 'authError',
+                                    form: 'register',
+                                    message: 'An account with that email already exists. Please sign in instead.'
+                                });
+                                return;
+                            }
+
+                            await storageManager.updateAuthUserRole(result.authUserId, role);
+
+                            session = {
+                                authenticated: true,
+                                authUserId: result.authUserId,
+                                role,
+                                provider: 'email',
+                                displayName: message.displayName as string,
+                                email: (message.email as string).toLowerCase()
+                            };
+                        } catch (error) {
+                            if (!isLegacySqlDisabledError(error)) {
+                                throw error;
+                            }
+                            session = buildLocalSession({
+                                role,
+                                provider: 'email',
+                                displayName: String(message.displayName || 'student'),
+                                email: String(message.email || '').toLowerCase()
+                            });
+                            vscode.window.showInformationMessage('TBD Logger is running in API-only mode. Local registration session created.');
                         }
 
-                        const role = message.role as UserRole;
-                        await storageManager.updateAuthUserRole(result.authUserId, role);
-
-                        const session: WorkspaceAuthSession = {
-                            authenticated: true,
-                            authUserId: result.authUserId,
-                            role,
-                            provider: 'email',
-                            displayName: message.displayName as string,
-                            email: (message.email as string).toLowerCase()
-                        };
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
                         authPanel?.webview.postMessage({
                             command: 'authSuccess',

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { DbStorageManager, UserRole, ClassActivityRecord } from './dbStorageManager';
+import type { UserRole, ClassActivityRecord } from './dbStorageManager';
 
 export type AuthProvider = 'microsoft' | 'google' | 'email';
 
@@ -148,7 +148,7 @@ async function runSignInFlow(): Promise<AuthIdentity | undefined> {
 }
 
 async function promptStudentAssignmentLink(
-    storageManager: DbStorageManager,
+    storageManager: any,
     authUserId: number
 ): Promise<{ classId: number; assignmentId: number } | undefined> {
     const joinCode = await vscode.window.showInputBox({
@@ -179,7 +179,7 @@ async function promptStudentAssignmentLink(
     }
 
     const pick = await vscode.window.showQuickPick(
-        assignments.map(a => ({
+        assignments.map((a: any) => ({
             label: a.name,
             description: `${linkedClass.courseCode} • ${linkedClass.teacherName}`,
             detail: a.dueDate ? `Due: ${a.dueDate}` : 'No due date',
@@ -195,12 +195,14 @@ async function promptStudentAssignmentLink(
         return undefined;
     }
 
+    const selected = pick as any;
+
     const metadata = extractWorkspaceMetadata();
     await storageManager.linkStudentWorkspaceToAssignment({
         studentAuthUserId: authUserId,
         teacherAuthUserId: linkedClass.teacherAuthUserId,
         classId: linkedClass.id,
-        assignmentId: pick.assignment.id,
+        assignmentId: selected.assignment.id,
         workspaceName: metadata.workspaceName,
         workspaceRootPath: metadata.workspaceRootPath,
         workspaceFoldersJson: metadata.workspaceFoldersJson
@@ -208,13 +210,13 @@ async function promptStudentAssignmentLink(
 
     return {
         classId: linkedClass.id,
-        assignmentId: pick.assignment.id
+        assignmentId: selected.assignment.id
     };
 }
 
 export async function initializeWorkspaceAccess(
     context: vscode.ExtensionContext,
-    storageManager: DbStorageManager,
+    storageManager: any,
     forcePrompt = false
 ): Promise<WorkspaceAuthSession | undefined> {
     const existing = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
@@ -316,7 +318,7 @@ export async function requireRoleAccess(
 
 export async function manageClassActivities(
     context: vscode.ExtensionContext,
-    storageManager: DbStorageManager
+    storageManager: any
 ): Promise<void> {
     const session = getWorkspaceAuthSession(context);
     if (!session?.authenticated) {

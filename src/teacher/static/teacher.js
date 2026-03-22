@@ -222,6 +222,80 @@
       }
     }
 
+    function formatTimeTo12Hour(value) {
+      const input = String(value || "").trim();
+      const match = input.match(/^(\d{1,2}):(\d{2})$/);
+      if (!match) {
+        return input;
+      }
+
+      let hours = Number(match[1]);
+      const minutes = match[2];
+      if (!Number.isFinite(hours)) {
+        return input;
+      }
+
+      const period = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12;
+      if (hours === 0) {
+        hours = 12;
+      }
+      return `${hours}:${minutes} ${period}`;
+    }
+
+    function formatMeetingTimeDisplay(meetingTimeRaw) {
+      const meetingTime = String(meetingTimeRaw || "").trim();
+      if (!meetingTime) {
+        return "—";
+      }
+
+      const [daysPart, timePart] = meetingTime
+        .split("|")
+        .map((segment) => String(segment || "").trim());
+
+      if (!timePart || !timePart.includes("-")) {
+        return meetingTime;
+      }
+
+      const [start, end] = timePart.split("-").map((segment) => String(segment || "").trim());
+      const start12 = formatTimeTo12Hour(start);
+      const end12 = formatTimeTo12Hour(end);
+      if (!daysPart) {
+        return `${start12}-${end12}`;
+      }
+      return `${daysPart} | ${start12}-${end12}`;
+    }
+
+    function formatClassDateDisplay(dateValueRaw) {
+      const input = String(dateValueRaw || "").trim();
+      if (!input) {
+        return "—";
+      }
+
+      // Treat yyyy-mm-dd and full ISO as calendar dates to avoid timezone day shifting.
+      const short = input.slice(0, 10);
+      const parts = short.split("-").map((part) => Number(part));
+      if (parts.length === 3 && parts.every((part) => Number.isFinite(part))) {
+        const [year, month, day] = parts;
+        const localDate = new Date(year, month - 1, day);
+        return localDate.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+
+      const fallback = new Date(input);
+      if (Number.isNaN(fallback.getTime())) {
+        return input;
+      }
+      return fallback.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+
     function installDatePickerBehavior() {
       const targetIds = new Set([
         "class-start-date",
@@ -1552,10 +1626,10 @@
             <div style="background:var(--accent); color:white; padding:4px 12px; border-radius:6px; font-size:0.8rem; font-weight:700; white-space:nowrap; letter-spacing:0.05em;">${cls.joinCode}</div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.88rem;">
-            <div><span style="color:var(--muted);">Meeting:</span> ${cls.meetingTime || "—"}</div>
-            <div><span style="color:var(--muted);">Start:</span> ${cls.startDate || "—"}</div>
+            <div><span style="color:var(--muted);">Meeting:</span> ${formatMeetingTimeDisplay(cls.meetingTime)}</div>
+            <div><span style="color:var(--muted);">Start:</span> ${formatClassDateDisplay(cls.startDate)}</div>
             <div></div>
-            <div><span style="color:var(--muted);">End:</span> ${cls.endDate || "—"}</div>
+            <div><span style="color:var(--muted);">End:</span> ${formatClassDateDisplay(cls.endDate)}</div>
           </div>
           <div class="meta" style="font-size:0.78rem;">Join Code: <strong style="font-family:monospace; font-size:0.9rem; color:var(--accent);">${cls.joinCode}</strong> &mdash; share this with students to link their workspace to this class.</div>
           <div style="display:flex; gap:8px; margin-top:2px;">

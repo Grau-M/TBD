@@ -107,3 +107,21 @@ export function updateApiKeyStatus(isValidOrPresent: boolean) {
         apiItem.show();
     }
 }
+
+export function updateTrackingUI(role?: string) {
+    const trackingItem = (global as any).trackingStatusBarItem as vscode.StatusBarItem | undefined;
+    if (!trackingItem) { return; }
+
+    // If a Teacher or Admin is logged in, show tracking as disabled
+    if (role === 'Teacher' || role === 'Admin') {
+        trackingItem.text = "$(circle-slash) Tracking Disabled";
+        trackingItem.tooltip = `Logs are not recorded for ${role} accounts.`;
+        // Optional: Make it stand out with a warning color
+        trackingItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground'); 
+    } else {
+        // Otherwise (Student or Not Logged In), tracking is active
+        trackingItem.text = "$(play) Tracking Active";
+        trackingItem.tooltip = "Keystroke Logging Active";
+        trackingItem.backgroundColor = undefined; // Reset background
+    }
+}

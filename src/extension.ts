@@ -22,7 +22,7 @@ import { openAuthView, openAccountView } from './auth/index';
 import { updateSyncStatus } from './statusBar';
 import { ApiHttpError, apiGet, apiPost, configureApiTokenProvider } from './api';
 import { updateApiKeyStatus } from './statusBar';
-
+import { updateTrackingUI } from './statusBar';
 import * as path from 'path';
 import { openStudentSyncView } from './auth/studentSyncView';
 
@@ -87,11 +87,11 @@ function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
 
 function updateAuthStatusBar(context: vscode.ExtensionContext): void {
     const authItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
+    const session = getWorkspaceAuthSession(context);
+    updateTrackingUI(session?.role);
     if (!authItem) {
         return;
     }
-
-    const session = getWorkspaceAuthSession(context);
     if (session?.authenticated) {
         if (!state.isConsentGiven) {
             authItem.text = `$(prohibit) Tracking Disabled`;
@@ -128,7 +128,11 @@ export interface ExtensionApi {
 // and background timers. Returns an object useful for tests.
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TBD Logger: activate');
+    // 1. Get the current session (if one exists on startup)
+    const session = getWorkspaceAuthSession(context);
 
+    // 2. Update the tracking UI based on their role
+    updateTrackingUI(session?.role);    
     configureApiTokenProvider(async () => context.secrets.get(API_TOKEN_SECRET_KEY));
 
     const isApiTokenValid = async (): Promise<boolean> => {

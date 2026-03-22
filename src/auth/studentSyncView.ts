@@ -36,10 +36,16 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 }
 
 function getStudentSyncHtml(session: any, assignment: any) {
-    const isLinked = !!assignment;
-    const statusText = isLinked ? "✅ Correct Assignment Linked" : "⚠️ Workspace Not Linked";
-    const statusColor = isLinked ? "var(--success)" : "var(--error)";
-//add alt text to the logo for accessibility
+    // 1. Check our conditions
+    const hasCourse = !!assignment?.courseName;
+    const hasAssignment = !!assignment?.assignmentName;
+    const canSync = hasCourse && hasAssignment;
+
+    // 2. Set up our dynamic UI states
+    const statusText = canSync ? "✅ Correct Assignment Linked" : "⚠️ Sync Unavailable";
+    const statusColor = canSync ? "var(--success)" : "var(--error)";
+    const errorMessage = "Student isn't registered in a course or workspace isn't connected to an assignment.";
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -47,25 +53,21 @@ function getStudentSyncHtml(session: any, assignment: any) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
         :root {
-            --bg: #f0f4f8; --surface: #ffffff; --muted: #6b7280; --fg: #111827;
-            --border: rgba(0,0,0,0.1); --accent: #2563eb; --success: #16a34a; --error: #dc2626;
-        }
-        :root.dark {
-            --bg: #071021; --surface: #0b1220; --muted: #9aa4b2; --fg: #e6eef8;
-            --border: rgba(255,255,255,0.08); --accent: #3b82f6; --success: #4ade80; --error: #f87171;
+            --bg: var(--vscode-editor-background); 
+            --surface: var(--vscode-sideBar-background, var(--vscode-editorWidget-background)); 
+            --muted: var(--vscode-descriptionForeground); 
+            --fg: var(--vscode-editor-foreground);
+            --border: var(--vscode-panel-border, rgba(128, 128, 128, 0.2)); 
+            --accent: var(--vscode-button-background); 
+            --accent-hover: var(--vscode-button-hoverBackground);
+            --success: #16a34a; 
+            --error: #dc2626;
         }
 
         body {
             background: var(--bg); color: var(--fg);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
             margin: 0; padding: 24px; display: flex; align-items: center; justify-content: center; min-height: 100vh;
-        }
-
-        .top-theme-btn {
-            position: fixed; top: 16px; right: 16px;
-            background: var(--surface); border: 1px solid var(--border);
-            border-radius: 8px; padding: 8px; cursor: pointer; color: var(--fg);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
 
         .card {
@@ -74,10 +76,24 @@ function getStudentSyncHtml(session: any, assignment: any) {
             box-shadow: 0 12px 48px rgba(0,0,0,0.14);
         }
 
-        .header { text-align: center; margin-bottom: 32px; }
+        .header { text-align: center; margin-bottom: 24px; }
         .logo { font-size: 3rem; margin-bottom: 12px; display: block; }
         .title { font-size: 1.5rem; font-weight: 800; margin: 0; }
         
+        /* New Error Banner Styles */
+        .error-banner {
+            background: rgba(220, 38, 38, 0.1); 
+            color: var(--error); 
+            padding: 12px 16px; 
+            border: 1px solid var(--error); 
+            border-radius: 8px; 
+            margin-bottom: 24px; 
+            font-size: 0.9rem; 
+            font-weight: 600; 
+            text-align: center;
+            line-height: 1.4;
+        }
+
         .info-grid { display: grid; gap: 16px; margin-bottom: 32px; }
         .field { background: var(--bg); padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border); }
         .label { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
@@ -86,9 +102,9 @@ function getStudentSyncHtml(session: any, assignment: any) {
         .btn-sync {
             width: 100%; padding: 14px; font-size: 1rem; font-weight: 700;
             border-radius: 10px; border: none; cursor: pointer;
-            background: var(--accent); color: white; transition: all 0.2s;
+            background: var(--accent); color: var(--vscode-button-foreground, white); transition: all 0.2s;
         }
-        .btn-sync:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+        .btn-sync:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); }
         .btn-sync:disabled { background: var(--muted); cursor: not-allowed; opacity: 0.6; }
 
         .status-tag {
@@ -99,14 +115,14 @@ function getStudentSyncHtml(session: any, assignment: any) {
     </style>
 </head>
 <body>
-    <button id="theme-toggle" class="top-theme-btn" title="Toggle theme">🌓</button>
-
     <div class="card">
         <div class="header">
-            <span class="logo">🛡️</span>
+            <span class="logo" role="img" aria-label="Shield Logo">🛡️</span>
             <h1 class="title">Sync Dashboard</h1>
             <div class="status-tag" style="background: ${statusColor}">${statusText}</div>
         </div>
+
+        ${!canSync ? `<div class="error-banner">❌ ${errorMessage}</div>` : ''}
 
         <div class="info-grid">
             <div class="field">
@@ -123,19 +139,14 @@ function getStudentSyncHtml(session: any, assignment: any) {
             </div>
         </div>
 
-        <button id="syncBtn" class="btn-sync" ${!isLinked ? 'disabled' : ''}>
-            ${isLinked ? '🔄 Force Sync to Assignment' : '❌ Assignment Link Missing'}
+        <button id="syncBtn" class="btn-sync" ${!canSync ? 'disabled' : ''}>
+            ${canSync ? '🔄 Force Sync to Assignment' : 'Sync Disabled'}
         </button>
     </div>
 
     <script>
         const vscode = acquireVsCodeApi();
         const syncBtn = document.getElementById('syncBtn');
-        const themeBtn = document.getElementById('theme-toggle');
-
-        themeBtn.addEventListener('click', () => {
-            document.documentElement.classList.toggle('dark');
-        });
 
         syncBtn.addEventListener('click', () => {
             syncBtn.disabled = true;

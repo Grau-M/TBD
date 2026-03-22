@@ -21,6 +21,7 @@ import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActiviti
 import { openAuthView, openAccountView } from './auth/index';
 import { updateSyncStatus } from './statusBar';
 import { ApiHttpError, apiGet, apiPost, configureApiTokenProvider } from './api';
+import { updateApiKeyStatus } from './statusBar';
 
 import * as path from 'path';
 import { openStudentSyncView } from './auth/studentSyncView';
@@ -55,6 +56,7 @@ async function updateDbStatusBar(): Promise<void> {
         statusItem.tooltip = `API is not reachable. Last error: ${msg}`;
     }
 }
+
 
 function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
     const session = getWorkspaceAuthSession(context);
@@ -180,7 +182,43 @@ export async function activate(context: vscode.ExtensionContext) {
 
         return false;
     };
+    async function checkInitialApiKeyStatus() {
+    // Check your database/storage to see if a valid key already exists
+    // const existingKey = await apiStorageManager.getApiKey();
+    const hasValidKey = false; // Replace with your actual check
 
+    // This will either hide it (if true) or show the "Set API Key" prompt (if false)
+    updateApiKeyStatus(hasValidKey);
+}
+
+checkInitialApiKeyStatus();
+let enterApiKeyCommand = vscode.commands.registerCommand('tbd-logger.enterApiKey', async () => {
+    const apiKey = await vscode.window.showInputBox({
+        prompt: "Enter your API Key",
+        placeHolder: "Paste your API key here...",
+        password: true,
+        ignoreFocusOut: true
+    });
+
+    if (apiKey) {
+        // 1. Save to your storage/database
+        // await apiStorageManager.storeApiKey(apiKey);
+        
+        // 2. Validate the key (Optional: make a test API call here to ensure it works)
+        const isKeyValid = true; // Replace with actual validation logic
+
+        if (isKeyValid) {
+            vscode.window.showInformationMessage("API Key successfully set!");
+            // 3. Hide the status bar item since we now have a valid key
+            updateApiKeyStatus(true);
+        } else {
+            vscode.window.showErrorMessage("Invalid API Key provided.");
+            updateApiKeyStatus(false);
+        }
+    }
+});
+
+context.subscriptions.push(enterApiKeyCommand);
     const withApiTokenRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
         try {
             return await operation();
@@ -272,7 +310,7 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         }
     }
-// 👉 UPDATED CONSENT GATE
+//  UPDATED CONSENT GATE
     const CURRENT_POLICY_VERSION = 'v1.1'; 
     const currentAuth = getWorkspaceAuthSession(context);
     
@@ -314,7 +352,7 @@ export async function activate(context: vscode.ExtensionContext) {
         console.log('[TBD Logger] CI environment detected: Auto-granting consent for automated tests.');
         state.isConsentGiven = true;
     }
-    // 👉 END OF CONSENT GATE
+    //  END OF CONSENT GATE
     // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
         inactivityThresholdMs: 5 * 60 * 1000, // 5 minutes (change if you want)

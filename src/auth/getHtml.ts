@@ -21,17 +21,15 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
   <title>TBD Logger — Sign In</title>
   <style>
     :root {
-      --bg: #f0f4f8;
-      --surface: #ffffff;
-      --muted: #6b7280;
-      --fg: #111827;
-      --border: rgba(0,0,0,0.1);
-      --accent: #2563eb;
-      --accent-2: #7c3aed;
+      --bg: var(--vscode-editor-background); 
+      --surface: var(--vscode-sideBar-background, var(--vscode-editorWidget-background)); 
+      --muted: var(--vscode-descriptionForeground); 
+      --fg: var(--vscode-editor-foreground);
+      --border: var(--vscode-panel-border, rgba(128, 128, 128, 0.2)); 
+      --accent: var(--vscode-button-background); 
+      --accent-hover: var(--vscode-button-hoverBackground);
+      --success: #16a34a; 
       --error: #dc2626;
-      --error-bg: rgba(220,38,38,0.08);
-      --success: #16a34a;
-      --success-bg: rgba(22,163,74,0.08);
     }
     .dark, :root.dark {
       --bg: #071021;

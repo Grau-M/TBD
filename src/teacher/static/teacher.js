@@ -148,6 +148,80 @@
       } catch (e) {}
     }
 
+    const meetingDays = [
+      { key: "mon", label: "Mon" },
+      { key: "tue", label: "Tue" },
+      { key: "wed", label: "Wed" },
+      { key: "thu", label: "Thu" },
+      { key: "fri", label: "Fri" },
+      { key: "sat", label: "Sat" },
+      { key: "sun", label: "Sun" },
+    ];
+
+    function clearMeetingScheduleInputs() {
+      meetingDays.forEach((day) => {
+        const box = $(`class-day-${day.key}`);
+        if (box) {
+          box.checked = false;
+        }
+      });
+      if ($("class-meeting-start")) {
+        $("class-meeting-start").value = "";
+      }
+      if ($("class-meeting-end")) {
+        $("class-meeting-end").value = "";
+      }
+      if ($("class-meeting-time")) {
+        $("class-meeting-time").value = "";
+      }
+    }
+
+    function buildMeetingScheduleText() {
+      const selectedDays = meetingDays
+        .filter((day) => !!$(`class-day-${day.key}`)?.checked)
+        .map((day) => day.label);
+      const start = $("class-meeting-start")?.value || "";
+      const end = $("class-meeting-end")?.value || "";
+
+      if (!selectedDays.length || !start || !end) {
+        return "";
+      }
+      return `${selectedDays.join(", ")} | ${start}-${end}`;
+    }
+
+    function applyMeetingScheduleText(meetingTimeRaw) {
+      clearMeetingScheduleInputs();
+      const meetingTime = String(meetingTimeRaw || "").trim();
+      if (!meetingTime) {
+        return;
+      }
+
+      if ($("class-meeting-time")) {
+        $("class-meeting-time").value = meetingTime;
+      }
+
+      const [daysPart, timePart] = meetingTime.split("|").map((s) => String(s || "").trim());
+      if (daysPart) {
+        const selected = daysPart.split(",").map((s) => s.trim().toLowerCase());
+        meetingDays.forEach((day) => {
+          const box = $(`class-day-${day.key}`);
+          if (box) {
+            box.checked = selected.includes(day.label.toLowerCase());
+          }
+        });
+      }
+
+      if (timePart && timePart.includes("-")) {
+        const [start, end] = timePart.split("-").map((s) => s.trim());
+        if ($("class-meeting-start")) {
+          $("class-meeting-start").value = start || "";
+        }
+        if ($("class-meeting-end")) {
+          $("class-meeting-end").value = end || "";
+        }
+      }
+    }
+
     function installDatePickerBehavior() {
       const targetIds = new Set([
         "class-start-date",
@@ -862,6 +936,28 @@
           if (status) {
             status.textContent = "Error: " + (msg.message || "");
           }
+          if ($("class-form-card")?.style.display === "block") {
+            const errEl = $("class-form-error");
+            if (errEl) {
+              errEl.textContent = msg.message || "Unable to save class. Please try again.";
+              errEl.style.display = "block";
+            }
+          }
+          // If class loading fails, stop spinner and show empty state instead of hanging.
+          if (currentTab === "class") {
+            const loadingEl = $("class-list-loading");
+            const emptyEl = $("class-list-empty");
+            const listView = $("class-list-view");
+            if (loadingEl) {
+              loadingEl.style.display = "none";
+            }
+            if (listView) {
+              listView.innerHTML = "";
+            }
+            if (emptyEl) {
+              emptyEl.style.display = "block";
+            }
+          }
           const compareMessage = $("assignment-compare-message");
           const isCompareLoading =
             !!compareMessage &&
@@ -893,9 +989,16 @@
           break;
 
         case "classList":
-          renderClasses(msg.data || []);
-          if (status) {
-            status.textContent = (msg.data || []).length + " class(es) loaded";
+          {
+            const classes = Array.isArray(msg.data)
+              ? msg.data
+              : Array.isArray(msg.data?.classes)
+                ? msg.data.classes
+                : [];
+            renderClasses(classes);
+            if (status) {
+              status.textContent = classes.length + " class(es) loaded";
+            }
           }
           break;
 
@@ -921,6 +1024,7 @@
               el.value = "";
             }
           });
+          clearMeetingScheduleInputs();
           if (status) {
             status.textContent =
               "Class created! Join code: " + (msg.data?.joinCode || "");
@@ -953,6 +1057,7 @@
               el.value = "";
             }
           });
+          clearMeetingScheduleInputs();
           editingClassId = null;
           if (status) {
             status.textContent = "Class updated successfully.";
@@ -1481,6 +1586,7 @@
           if ($("class-meeting-time")) {
             $("class-meeting-time").value = cls.meetingTime || "";
           }
+          applyMeetingScheduleText(cls.meetingTime || "");
           if ($("class-start-date")) {
             $("class-start-date").value = cls.startDate || "";
           }
@@ -1992,6 +2098,7 @@
       if ($("class-form-card")) {
         $("class-form-card").style.display = "none";
       }
+      clearMeetingScheduleInputs();
       editingClassId = null;
       const submitBtn = $("btn-submit-class");
       if (submitBtn) {
@@ -2154,21 +2261,26 @@
       const courseName = $("class-course-name")?.value?.trim();
       const courseCode = $("class-course-code")?.value?.trim();
       const teacherName = $("class-teacher-name")?.value?.trim();
-      const meetingTime = $("class-meeting-time")?.value?.trim();
+      const meetingTime = buildMeetingScheduleText();
       const startDate = $("class-start-date")?.value;
       const endDate = $("class-end-date")?.value;
       const errEl = $("class-form-error");
+
+      if ($("class-meeting-time")) {
+        $("class-meeting-time").value = meetingTime;
+      }
 
       if (
         !courseName ||
         !courseCode ||
         !teacherName ||
+        !meetingTime ||
         !startDate ||
         !endDate
       ) {
         if (errEl) {
           errEl.textContent =
-            "Course Name, Course Code, Teacher Name, Start Date, and End Date are required.";
+            "Course Name, Course Code, Teacher Name, Meeting Schedule, Start Date, and End Date are required.";
           errEl.style.display = "block";
         }
         return;

@@ -374,12 +374,28 @@ export class ApiStorageManager {
         });
     }
 
-    async validateAssignmentLink(_authUserId: number, workspaceRoot: string): Promise<{ assignmentName: string; workspaceRootPath: string } | null> {
-        if (!workspaceRoot) {
+    async validateAssignmentLink(_authUserId: number, workspaceRoot: string): Promise<{
+        classId: number;
+        assignmentId: number;
+        assignmentName: string;
+        workspaceRootPath: string;
+    } | null> {
+        if (!workspaceRoot || !this.context) {
             return null;
         }
+
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const classId = Number(session?.workspaceLinkedClassId ?? 0);
+        const assignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+
+        if (!classId || !assignmentId) {
+            return null;
+        }
+
         return {
-            assignmentName: 'Current Assignment',
+            classId,
+            assignmentId,
+            assignmentName: String(session?.displayName || 'Current Assignment'),
             workspaceRootPath: workspaceRoot
         };
     }
@@ -556,7 +572,9 @@ export class ApiStorageManager {
     async listClassStudentsSummary(classId: number, teacherAuthUserId: number): Promise<any[]> {
         const result = await this.apiGetFirst([
             `/api/classes/${classId}/students?teacherAuthUserId=${teacherAuthUserId}`,
-            `/api/classes/students?classId=${classId}&teacherAuthUserId=${teacherAuthUserId}`
+            `/api/class-students?classId=${classId}&teacherAuthUserId=${teacherAuthUserId}`,
+            `/api/class-students/${classId}?teacherAuthUserId=${teacherAuthUserId}`,
+            `/api/classes/${classId}/students-summary?teacherAuthUserId=${teacherAuthUserId}`
         ]);
         const rows = Array.isArray(result)
             ? result
@@ -638,8 +656,7 @@ export class ApiStorageManager {
 
     async listStudentClasses(studentAuthUserId: number): Promise<any[]> {
         const result = await this.apiGetFirst([
-            `/api/student/classes?studentAuthUserId=${studentAuthUserId}`,
-            `/api/classes/student?studentAuthUserId=${studentAuthUserId}`
+            `/api/student/classes?studentAuthUserId=${studentAuthUserId}`
         ]);
         const rows = Array.isArray(result)
             ? result

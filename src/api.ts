@@ -1,6 +1,5 @@
 const API_BASE = 'http://142.55.32.101';
-
-let apiTokenProvider: (() => Promise<string | undefined>) | undefined;
+const API_KEY = 'supersecretkey123';
 
 export class ApiHttpError extends Error {
   status: number;
@@ -13,20 +12,10 @@ export class ApiHttpError extends Error {
   }
 }
 
-export function configureApiTokenProvider(provider: (() => Promise<string | undefined>) | undefined): void {
-  apiTokenProvider = provider;
-}
-
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const token = (await apiTokenProvider?.())?.trim();
-  if (!token) {
-    return {};
-  }
-
-  // Keep both headers temporarily for backend compatibility while migrating.
   return {
-    Authorization: `Bearer ${token}`,
-    'x-api-key': token
+    Authorization: `Bearer ${API_KEY}`,
+    'x-api-key': API_KEY
   };
 }
 

@@ -167,21 +167,95 @@
       });
       if ($("class-meeting-start")) {
         $("class-meeting-start").value = "";
+        $("class-meeting-start").dataset.timeValue = "";
       }
       if ($("class-meeting-end")) {
         $("class-meeting-end").value = "";
+        $("class-meeting-end").dataset.timeValue = "";
       }
       if ($("class-meeting-time")) {
         $("class-meeting-time").value = "";
       }
     }
 
+    function formatTimeTo12Hour(value) {
+      const input = String(value || "").trim();
+      const match = input.match(/^(\d{1,2}):(\d{2})$/);
+      if (!match) {
+        return input;
+      }
+
+      let hours = Number(match[1]);
+      const minutes = match[2];
+      if (!Number.isFinite(hours)) {
+        return input;
+      }
+
+      const period = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12;
+      if (hours === 0) {
+        hours = 12;
+      }
+      return `${hours}:${minutes} ${period}`;
+    }
+
+    function parseDisplayTimeTo24Hour(value) {
+      const input = String(value || "").trim();
+      if (!input) {
+        return "";
+      }
+
+      // Already 24h
+      if (/^\d{1,2}:\d{2}$/.test(input)) {
+        const [h, m] = input.split(":").map(Number);
+        if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+          return "";
+        }
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      }
+
+      // 12h format (h:mm AM/PM)
+      const match = input.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (!match) {
+        return "";
+      }
+      let hours = Number(match[1]);
+      const minutes = Number(match[2]);
+      const meridian = String(match[3] || "").toUpperCase();
+
+      if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
+        return "";
+      }
+      if (meridian === "AM") {
+        if (hours === 12) {
+          hours = 0;
+        }
+      } else if (meridian === "PM") {
+        if (hours !== 12) {
+          hours += 12;
+        }
+      }
+
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    }
+
+    function getCanonicalTimeValue(inputEl) {
+      if (!inputEl) {
+        return "";
+      }
+      const dataValue = String(inputEl.dataset.timeValue || "").trim();
+      if (dataValue) {
+        return dataValue;
+      }
+      return parseDisplayTimeTo24Hour(inputEl.value || "");
+    }
+
     function buildMeetingScheduleText() {
       const selectedDays = meetingDays
         .filter((day) => !!$(`class-day-${day.key}`)?.checked)
         .map((day) => day.label);
-      const start = $("class-meeting-start")?.value || "";
-      const end = $("class-meeting-end")?.value || "";
+      const start = getCanonicalTimeValue($("class-meeting-start"));
+      const end = getCanonicalTimeValue($("class-meeting-end"));
 
       if (!selectedDays.length || !start || !end) {
         return "";
@@ -214,18 +288,115 @@
       if (timePart && timePart.includes("-")) {
         const [start, end] = timePart.split("-").map((s) => s.trim());
         if ($("class-meeting-start")) {
-          $("class-meeting-start").value = start || "";
+          $("class-meeting-start").dataset.timeValue = start || "";
+          $("class-meeting-start").value = start ? formatTimeTo12Hour(start) : "";
         }
         if ($("class-meeting-end")) {
-          $("class-meeting-end").value = end || "";
+          $("class-meeting-end").dataset.timeValue = end || "";
+          $("class-meeting-end").value = end ? formatTimeTo12Hour(end) : "";
         }
       }
+    }
+
+    function formatTimeTo12Hour(value) {
+      const input = String(value || "").trim();
+      const match = input.match(/^(\d{1,2}):(\d{2})$/);
+      if (!match) {
+        return input;
+      }
+
+      let hours = Number(match[1]);
+      const minutes = match[2];
+      if (!Number.isFinite(hours)) {
+        return input;
+      }
+
+      const period = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12;
+      if (hours === 0) {
+        hours = 12;
+      }
+      return `${hours}:${minutes} ${period}`;
+    }
+
+    function formatMeetingTimeDisplay(meetingTimeRaw) {
+      const meetingTime = String(meetingTimeRaw || "").trim();
+      if (!meetingTime) {
+        return "—";
+      }
+
+      const [daysPart, timePart] = meetingTime
+        .split("|")
+        .map((segment) => String(segment || "").trim());
+
+      if (!timePart || !timePart.includes("-")) {
+        return meetingTime;
+      }
+
+      const [start, end] = timePart.split("-").map((segment) => String(segment || "").trim());
+      const start12 = formatTimeTo12Hour(start);
+      const end12 = formatTimeTo12Hour(end);
+      if (!daysPart) {
+        return `${start12}-${end12}`;
+      }
+      return `${daysPart} | ${start12}-${end12}`;
+    }
+
+    function formatClassDateDisplay(dateValueRaw) {
+      const input = String(dateValueRaw || "").trim();
+      if (!input) {
+        return "—";
+      }
+
+      // Treat yyyy-mm-dd and full ISO as calendar dates to avoid timezone day shifting.
+      const short = input.slice(0, 10);
+      const parts = short.split("-").map((part) => Number(part));
+      if (parts.length === 3 && parts.every((part) => Number.isFinite(part))) {
+        const [year, month, day] = parts;
+        const localDate = new Date(year, month - 1, day);
+        return localDate.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+
+      const fallback = new Date(input);
+      if (Number.isNaN(fallback.getTime())) {
+        return input;
+      }
+      return fallback.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+
+    function normalizeDateForInput(dateValueRaw) {
+      const input = String(dateValueRaw || "").trim();
+      if (!input) {
+        return "";
+      }
+
+      const short = input.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(short)) {
+        return short;
+      }
+
+      const parsed = new Date(input);
+      if (Number.isNaN(parsed.getTime())) {
+        return "";
+      }
+
+      return parsed.toISOString().slice(0, 10);
     }
 
     function installDatePickerBehavior() {
       const targetIds = new Set([
         "class-start-date",
         "class-end-date",
+        "class-meeting-start",
+        "class-meeting-end",
         "assignment-due-date",
       ]);
 
@@ -234,7 +405,7 @@
         if (!(el instanceof HTMLInputElement)) {
           return null;
         }
-        if (el.type !== "date" || !targetIds.has(el.id)) {
+        if ((el.type !== "date" && el.type !== "time") || !targetIds.has(el.id)) {
           return null;
         }
         return el;
@@ -295,7 +466,780 @@
       document.addEventListener("click", onClick, true);
     }
 
+    function installTimePickerOnlyBehavior() {
+      const targetIds = ["class-meeting-start", "class-meeting-end"];
+
+      const times = [];
+      for (let hour = 0; hour < 24; hour++) {
+        for (const minute of [0, 15, 30, 45]) {
+          const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+          times.push({ value, label: formatTimeTo12Hour(value) });
+        }
+      }
+
+      let dropdown = null;
+      let activeInput = null;
+      let highlightedIndex = -1;
+      let currentVisibleTimes = times.slice();
+      let renderedButtons = [];
+      const lastSuggestedByInputId = new Map();
+
+      const closeDropdown = () => {
+        if (dropdown) {
+          dropdown.style.display = "none";
+        }
+        activeInput = null;
+        highlightedIndex = -1;
+        currentVisibleTimes = times.slice();
+        renderedButtons = [];
+      };
+
+      const ensureDropdown = () => {
+        if (dropdown) {
+          return dropdown;
+        }
+        dropdown = document.createElement("div");
+        dropdown.id = "class-time-dropdown";
+        dropdown.style.position = "fixed";
+        dropdown.style.zIndex = "500";
+        dropdown.style.maxHeight = "220px";
+        dropdown.style.overflowY = "auto";
+        dropdown.style.minWidth = "210px";
+        dropdown.style.padding = "6px";
+        dropdown.style.border = "1px solid var(--border)";
+        dropdown.style.borderRadius = "10px";
+        dropdown.style.background = "var(--surface)";
+        dropdown.style.boxShadow = "0 12px 28px rgba(0,0,0,0.25)";
+        dropdown.style.display = "none";
+        document.body.appendChild(dropdown);
+        return dropdown;
+      };
+
+      const positionDropdown = (inputEl) => {
+        if (!dropdown || !inputEl) {
+          return;
+        }
+        const rect = inputEl.getBoundingClientRect();
+        dropdown.style.left = `${Math.max(8, rect.left)}px`;
+        dropdown.style.top = `${Math.min(window.innerHeight - 230, rect.bottom + 4)}px`;
+        dropdown.style.width = `${Math.max(180, rect.width)}px`;
+      };
+
+      const getGhostEl = (inputEl) => {
+        if (!(inputEl instanceof HTMLInputElement) || !inputEl.id) {
+          return null;
+        }
+        const el = document.getElementById(`${inputEl.id}-ghost`);
+        return el instanceof HTMLElement ? el : null;
+      };
+
+      const hideGhost = (inputEl) => {
+        const ghost = getGhostEl(inputEl);
+        if (!ghost) {
+          return;
+        }
+        ghost.style.display = "none";
+        ghost.innerHTML = "";
+      };
+
+      const syncGhostTypography = (inputEl) => {
+        const ghost = getGhostEl(inputEl);
+        if (!ghost || !(inputEl instanceof HTMLInputElement)) {
+          return;
+        }
+        const computed = window.getComputedStyle(inputEl);
+        ghost.style.font = computed.font;
+        ghost.style.fontSize = computed.fontSize;
+        ghost.style.lineHeight = computed.lineHeight;
+        ghost.style.letterSpacing = computed.letterSpacing;
+        ghost.style.textTransform = computed.textTransform;
+        ghost.style.padding = computed.padding;
+      };
+
+      const updateGhost = (inputEl) => {
+        const ghost = getGhostEl(inputEl);
+        if (!ghost || activeInput !== inputEl || highlightedIndex < 0 || highlightedIndex >= currentVisibleTimes.length) {
+          hideGhost(inputEl);
+          return;
+        }
+
+        const suggestion = String(currentVisibleTimes[highlightedIndex]?.label || "");
+        const typed = String(inputEl.value || "");
+        if (!suggestion || !typed || !suggestion.toLowerCase().startsWith(typed.toLowerCase())) {
+          hideGhost(inputEl);
+          return;
+        }
+
+        syncGhostTypography(inputEl);
+        ghost.innerHTML = "";
+
+        const typedSpan = document.createElement("span");
+        typedSpan.textContent = typed;
+        typedSpan.style.visibility = "hidden";
+
+        const suffixSpan = document.createElement("span");
+        suffixSpan.textContent = suggestion.slice(typed.length);
+        suffixSpan.style.color = "var(--muted)";
+        suffixSpan.style.opacity = "0.85";
+
+        if (!suffixSpan.textContent) {
+          hideGhost(inputEl);
+          return;
+        }
+
+        ghost.appendChild(typedSpan);
+        ghost.appendChild(suffixSpan);
+        ghost.style.display = "block";
+      };
+
+      const getStrictMinuteDigits = (value) => {
+        const input = String(value || "").toUpperCase();
+        const match = input.match(/^\s*\d{1,2}:(\d{2})(?:\s*[AP]M?)?\s*$/);
+        return match ? String(match[1] || "") : "";
+      };
+
+      const getPeriodPriorityFromQuery = (query) => {
+        const raw = String(query || "").trim().toUpperCase();
+        if (!raw) {
+          return null;
+        }
+
+        const numericMatch = raw.match(/^(\d{1,2})/);
+        if (!numericMatch) {
+          return null;
+        }
+
+        const hour = Number(numericMatch[1]);
+        if (!Number.isFinite(hour) || hour < 1 || hour > 12) {
+          return null;
+        }
+
+        if (hour === 12) {
+          return "PM";
+        }
+
+        if (hour >= 9 && hour <= 11) {
+          return "AM";
+        }
+        if (hour >= 1 && hour <= 8) {
+          return "PM";
+        }
+        return null;
+      };
+
+      const getPeriodFromEntry = (entry) => {
+        const canonical = String(entry?.value || "");
+        const hour24 = Number(canonical.split(":")[0]);
+        if (!Number.isFinite(hour24)) {
+          return "";
+        }
+        return hour24 >= 12 ? "PM" : "AM";
+      };
+
+      const reorderByPeriodPreference = (entries, query) => {
+        const preferred = getPeriodPriorityFromQuery(query);
+        if (!preferred || !Array.isArray(entries) || entries.length <= 1) {
+          return entries;
+        }
+
+        return entries.slice().sort((a, b) => {
+          const aPreferred = getPeriodFromEntry(a) === preferred ? 0 : 1;
+          const bPreferred = getPeriodFromEntry(b) === preferred ? 0 : 1;
+          if (aPreferred !== bPreferred) {
+            return aPreferred - bPreferred;
+          }
+          return times.indexOf(a) - times.indexOf(b);
+        });
+      };
+
+      const getPreferredPeriodFromHour12 = (hour12) => {
+        const hour = Number(hour12);
+        if (!Number.isFinite(hour) || hour < 1 || hour > 12) {
+          return "AM";
+        }
+        if (hour === 12) {
+          return "PM";
+        }
+        if (hour >= 9 && hour <= 11) {
+          return "AM";
+        }
+        return "PM";
+      };
+
+      const reorderForBlankInput = (entries, query) => {
+        if (!Array.isArray(entries) || entries.length <= 1 || String(query || "").trim()) {
+          return entries;
+        }
+        const startIndex = entries.findIndex((entry) => String(entry?.value || "") === "08:00");
+        if (startIndex <= 0) {
+          return entries;
+        }
+        return entries.slice(startIndex).concat(entries.slice(0, startIndex));
+      };
+
+      const normalizeTimeSearch = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      const getHour12FromCanonical = (canonical) => {
+        const parts = String(canonical || "").split(":");
+        const hour24 = Number(parts[0]);
+        if (!Number.isFinite(hour24)) {
+          return "";
+        }
+        let hour12 = hour24 % 12;
+        if (hour12 === 0) {
+          hour12 = 12;
+        }
+        return String(hour12);
+      };
+
+      const getTimeSearchTokens = (entry) => {
+        const tokens = [];
+        const canonical = String(entry.value || "");
+        const label = String(entry.label || "");
+        const labelLower = label.toLowerCase();
+
+        tokens.push(labelLower);
+        tokens.push(canonical);
+        tokens.push(labelLower.replace(/\s+/g, ""));
+
+        const parts = canonical.split(":");
+        const hour = Number(parts[0]);
+        const minute = String(parts[1] || "00");
+        if (Number.isFinite(hour)) {
+          const period = hour >= 12 ? "pm" : "am";
+          let hour12 = hour % 12;
+          if (hour12 === 0) {
+            hour12 = 12;
+          }
+          const hourText = String(hour12);
+          tokens.push(`${hourText}${period}`);
+          tokens.push(`${hourText}:${minute}${period}`);
+          tokens.push(`${hourText}:${minute} ${period}`);
+        }
+
+        return tokens;
+      };
+
+      const entryMatchesQuery = (entry, query) => {
+        const raw = String(query || "").trim().toLowerCase();
+        if (!raw) {
+          return true;
+        }
+
+        const hourMinutePrefixMatch = raw.match(/^(\d{1,2}):(\d{0,2})$/);
+        if (hourMinutePrefixMatch) {
+          const queryHour = String(Number(hourMinutePrefixMatch[1]));
+          const queryMinutePrefix = String(hourMinutePrefixMatch[2] || "");
+
+          const canonical = String(entry.value || "");
+          const [hour24Text, minuteText = ""] = canonical.split(":");
+          const hour24 = Number(hour24Text);
+          if (!Number.isFinite(hour24)) {
+            return false;
+          }
+
+          let hour12 = hour24 % 12;
+          if (hour12 === 0) {
+            hour12 = 12;
+          }
+
+          if (String(hour12) !== queryHour) {
+            return false;
+          }
+          return minuteText.startsWith(queryMinutePrefix);
+        }
+
+        // Pure hour typing should match hour semantics, not normalized text prefixes.
+        if (/^\d{1,2}$/.test(raw)) {
+          const hourText = getHour12FromCanonical(entry.value);
+          if (!hourText) {
+            return false;
+          }
+          if (raw.length === 1) {
+            if (raw === "1") {
+              return hourText === "1" || hourText === "10" || hourText === "11" || hourText === "12";
+            }
+            return hourText === raw;
+          }
+          return hourText === raw;
+        }
+
+        const normalizedQuery = normalizeTimeSearch(raw);
+        return getTimeSearchTokens(entry).some((token) => {
+          const tokenLower = String(token || "").toLowerCase();
+          const normalizedToken = normalizeTimeSearch(tokenLower);
+          return tokenLower.startsWith(raw) || normalizedToken.startsWith(normalizedQuery);
+        });
+      };
+
+      const sanitizeMinuteDigits = (minuteDigitsRaw) => {
+        const minuteDigits = String(minuteDigitsRaw || "").replace(/\D/g, "").slice(0, 2);
+        if (!minuteDigits) {
+          return "";
+        }
+        if (minuteDigits.length === 1) {
+          return Number(minuteDigits[0]) <= 5 ? minuteDigits : "";
+        }
+        if (Number(minuteDigits[0]) > 5) {
+          return minuteDigits[1] ? minuteDigits[1] : "";
+        }
+        return minuteDigits;
+      };
+
+      const normalizeTypedTimeInput = (rawValue) => {
+        let raw = String(rawValue || "");
+        raw = raw.toUpperCase().replace(/[^\d:APM\s]/g, "");
+        if (!raw) {
+          return "";
+        }
+
+        const meridianLetters = raw.replace(/[^APM]/g, "");
+        let meridian = "";
+        if (meridianLetters.startsWith("AM")) {
+          meridian = "AM";
+        } else if (meridianLetters.startsWith("PM")) {
+          meridian = "PM";
+        } else if (meridianLetters.startsWith("A")) {
+          meridian = "A";
+        } else if (meridianLetters.startsWith("P")) {
+          meridian = "P";
+        }
+
+        raw = raw.replace(/[^\d:]/g, "");
+
+        const firstColon = raw.indexOf(":");
+        let hasColon = firstColon >= 0;
+        let hourPart = hasColon ? raw.slice(0, firstColon) : raw;
+        let minutePart = hasColon ? raw.slice(firstColon + 1).replace(/:/g, "") : "";
+        hourPart = hourPart.replace(/\D/g, "");
+
+        if (!hourPart) {
+          return "";
+        }
+
+        const first = hourPart[0];
+        if (first === "0") {
+          const next = hourPart[1] || "";
+          if (!next || next === "0") {
+            return "";
+          }
+          hourPart = next;
+        }
+
+        if (!hourPart) {
+          return "";
+        }
+
+        if (!hasColon) {
+          if (first === "1") {
+            if (hourPart.length === 1) {
+              return "1";
+            }
+            const second = hourPart[1];
+            if (!["0", "1", "2"].includes(second)) {
+              return "1";
+            }
+            const minuteDigits = sanitizeMinuteDigits(hourPart.slice(2));
+            const base = minuteDigits ? `1${second}:${minuteDigits}` : `1${second}:`;
+            return meridian ? `${base} ${meridian}` : base;
+          }
+
+          if (/^[2-9]$/.test(first)) {
+            const minuteDigits = sanitizeMinuteDigits(hourPart.slice(1));
+            const base = minuteDigits ? `${first}:${minuteDigits}` : `${first}:`;
+            return meridian ? `${base} ${meridian}` : base;
+          }
+
+          return "";
+        }
+
+        if (hourPart[0] === "1") {
+          if (hourPart.length > 2) {
+            hourPart = hourPart.slice(0, 2);
+          }
+          if (hourPart.length === 2 && !["0", "1", "2"].includes(hourPart[1])) {
+            hourPart = "1";
+          }
+        } else if (/^[2-9]/.test(hourPart[0])) {
+          hourPart = hourPart[0];
+        } else {
+          return "";
+        }
+
+        minutePart = sanitizeMinuteDigits(minutePart);
+        const base = `${hourPart}:${minutePart}`;
+        return meridian ? `${base} ${meridian}` : base;
+      };
+
+      const syncInputTimeValue = (inputEl, keepTypedText = false) => {
+        if (!(inputEl instanceof HTMLInputElement)) {
+          return;
+        }
+        const normalized = normalizeTypedTimeInput(inputEl.value || "");
+        if (normalized !== inputEl.value) {
+          inputEl.value = normalized;
+        }
+
+        let canonical = "";
+        if (normalized) {
+          // Interpret naked 12h input as AM by default for storage until a concrete selection occurs.
+          const maybe12Hour = `${normalized} AM`;
+          canonical = parseDisplayTimeTo24Hour(maybe12Hour) || parseDisplayTimeTo24Hour(normalized) || "";
+        }
+
+        inputEl.dataset.timeValue = canonical;
+
+        if (!keepTypedText && canonical) {
+          inputEl.value = formatTimeTo12Hour(canonical);
+        }
+
+        if (!keepTypedText) {
+          hideGhost(inputEl);
+        }
+      };
+
+      const tryFinalizeCustomTimeOnBlur = (inputEl) => {
+        if (!(inputEl instanceof HTMLInputElement)) {
+          return "";
+        }
+
+        const normalized = normalizeTypedTimeInput(inputEl.value || "");
+        const match = normalized.match(/^\s*(\d{1,2}):(\d{1,2})(?:\s*(AM|PM|A|P))?\s*$/i);
+        if (!match) {
+          return "";
+        }
+
+        const hour12 = Number(match[1]);
+        if (!Number.isFinite(hour12) || hour12 < 1 || hour12 > 12) {
+          return "";
+        }
+
+        let minute = String(match[2] || "");
+        if (minute.length === 1) {
+          minute = `${minute}0`;
+        }
+        if (minute.length !== 2) {
+          return "";
+        }
+
+        let period = String(match[3] || "").toUpperCase();
+        if (period === "A") {
+          period = "AM";
+        } else if (period === "P") {
+          period = "PM";
+        }
+        if (!period) {
+          period = getPreferredPeriodFromHour12(hour12);
+        }
+
+        const canonical = parseDisplayTimeTo24Hour(`${hour12}:${minute} ${period}`);
+        if (!canonical) {
+          return "";
+        }
+
+        inputEl.dataset.timeValue = canonical;
+        inputEl.value = formatTimeTo12Hour(canonical);
+        return canonical;
+      };
+
+      const setInputToEntry = (inputEl, entry) => {
+        if (!(inputEl instanceof HTMLInputElement) || !entry) {
+          return;
+        }
+        inputEl.dataset.timeValue = entry.value;
+        inputEl.value = entry.label;
+      };
+
+      const coerceTypedTime = (inputEl) => {
+        if (!(inputEl instanceof HTMLInputElement)) {
+          return "";
+        }
+        const customFinalized = tryFinalizeCustomTimeOnBlur(inputEl);
+        if (customFinalized) {
+          hideGhost(inputEl);
+          return customFinalized;
+        }
+        syncInputTimeValue(inputEl, false);
+        const canonical = String(inputEl.dataset.timeValue || "");
+        if (!canonical) {
+          inputEl.dataset.timeValue = "";
+          return "";
+        }
+        return canonical;
+      };
+
+      const refreshHighlightStyles = () => {
+        renderedButtons.forEach((button, index) => {
+          const active = index === highlightedIndex;
+          button.style.background = active ? "var(--accent)" : "transparent";
+          button.style.color = active ? "white" : "var(--fg)";
+        });
+
+        if (
+          activeInput &&
+          activeInput.id &&
+          highlightedIndex >= 0 &&
+          highlightedIndex < currentVisibleTimes.length
+        ) {
+          lastSuggestedByInputId.set(activeInput.id, currentVisibleTimes[highlightedIndex]);
+        }
+
+        if (activeInput) {
+          updateGhost(activeInput);
+        }
+      };
+
+      const renderDropdown = (inputEl, filterText, preserveHighlight = false) => {
+        if (!(inputEl instanceof HTMLInputElement)) {
+          return;
+        }
+
+        activeInput = inputEl;
+        const panel = ensureDropdown();
+        panel.innerHTML = "";
+        renderedButtons = [];
+
+        const filter = String(filterText ?? inputEl.value ?? "");
+        const strictMinute = getStrictMinuteDigits(filter);
+        if (strictMinute && !["00", "15", "30", "45"].includes(strictMinute)) {
+          closeDropdown();
+          hideGhost(inputEl);
+          return;
+        }
+
+        const filtered = reorderForBlankInput(
+          reorderByPeriodPreference(
+            times.filter((entry) => entryMatchesQuery(entry, filter)),
+            filter,
+          ),
+          filter,
+        );
+        currentVisibleTimes = filtered.length ? filtered : [];
+
+        if (!currentVisibleTimes.length && String(filter || "").trim()) {
+          closeDropdown();
+          hideGhost(inputEl);
+          return;
+        }
+
+        const current = getCanonicalTimeValue(inputEl);
+        let preferredIndex = currentVisibleTimes.findIndex((entry) => entry.value === current);
+        if (preferredIndex < 0) {
+          preferredIndex = currentVisibleTimes.length ? 0 : -1;
+        }
+
+        if (!preserveHighlight || highlightedIndex < 0 || highlightedIndex >= currentVisibleTimes.length) {
+          highlightedIndex = preferredIndex;
+        }
+
+        if (!currentVisibleTimes.length) {
+          const empty = document.createElement("div");
+          empty.textContent = "No matching times";
+          empty.style.padding = "8px 10px";
+          empty.style.color = "var(--muted)";
+          empty.style.fontSize = "12px";
+          panel.appendChild(empty);
+        }
+
+        currentVisibleTimes.forEach((entry, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = entry.label;
+          button.style.width = "100%";
+          button.style.textAlign = "left";
+          button.style.padding = "8px 10px";
+          button.style.border = "none";
+          button.style.borderRadius = "8px";
+          button.style.cursor = "pointer";
+
+          button.addEventListener("mouseenter", () => {
+            highlightedIndex = index;
+            refreshHighlightStyles();
+          });
+
+          button.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            setInputToEntry(inputEl, entry);
+            closeDropdown();
+          });
+
+          panel.appendChild(button);
+          renderedButtons.push(button);
+        });
+
+        refreshHighlightStyles();
+
+        positionDropdown(inputEl);
+        panel.style.display = "block";
+
+        if (highlightedIndex >= 0 && panel.children[highlightedIndex]) {
+          panel.children[highlightedIndex].scrollIntoView({ block: "nearest" });
+        }
+        updateGhost(inputEl);
+      };
+
+      const openDropdown = (inputEl, filterText, preserveHighlight = false) => {
+        renderDropdown(inputEl, filterText, preserveHighlight);
+      };
+
+      targetIds.forEach((id) => {
+        const el = $(id);
+        if (!(el instanceof HTMLInputElement)) {
+          return;
+        }
+
+        el.addEventListener("keydown", (event) => {
+          const isCharKey = event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
+          if (isCharKey) {
+            const caretStart = Number(el.selectionStart ?? el.value.length);
+            const meridianStart = el.value.indexOf(" ");
+            const inMeridian = meridianStart >= 0 && caretStart > meridianStart;
+            const hasMinuteSection = /^\d{1,2}:\d{1,2}/.test(el.value);
+
+            if (/\d/.test(event.key)) {
+              if (inMeridian) {
+                event.preventDefault();
+                return;
+              }
+            } else if (/[apmAPM]/.test(event.key)) {
+              const canTypeMeridian = hasMinuteSection && (inMeridian || caretStart >= el.value.length - 1);
+              if (!canTypeMeridian) {
+                event.preventDefault();
+                return;
+              }
+            } else if (event.key !== ":") {
+              event.preventDefault();
+              return;
+            }
+          }
+
+          if (event.key === "Backspace") {
+            const start = Number(el.selectionStart ?? 0);
+            const end = Number(el.selectionEnd ?? 0);
+            if (start === end && start > 0 && el.value[start - 1] === ":") {
+              event.preventDefault();
+              const nextChar = el.value[start] || "";
+              const removeCount = nextChar === "1" ? 1 : (nextChar ? 2 : 1);
+              const newValue = `${el.value.slice(0, start - 1)}${el.value.slice(start - 1 + removeCount)}`;
+              el.value = normalizeTypedTimeInput(newValue);
+              const newCaret = Math.max(0, start - 1);
+              window.requestAnimationFrame(() => {
+                try {
+                  el.setSelectionRange(newCaret, newCaret);
+                } catch (e) {}
+                syncInputTimeValue(el, true);
+                openDropdown(el, el.value);
+              });
+              return;
+            }
+          }
+
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            if (dropdown?.style.display !== "block") {
+              openDropdown(el, el.value);
+            }
+            if (!currentVisibleTimes.length) {
+              return;
+            }
+            const delta = event.key === "ArrowDown" ? 1 : -1;
+            const next = highlightedIndex + delta;
+            if (next < 0) {
+              highlightedIndex = currentVisibleTimes.length - 1;
+            } else if (next >= currentVisibleTimes.length) {
+              highlightedIndex = 0;
+            } else {
+              highlightedIndex = next;
+            }
+            renderDropdown(el, el.value, true);
+            return;
+          }
+
+          if (event.key === "Enter") {
+            if (dropdown?.style.display === "block" && highlightedIndex >= 0 && highlightedIndex < currentVisibleTimes.length) {
+              event.preventDefault();
+              setInputToEntry(el, currentVisibleTimes[highlightedIndex]);
+              closeDropdown();
+              hideGhost(el);
+              return;
+            }
+            coerceTypedTime(el);
+            closeDropdown();
+            hideGhost(el);
+            return;
+          }
+
+          if (event.key === "Escape") {
+            closeDropdown();
+            return;
+          }
+
+          if (event.key === "Tab") {
+            if (!String(el.dataset.timeValue || "") && highlightedIndex >= 0 && highlightedIndex < currentVisibleTimes.length) {
+              setInputToEntry(el, currentVisibleTimes[highlightedIndex]);
+            }
+            coerceTypedTime(el);
+            closeDropdown();
+            hideGhost(el);
+          }
+        });
+
+        el.addEventListener("input", () => {
+          syncInputTimeValue(el, true);
+          openDropdown(el, el.value);
+        });
+
+        const openFromGesture = (event) => {
+          openDropdown(el, el.value);
+        };
+
+        el.addEventListener("mousedown", openFromGesture, true);
+        el.addEventListener("click", openFromGesture, true);
+        el.addEventListener("focus", () => {
+          syncGhostTypography(el);
+          openDropdown(el, el.value);
+        });
+        el.addEventListener("blur", () => {
+          const lastSuggested = el.id ? lastSuggestedByInputId.get(el.id) : null;
+          if (!String(el.dataset.timeValue || "") && lastSuggested) {
+            const typed = String(el.value || "").trim().toLowerCase();
+            const suggestedLabel = String(lastSuggested.label || "").trim().toLowerCase();
+            const suggestedCanonical = String(lastSuggested.value || "").trim();
+            const suggested12 = formatTimeTo12Hour(suggestedCanonical).toLowerCase();
+            if (!typed || suggestedLabel.startsWith(typed) || suggested12.startsWith(typed)) {
+              setInputToEntry(el, lastSuggested);
+            }
+          }
+          coerceTypedTime(el);
+          hideGhost(el);
+        });
+      });
+
+      document.addEventListener(
+        "mousedown",
+        (event) => {
+          const target = event.target;
+          if (!activeInput) {
+            return;
+          }
+          const clickedInput = target instanceof HTMLElement && target.closest("#class-meeting-start, #class-meeting-end");
+          const clickedDropdown = dropdown && target instanceof Node && dropdown.contains(target);
+          if (!clickedInput && !clickedDropdown) {
+            closeDropdown();
+          }
+        },
+        true,
+      );
+
+      window.addEventListener("resize", () => {
+        if (activeInput) {
+          positionDropdown(activeInput);
+        }
+      });
+    }
+
     installDatePickerBehavior();
+    installTimePickerOnlyBehavior();
 
     // Make post available globally for note handlers + student summary button
     window.postTeacherMessage = post;
@@ -1075,6 +2019,14 @@
           break;
         }
 
+        case "classEditData": {
+          fillClassEditForm(msg.data || {});
+          if (status) {
+            status.textContent = "Editing class loaded from database.";
+          }
+          break;
+        }
+
         case "classAssignmentCreated": {
           const btn = $("btn-create-assignment");
           if (btn) {
@@ -1509,6 +2461,40 @@
       btn.textContent = "+ New Class";
     }
 
+    function fillClassEditForm(classInfo) {
+      if (!classInfo) {
+        return;
+      }
+
+      if ($("class-form-card")) {
+        $("class-form-card").style.display = "block";
+      }
+      if ($("class-course-name")) {
+        $("class-course-name").value = classInfo.courseName || "";
+      }
+      if ($("class-course-code")) {
+        $("class-course-code").value = classInfo.courseCode || "";
+      }
+      if ($("class-teacher-name")) {
+        $("class-teacher-name").value = classInfo.teacherName || "";
+      }
+      if ($("class-meeting-time")) {
+        $("class-meeting-time").value = classInfo.meetingTime || "";
+      }
+      applyMeetingScheduleText(classInfo.meetingTime || "");
+      if ($("class-start-date")) {
+        $("class-start-date").value = normalizeDateForInput(classInfo.startDate);
+      }
+      if ($("class-end-date")) {
+        $("class-end-date").value = normalizeDateForInput(classInfo.endDate);
+      }
+
+      const submitBtn = $("btn-submit-class");
+      if (submitBtn) {
+        submitBtn.textContent = "Save Class Changes";
+      }
+    }
+
     function renderClasses(classes) {
       const listView = $("class-list-view");
       const emptyEl = $("class-list-empty");
@@ -1552,10 +2538,10 @@
             <div style="background:var(--accent); color:white; padding:4px 12px; border-radius:6px; font-size:0.8rem; font-weight:700; white-space:nowrap; letter-spacing:0.05em;">${cls.joinCode}</div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.88rem;">
-            <div><span style="color:var(--muted);">Meeting:</span> ${cls.meetingTime || "—"}</div>
-            <div><span style="color:var(--muted);">Start:</span> ${cls.startDate || "—"}</div>
+            <div><span style="color:var(--muted);">Meeting:</span> ${formatMeetingTimeDisplay(cls.meetingTime)}</div>
+            <div><span style="color:var(--muted);">Start:</span> ${formatClassDateDisplay(cls.startDate)}</div>
             <div></div>
-            <div><span style="color:var(--muted);">End:</span> ${cls.endDate || "—"}</div>
+            <div><span style="color:var(--muted);">End:</span> ${formatClassDateDisplay(cls.endDate)}</div>
           </div>
           <div class="meta" style="font-size:0.78rem;">Join Code: <strong style="font-family:monospace; font-size:0.9rem; color:var(--accent);">${cls.joinCode}</strong> &mdash; share this with students to link their workspace to this class.</div>
           <div style="display:flex; gap:8px; margin-top:2px;">
@@ -1571,32 +2557,8 @@
         });
         editBtn?.addEventListener("click", () => {
           editingClassId = cls.id;
-          if ($("class-form-card")) {
-            $("class-form-card").style.display = "block";
-          }
-          if ($("class-course-name")) {
-            $("class-course-name").value = cls.courseName || "";
-          }
-          if ($("class-course-code")) {
-            $("class-course-code").value = cls.courseCode || "";
-          }
-          if ($("class-teacher-name")) {
-            $("class-teacher-name").value = cls.teacherName || "";
-          }
-          if ($("class-meeting-time")) {
-            $("class-meeting-time").value = cls.meetingTime || "";
-          }
-          applyMeetingScheduleText(cls.meetingTime || "");
-          if ($("class-start-date")) {
-            $("class-start-date").value = cls.startDate || "";
-          }
-          if ($("class-end-date")) {
-            $("class-end-date").value = cls.endDate || "";
-          }
-          const submitBtn = $("btn-submit-class");
-          if (submitBtn) {
-            submitBtn.textContent = "Save Class Changes";
-          }
+          fillClassEditForm(cls);
+          post("getClassForEdit", { classId: cls.id });
           if (status) {
             status.textContent = "Editing class: " + cls.courseName;
           }

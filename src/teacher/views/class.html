@@ -45,11 +45,57 @@
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
           <div>
             <label for="class-meeting-start" style="margin-bottom:4px;">Start Time</label>
-            <input type="time" id="class-meeting-start" />
+            <div style="position: relative;">
+              <div
+                id="class-meeting-start-ghost"
+                style="
+                  position: absolute;
+                  left: 12px;
+                  top: 50%;
+                  transform: translateY(-50%);
+                  color: var(--muted);
+                  opacity: 0.65;
+                  pointer-events: none;
+                  white-space: pre;
+                  display: none;
+                  z-index: 1;
+                "
+              ></div>
+              <input
+                type="text"
+                id="class-meeting-start"
+                placeholder="Select start time"
+                autocomplete="off"
+                style="position: relative; z-index: 2; background: transparent"
+              />
+            </div>
           </div>
           <div>
             <label for="class-meeting-end" style="margin-bottom:4px;">End Time</label>
-            <input type="time" id="class-meeting-end" />
+            <div style="position: relative;">
+              <div
+                id="class-meeting-end-ghost"
+                style="
+                  position: absolute;
+                  left: 12px;
+                  top: 50%;
+                  transform: translateY(-50%);
+                  color: var(--muted);
+                  opacity: 0.65;
+                  pointer-events: none;
+                  white-space: pre;
+                  display: none;
+                  z-index: 1;
+                "
+              ></div>
+              <input
+                type="text"
+                id="class-meeting-end"
+                placeholder="Select end time"
+                autocomplete="off"
+                style="position: relative; z-index: 2; background: transparent"
+              />
+            </div>
           </div>
         </div>
         <input type="hidden" id="class-meeting-time" />

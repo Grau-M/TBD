@@ -59,7 +59,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--fg); }
     .form-group { margin-bottom: 16px; position: relative; }
     label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9rem; color: var(--muted); }
-    input[type="text"], input[type="number"], input[type="date"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; min-height: 42px; }
+    input[type="text"], input[type="number"], input[type="date"], input[type="time"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; min-height: 42px; }
     input[type="date"] {
       color-scheme: dark light;
       cursor: pointer;
@@ -69,6 +69,16 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
       -moz-user-select: none;
       -ms-user-select: none;
       caret-color: transparent;
+    }
+    input[type="time"] {
+      color-scheme: dark light;
+      cursor: pointer;
+    }
+    input[type="time"]::-webkit-datetime-edit,
+    input[type="time"]::-webkit-datetime-edit-hour-field,
+    input[type="time"]::-webkit-datetime-edit-minute-field,
+    input[type="time"]::-webkit-datetime-edit-ampm-field {
+      color: var(--fg);
     }
     input[type="date"]::-webkit-datetime-edit,
     input[type="date"]::-webkit-datetime-edit-text,

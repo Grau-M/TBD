@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { StandardEvent } from './types';
-import { ApiHttpError, apiGet, apiPost } from './api';
+import { ApiHttpError, apiGet, apiPost, apiPut } from './api';
 
 interface ApiSyncStatus {
     state: 'synced' | 'syncing' | 'offline' | 'queue-warning' | 'conflict' | 'idle';
@@ -90,6 +90,27 @@ export class ApiStorageManager {
             throw new Error(`API POST 404. Tried routes: ${tried.join(', ')}. Last response: ${lastError.responseBody || 'Not Found'}`);
         }
         throw lastError || new Error('No matching API POST route found.');
+    }
+
+    private async apiPutFirst(paths: string[], body: any): Promise<any> {
+        let lastError: unknown;
+        const tried: string[] = [];
+        for (const path of paths) {
+            tried.push(path);
+            try {
+                return await apiPut(path, body);
+            } catch (error) {
+                if (error instanceof ApiHttpError && error.status === 404) {
+                    lastError = error;
+                    continue;
+                }
+                throw error;
+            }
+        }
+        if (lastError instanceof ApiHttpError) {
+            throw new Error(`API PUT 404. Tried routes: ${tried.join(', ')}. Last response: ${lastError.responseBody || 'Not Found'}`);
+        }
+        throw lastError || new Error('No matching API PUT route found.');
     }
 
     async init(context: vscode.ExtensionContext): Promise<void> {
@@ -495,13 +516,13 @@ export class ApiStorageManager {
             Description: String(input?.description ?? input?.Description ?? '')
         };
 
-        await this.apiPostFirst([
+        await this.apiPutFirst([
+            `/api/classes/${classId}`,
+            `/api/class/${classId}`,
+            `/api/class-activities/${classId}`,
             '/api/classes/update',
-            '/api/classes',
-            '/api/classes/edit',
             '/api/class/update',
-            '/api/class-activities/update',
-            '/api/class-activities/edit'
+            '/api/class-activities/update'
         ], payload);
     }
 

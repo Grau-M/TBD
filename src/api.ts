@@ -66,6 +66,16 @@ export async function apiPost(path: string, body: any): Promise<any> {
   });
 }
 
+export async function apiPut(path: string, body: any): Promise<any> {
+  return apiRequest(path, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+}
+
 export async function apiGet(path: string): Promise<any> {
   return apiRequest(path, {
     method: 'GET'

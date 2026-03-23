@@ -88,11 +88,25 @@ function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
 function updateAuthStatusBar(context: vscode.ExtensionContext): void {
     const authItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
     const session = getWorkspaceAuthSession(context);
+    
+    // 1. Sync the global role state automatically whenever auth changes
+    state.currentUserRole = session?.role || 'None';
+    
     updateTrackingUI(session?.role);
     if (!authItem) {
         return;
     }
     if (session?.authenticated) {
+        // 2. NEW: Override UI for teachers so they bypass tracking cleanly
+        if (session.role !== 'Student') {
+            authItem.text = `$(account) ${session.role}`;
+            authItem.tooltip = `Logged in as ${session.role}. Activity logging is permanently disabled for educators.`;
+            authItem.backgroundColor = undefined;
+            authItem.color = new vscode.ThemeColor('terminal.ansiBrightBlue');
+            syncTeacherDashboardLock(context);
+            return;
+        }
+
         if (!state.isConsentGiven) {
             authItem.text = `$(prohibit) Tracking Disabled`;
             authItem.tooltip = `Consent declined. Work is NOT being recorded for academic integrity.`;

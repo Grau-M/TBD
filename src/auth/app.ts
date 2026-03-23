@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { UserRole } from '../apiStorageManager';
+import { UserRole } from '../apiStorageManager';
 import { WorkspaceAuthSession } from '../auth';
 import { getAuthHtml } from './getHtml';
 import { ApiHttpError } from '../api';
@@ -109,7 +109,8 @@ export async function openAuthView(
                                 provider,
                                 subjectId: oauthSession.account.id,
                                 email: emailGuess,
-                                displayName: accountName
+                                displayName: accountName,
+                                trackingConsent: false // Default to false for OAuth until they consent in dashboard
                             });
 
                             let resolvedRole = result.role;
@@ -133,7 +134,8 @@ export async function openAuthView(
                                 role: resolvedRole,
                                 provider: provider as 'microsoft' | 'google',
                                 displayName: accountName,
-                                email: emailGuess
+                                email: emailGuess,
+                                trackingConsent: result.trackingConsent // Map the consent
                             };
                         } catch (error) {
                             throw error;
@@ -173,7 +175,8 @@ export async function openAuthView(
                                 role: user.role,
                                 provider: 'email',
                                 displayName: user.displayName,
-                                email
+                                email,
+                                trackingConsent: user.trackingConsent // Map the consent
                             };
                         } catch (error) {
                             throw error;
@@ -200,7 +203,10 @@ export async function openAuthView(
                             const email = String(message.email || '').toLowerCase();
                             const password = String(message.password || '');
                             const displayName = String(message.displayName || '').trim();
+                            
+                            // EXTRACT CONSENT
                             const trackingConsent = Boolean(message.trackingConsent === true || message.trackingConsent === 'true');
+
                             const result = await storageManager.upsertAuthUser({
                                 provider: 'email',
                                 subjectId: email,
@@ -209,7 +215,7 @@ export async function openAuthView(
                                 displayName,
                                 password,
                                 role,
-                                trackingConsent
+                                trackingConsent // SEND TO DATABASE
                             });
 
                             if (!result.isNew) {
@@ -231,7 +237,8 @@ export async function openAuthView(
                                     role: existingUser.role,
                                     provider: 'email',
                                     displayName: existingUser.displayName || displayName,
-                                    email
+                                    email,
+                                    trackingConsent: existingUser.trackingConsent // MAP EXISTING
                                 };
                             } else {
                                 try {
@@ -247,7 +254,8 @@ export async function openAuthView(
                                     role,
                                     provider: 'email',
                                     displayName,
-                                    email
+                                    email,
+                                    trackingConsent: result.trackingConsent // MAP NEW
                                 };
                             }
                         } catch (error) {

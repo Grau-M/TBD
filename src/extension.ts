@@ -345,6 +345,9 @@ context.subscriptions.push(enterApiKeyCommand);
     };
 
     const logEvent = async (eventType: string, data: any): Promise<void> => {
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') {
+            return;
+        }
         const sessionId = context.workspaceState.get<number>(SESSION_ID_KEY);
         if (!sessionId) {
             return;
@@ -389,7 +392,8 @@ context.subscriptions.push(enterApiKeyCommand);
     const CURRENT_POLICY_VERSION = 'v1.1'; 
     const currentAuth = getWorkspaceAuthSession(context);
 
-    if (currentAuth?.authenticated) {
+    // 1. Only start an API session if the user is explicitly a Student
+    if (currentAuth?.authenticated && currentAuth.role === 'Student') {
         const hasLinkedWorkspace = Number(currentAuth.workspaceLinkedClassId ?? 0) > 0
             && Number(currentAuth.workspaceLinkedAssignmentId ?? 0) > 0;
 
@@ -409,40 +413,48 @@ context.subscriptions.push(enterApiKeyCommand);
         }
     }
     
+    // 2. Consent Check Gate
     if (currentAuth?.authenticated) {
-        try {
-            // We now just check consent using the policy version
-            const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
+        // ONLY prompt for consent if they are a student
+        if (currentAuth.role === 'Student') {
+            try {
+                const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
 
-            if (!hasConsented) {
-                const choice = await vscode.window.showInformationMessage(
-                    'Privacy Policy: Coding activity is being recorded for academic integrity purposes. By continuing, you acknowledge and agree to this tracking as a condition of using TBD Logger.',
-                    { modal: true },
-                    'I Acknowledge and Agree',
-                    'Decline'
-                );
+                if (!hasConsented) {
+                    const choice = await vscode.window.showInformationMessage(
+                        'Privacy Policy: Coding activity is being recorded for academic integrity purposes. By continuing, you acknowledge and agree to this tracking as a condition of using TBD Logger.',
+                        { modal: true },
+                        'I Acknowledge and Agree',
+                        'Decline'
+                    );
 
-                if (choice === 'I Acknowledge and Agree') {
-                    await storageManager.recordUserConsent(CURRENT_POLICY_VERSION);
-                    state.isConsentGiven = true;
-                    updateAuthStatusBar(context);
+                    if (choice === 'I Acknowledge and Agree') {
+                        await storageManager.recordUserConsent(CURRENT_POLICY_VERSION);
+                        state.isConsentGiven = true;
+                        updateAuthStatusBar(context);
+                    } else {
+                        state.isConsentGiven = false;
+                        updateAuthStatusBar(context);
+                        vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded.');
+                    }
                 } else {
-                    state.isConsentGiven = false;
-                    updateAuthStatusBar(context);
-                    vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded.');
+                    state.isConsentGiven = true;
                 }
-            } else {
-                state.isConsentGiven = true;
+            } catch (err) {
+                console.warn('[TBD Logger] Consent check failed. Continuing with local offline mode.', err);
+                state.isConsentGiven = false;
+                updateAuthStatusBar(context);
+                vscode.window.showWarningMessage('TBD Logger could not verify consent with the database. Please retry sign-in/consent once connectivity is restored.');
             }
-        } catch (err) {
-            console.warn('[TBD Logger] Consent check failed. Continuing with local offline mode.', err);
+        } else {
             state.isConsentGiven = false;
-            updateAuthStatusBar(context);
-            vscode.window.showWarningMessage('TBD Logger could not verify consent with the database. Please retry sign-in/consent once connectivity is restored.');
+            updateAuthStatusBar(context); 
         }
     } else {
+        // For unauthenticated users
         state.isConsentGiven = false; 
     }
+
     if (process.env.CI === 'true') {
         console.log('[TBD Logger] CI environment detected: Auto-granting consent for automated tests.');
         state.isConsentGiven = true;
@@ -456,13 +468,15 @@ context.subscriptions.push(enterApiKeyCommand);
 
 
     // Log Session Start 
-    state.sessionBuffer.push({
-        time: formatTimestamp(Date.now()),
-        flightTime: '0',
-        eventType: 'session-start',
-        fileEdit: '',
-        fileView: 'VS Code Session Started'
-    });
+   if (state.currentUserRole === 'Student' || state.currentUserRole === 'None') {
+        state.sessionBuffer.push({
+            time: formatTimestamp(Date.now()),
+            flightTime: '0',
+            eventType: 'session-start',
+            fileEdit: '',
+            fileView: 'VS Code Session Started'
+        });
+    }
 
     // Initialize focused file state
     const initialActive = vscode.window.activeTextEditor;
@@ -678,6 +692,7 @@ context.subscriptions.push(enterApiKeyCommand);
 
     // Text edits
     const authEditGuard = vscode.workspace.onDidChangeTextDocument((e) => {
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         if (e.contentChanges.length === 0) { return; }
         const docPath = vscode.workspace.asRelativePath(e.document.uri, false);
         if (isIgnoredPath(docPath)) { return; }
@@ -694,6 +709,7 @@ context.subscriptions.push(enterApiKeyCommand);
     context.subscriptions.push(authEditGuard);
 
     const apiSaveEventListener = vscode.workspace.onDidSaveTextDocument((doc) => {
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         const docPath = vscode.workspace.asRelativePath(doc.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void logEvent('file_save', { file: docPath });
@@ -701,6 +717,7 @@ context.subscriptions.push(enterApiKeyCommand);
     context.subscriptions.push(apiSaveEventListener);
 
     const apiOpenEventListener = vscode.workspace.onDidOpenTextDocument((doc) => {
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         const docPath = vscode.workspace.asRelativePath(doc.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void logEvent('file_open', { file: docPath });
@@ -708,6 +725,7 @@ context.subscriptions.push(enterApiKeyCommand);
     context.subscriptions.push(apiOpenEventListener);
 
     const apiCloseEventListener = vscode.workspace.onDidCloseTextDocument((doc) => {
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         const docPath = vscode.workspace.asRelativePath(doc.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void logEvent('file_close', { file: docPath });
@@ -715,6 +733,7 @@ context.subscriptions.push(enterApiKeyCommand);
     context.subscriptions.push(apiCloseEventListener);
 
     const apiActiveEditorListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         if (!editor) {
             void logEvent('active_editor_change', { file: '' });
             return;
@@ -726,6 +745,7 @@ context.subscriptions.push(enterApiKeyCommand);
     context.subscriptions.push(apiActiveEditorListener);
 
     const apiWindowStateListener = vscode.window.onDidChangeWindowState((windowState) => {
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         void logEvent('window_state_change', {
             focused: windowState.focused
         });
@@ -770,7 +790,12 @@ context.subscriptions.push(enterApiKeyCommand);
     context.subscriptions.push(testConnectionCommand);
 
     // Periodic flush timer
-    const flushTimer = setInterval(() => void flushBuffer(), CONSTANTS.FLUSH_INTERVAL_MS);
+    const flushTimer = setInterval(() => {
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') {
+            state.sessionBuffer = []; // Hard-wipe any errant local logs so they never hit disk
+            return;
+        }
+            void flushBuffer()}, CONSTANTS.FLUSH_INTERVAL_MS);
     context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
 
     // Periodic database status update (every 10 seconds)
@@ -853,20 +878,25 @@ export function deactivate() {
     // 1. Mark clean shutdown for the tracker
     SessionInterruptionTracker.markCleanShutdown();
 
-    // 2. Log final focus duration
-    const now = Date.now();
-    if (state.currentFocusedFile) {
-        state.sessionBuffer.push({
-            time: formatTimestamp(now),
-            flightTime: String(now - state.focusStartTime),
-            eventType: 'focusDuration',
-            fileEdit: '',
-            fileView: state.currentFocusedFile
-        });
-    }
+    // Prevent final telemetry packaging if user is an educator
+    if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') {
+        state.sessionBuffer = []; // Wipe completely
+    } else {
+        // 2. Log final focus duration
+        const now = Date.now();
+        if (state.currentFocusedFile) {
+            state.sessionBuffer.push({
+                time: formatTimestamp(now),
+                flightTime: String(now - state.focusStartTime),
+                eventType: 'focusDuration',
+                fileEdit: '',
+                fileView: state.currentFocusedFile
+            });
+        }
 
-    // 3. Final data flush
-    void flushBuffer();
+        // 3. Final data flush
+        void flushBuffer();
+    }
 
     // 4. Dispose global status bar references
     const globalSb = (global as any).statusBarItem as vscode.StatusBarItem | undefined;

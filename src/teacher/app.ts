@@ -192,6 +192,18 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           break;
         }
 
+        case 'getClassForEdit': {
+          const teacherId = await getValidTeacherId();
+          const classId = Number(message.classId);
+          const classInfo = await storageManager.getTeacherClassById(classId, teacherId);
+          if (!classInfo) {
+            panel?.webview.postMessage({ command: 'error', message: 'Class not found or access denied.' });
+            break;
+          }
+          panel?.webview.postMessage({ command: 'classEditData', data: classInfo });
+          break;
+        }
+
         case 'openClass': {
           const teacherId = await getValidTeacherId();
           const classId = Number(message.classId);

@@ -208,7 +208,7 @@ export class ApiStorageManager {
         const role = identity.role ? this.normalizeRole(identity.role) : undefined;
         
         // Ensure it's a native boolean type
-        const trackingConsent = identity.trackingConsent === true; 
+        const trackingConsent = identity.trackingConsent === true;
 
         const payload = {
             provider, Provider: provider,
@@ -220,7 +220,7 @@ export class ApiStorageManager {
             role, Role: role,
             trackingConsent, TrackingConsent: trackingConsent // Native boolean in JSON
         };
-
+        console.log('[DEBUG] Sending Registration Payload to Server:', JSON.stringify(payload, null, 2));
         const result = await apiPost('/api/auth/upsert-user', payload);
         const user = result?.user ?? result;
         return {
@@ -234,16 +234,22 @@ export class ApiStorageManager {
         };
     }
     // Create the update profile method to handle the account settings save
+// Replaces updateAuthUserDisplayName to support saving consent
     async updateAuthUserProfile(authUserId: number, displayName: string, trackingConsent: boolean, email?: string): Promise<void> {
-        await apiPost('/api/auth/update-profile', { 
-            authUserId, userId: authUserId, id: authUserId, AuthUserId: authUserId,
-            displayName, DisplayName: displayName,
-            
-            // Strictly pass as native boolean in the JSON payload
-            trackingConsent: trackingConsent === true, 
-            TrackingConsent: trackingConsent === true, 
-            
-            email: email?.toLowerCase(), Email: email?.toLowerCase()
+        await this.apiPostFirst([
+            '/api/auth/update-profile', 
+            '/api/auth/update-display-name' // Fallback in case backend hasn't updated the route name yet
+        ], {
+            authUserId,
+            userId: authUserId,
+            id: authUserId,
+            AuthUserId: authUserId,
+            displayName,
+            DisplayName: displayName,
+            trackingConsent: Boolean(trackingConsent),
+            TrackingConsent: Boolean(trackingConsent),
+            email: email?.toLowerCase(),
+            Email: email?.toLowerCase()
         });
     }
 
@@ -258,18 +264,6 @@ export class ApiStorageManager {
         });
     }
 
-    async updateAuthUserDisplayName(authUserId: number, displayName: string, email?: string): Promise<void> {
-        await apiPost('/api/auth/update-display-name', {
-            authUserId,
-            userId: authUserId,
-            id: authUserId,
-            AuthUserId: authUserId,
-            displayName,
-            DisplayName: displayName,
-            email: email?.toLowerCase(),
-            Email: email?.toLowerCase()
-        });
-    }
 
     // Update the login/fetch methods so the session knows the consent state
     async findAuthUserByEmail(email: string): Promise<{ authUserId: number; role: UserRole; displayName: string; trackingConsent: boolean } | null> {
@@ -287,7 +281,7 @@ export class ApiStorageManager {
         };
     }
 
-    async authenticateEmailPassword(email: string, password: string): Promise<{ authUserId: number; role: UserRole; displayName: string } | null> {
+    async authenticateEmailPassword(email: string, password: string): Promise<{ authUserId: number; role: UserRole; displayName: string; trackingConsent: boolean } | null> {
         const result = await apiPost('/api/auth/login', {
             email: email.toLowerCase(),
             Email: email.toLowerCase(),
@@ -304,7 +298,8 @@ export class ApiStorageManager {
         return {
             authUserId,
             role: this.normalizeRole(this.pick(user, ['role', 'Role'])),
-            displayName: String(this.pick(user, ['displayName', 'DisplayName', 'username', 'Username']) || email)
+            displayName: String(this.pick(user, ['displayName', 'DisplayName', 'username', 'Username']) || email),
+            trackingConsent: Boolean(this.pick(user, ['trackingConsent', 'TrackingConsent']) ?? false)
         };
     }
 

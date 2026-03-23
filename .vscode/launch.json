@@ -16,6 +16,9 @@
 				"outFiles": [
 					"${workspaceFolder}/dist/**/*.js"
 				],
+				"env": {
+        "NODE_OPTIONS": "--no-warnings"
+      },
 				"preLaunchTask": "npm: compile"
 			},
 			{
@@ -30,6 +33,11 @@
     			"outFiles": [
         			"${workspaceFolder}/out/**/*.js"
     			],
+				
+      // ADD IT HERE TOO:
+      "env": {
+        "NODE_OPTIONS": "--no-warnings"
+      },
     			"preLaunchTask": "npm: compile-tests"
 			}
 	]

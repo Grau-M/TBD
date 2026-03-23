@@ -3,34 +3,10 @@ import * as path from 'path';
 import { WorkspaceAuthSession } from '../../auth';
 import { getAccountHtml } from './getHtml';
 import { getThemePreference, normalizeThemePreference, setThemePreference } from '../../themePreference';
-import { ApiHttpError } from '../../api';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let accountPanel: vscode.WebviewPanel | undefined;
-
-function formatApiErrorDetails(error: unknown, fallbackMessage: string): string {
-    const details: string[] = [];
-    const fallback = String(fallbackMessage || '').trim();
-    if (fallback) {
-        details.push(fallback);
-    }
-
-    if (error instanceof ApiHttpError) {
-        details.push(`HTTP ${error.status}`);
-        const responseBody = String(error.responseBody || '').trim();
-        if (responseBody) {
-            details.push(responseBody);
-        }
-    } else if (error instanceof Error) {
-        const message = String(error.message || '').trim();
-        if (message) {
-            details.push(message);
-        }
-    }
-
-    return details.filter(Boolean).join('\n');
-}
 
 async function promptStudentClassJoin(storageManager: any, authUserId: number): Promise<boolean> {
     const joinCode = await vscode.window.showInputBox({
@@ -44,37 +20,14 @@ async function promptStudentClassJoin(storageManager: any, authUserId: number): 
         return false;
     }
 
-    let linkedClass;
-    try {
-        linkedClass = await storageManager.findClassByJoinCode(joinCode.trim());
-    } catch (error: any) {
-        const detail = formatApiErrorDetails(error, 'Unable to look up the class join code.');
-        accountPanel?.webview.postMessage({
-            command: 'accountError',
-            message: 'Join code lookup failed.',
-            detail
-        });
-        return false;
-    }
-
+    const linkedClass = await storageManager.findClassByJoinCode(joinCode.trim());
     if (!linkedClass) {
         vscode.window.showErrorMessage('Class join code not found. Please verify the code with your teacher.');
         return false;
     }
 
     //see if they were already in the class
-    let isNewEnrollment: boolean;
-    try {
-        isNewEnrollment = await storageManager.enrollStudentInClass(authUserId, linkedClass);
-    } catch (error: any) {
-        const detail = formatApiErrorDetails(error, 'Unable to enroll in the selected class.');
-        accountPanel?.webview.postMessage({
-            command: 'accountError',
-            message: 'Join class request failed.',
-            detail
-        });
-        return false;
-    }
+    const isNewEnrollment = await storageManager.enrollStudentInClass(authUserId, linkedClass);
     
     if (isNewEnrollment) {
         vscode.window.showInformationMessage(`Successfully joined ${linkedClass.courseName} (${linkedClass.courseCode}).`);
@@ -111,7 +64,8 @@ export async function openAccountView(
             ...storedSession,
             authUserId: dbUser.authUserId,
             role: dbUser.role,
-            displayName: dbUser.displayName || storedSession.displayName
+            displayName: dbUser.displayName || storedSession.displayName,
+            trackingConsent: dbUser.trackingConsent // Added this mapping
         };
         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
     } catch (error: any) {
@@ -144,7 +98,8 @@ export async function openAccountView(
             ideUser: details.ideUser,
             workspaceName: details.workspaceName,
             canViewClasses: session.role === 'Student',
-            themePreference: getThemePreference(context)
+            themePreference: getThemePreference(context),
+            trackingConsent: session.trackingConsent // Ensure getAccountHtml has this passed
         });
 
         accountPanel.onDidDispose(() => {
@@ -165,7 +120,7 @@ export async function openAccountView(
                         const newDisplayName = String(message.displayName || '').trim();
                         const selectedTheme = normalizeThemePreference(message.themePreference);
                         
-                        // STRICT BOOLEAN CAST: Ensure it is true/false, not "true"/"false"
+                        // STRICT BOOLEAN CAST FOR CONSENT
                         const trackingConsent = Boolean(message.trackingConsent === true || message.trackingConsent === 'true');
 
                         if (!newDisplayName) {
@@ -175,13 +130,12 @@ export async function openAccountView(
 
                         await setThemePreference(context, selectedTheme);
                         
-                        // Call the updated profile method with the boolean
+                        // CALL THE NEW PROFILE UPDATER WITH THE CONSENT FLAG
                         await storageManager.updateAuthUserProfile(currentSession.authUserId, newDisplayName, trackingConsent, currentSession.email);
 
-                        // Verify persisted data from API
+                        // Verify persisted data from API before confirming success in UI.
                         const refreshedUser = await storageManager.findAuthUserByEmail(currentSession.email);
                         const persistedDisplayName = String(refreshedUser?.displayName || '').trim();
-                        
                         if (!persistedDisplayName || persistedDisplayName !== newDisplayName) {
                             accountPanel?.webview.postMessage({
                                 command: 'accountError',
@@ -190,11 +144,10 @@ export async function openAccountView(
                             return;
                         }
 
-                        // Update local session
                         const updatedSession: WorkspaceAuthSession = {
                             ...currentSession,
                             displayName: persistedDisplayName,
-                            trackingConsent: refreshedUser.trackingConsent 
+                            trackingConsent: refreshedUser.trackingConsent // SAVE TO SESSION
                         };
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, updatedSession);
 

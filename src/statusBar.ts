@@ -46,15 +46,6 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
     context.subscriptions.push(authItem);
     (global as any).authStatusBarItem = authItem;
 
-    // API Key Indicator 
-    const apiItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 9996);
-    apiItem.text = '$(key) Set API Key';
-    apiItem.tooltip = 'Click to enter API Key';
-    apiItem.command = 'tbd-logger.enterApiKey'; // Command to drop down the input palette
-    apiItem.show();
-    context.subscriptions.push(apiItem);
-    (global as any).apiStatusBarItem = apiItem;
-
     // Optional small secondary item to open the Teacher Dashboard (click the lock to open teacher dashboard)
     // The `hiddenCommandId` should point to the command that opens the Teacher view/webview.
     if (hiddenCommandId) {
@@ -93,19 +84,7 @@ export function updateSyncStatus(isSyncing: boolean) {
     }
 }
 export function updateApiKeyStatus(isValidOrPresent: boolean) {
-    const apiItem = (global as any).apiStatusBarItem as vscode.StatusBarItem | undefined;
-    if (!apiItem) { return; }
-
-    if (isValidOrPresent) {
-        // Key exists and is valid -> Hide the button to keep the UI clean
-        apiItem.hide();
-    } else {
-        // Key is missing or invalid -> Show the button
-        apiItem.text = '$(key) Set API Key';
-        apiItem.tooltip = 'API Key missing or invalid. Click to set.';
-        apiItem.command = 'tbd-logger.enterApiKey';
-        apiItem.show();
-    }
+    return;
 }
 
 export function updateTrackingUI(role?: string) {

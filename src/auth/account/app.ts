@@ -245,12 +245,26 @@ export async function openAccountView(
 
                         const folderUri = picked[0];
                         const workspaceName = path.basename(folderUri.fsPath || folderUri.path || 'workspace');
-                        await storageManager.linkStudentWorkspaceToAssignment({
+                        const classes = await storageManager.listStudentClasses(currentSession.authUserId);
+                        const selectedClass = classes.find((item: any) => Number(item.id) === classId);
+                        const teacherAuthUserId = Number(
+                            target.teacherAuthUserId ||
+                            target.teacherId ||
+                            selectedClass?.teacherAuthUserId ||
+                            selectedClass?.teacherId ||
+                            0
+                        );
+                        const linkedWorkspace = await storageManager.linkStudentWorkspaceToAssignment({
                             studentAuthUserId: currentSession.authUserId,
-                            teacherAuthUserId: 0,
+                            teacherAuthUserId,
+                            teacherId: teacherAuthUserId,
                             classId,
+                            classAssignmentId: assignmentId,
+                            ClassAssignmentId: assignmentId,
                             assignmentId,
                             workspaceName,
+                            workspaceId: folderUri.fsPath,
+                            WorkspaceId: folderUri.fsPath,
                             workspaceRootPath: folderUri.fsPath,
                             workspaceFoldersJson: JSON.stringify([
                                 {
@@ -263,7 +277,14 @@ export async function openAccountView(
                         const refreshed = await storageManager.listStudentAssignmentsForClass(currentSession.authUserId, classId);
                         accountPanel?.webview.postMessage({
                             command: 'studentAssignmentWorkspaceLinked',
-                            data: { classId, assignments: refreshed }
+                            data: {
+                                classId,
+                                assignments: refreshed,
+                                linkedAssignment: linkedWorkspace,
+                                assignmentId,
+                                workspaceName,
+                                workspaceRootPath: folderUri.fsPath
+                            }
                         });
                         break;
                     }

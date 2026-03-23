@@ -1,12 +1,37 @@
 const API_BASE = 'http://142.55.32.101';
 const API_KEY = 'supersecretkey123';
 
+function formatErrorBody(raw: string): string {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return '';
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object') {
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    // Fall through to plain text handling.
+  }
+
+  return text.replace(/\s+/g, ' ').slice(0, 800);
+}
+
 export class ApiHttpError extends Error {
+  path: string;
   status: number;
   responseBody: string;
 
-  constructor(status: number, responseBody: string) {
-    super(`API request failed with status ${status}`);
+  constructor(path: string, status: number, responseBody: string) {
+    const bodySnippet = formatErrorBody(responseBody);
+    super(
+      bodySnippet
+        ? `API ${path} failed with status ${status}: ${bodySnippet}`
+        : `API ${path} failed with status ${status}`
+    );
+    this.path = path;
     this.status = status;
     this.responseBody = responseBody;
   }
@@ -31,7 +56,7 @@ async function apiRequest(path: string, init: RequestInit): Promise<any> {
 
   const raw = await res.text();
   if (!res.ok) {
-    throw new ApiHttpError(res.status, raw);
+    throw new ApiHttpError(path, res.status, raw);
   }
 
   if (!raw) {

@@ -87,6 +87,22 @@
       setVisible(ok, true);
     }
 
+    function buildErrorMessage(msg, fallback) {
+      const lines = [];
+      const primary = String(msg?.message || fallback || "").trim();
+      if (primary) {
+        lines.push(primary);
+      }
+      if (msg?.status) {
+        lines.push(`HTTP ${msg.status}`);
+      }
+      const detail = String(msg?.detail || "").trim();
+      if (detail) {
+        lines.push(detail);
+      }
+      return lines.join("\n");
+    }
+
     function escapeHtml(value) {
       return String(value || "")
         .replace(/&/g, "&amp;")
@@ -123,6 +139,28 @@
         parts.push(item.meetingTime);
       }
       return parts.join(" • ");
+    }
+
+    function parseDueDate(value) {
+      if (!value) {
+        return null;
+      }
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+      return parsed;
+    }
+
+    function isPastDueAssignment(assignment) {
+      const dueDate = parseDueDate(assignment?.dueDate);
+      if (!dueDate) {
+        return false;
+      }
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate.getTime() < today.getTime();
     }
 
     function setNavVisibility(data) {
@@ -218,17 +256,24 @@
       }
 
       setVisible(emptyAssignments, false);
-      assignmentList.innerHTML = assignments.map((assignment) => {
+      const currentAssignments = assignments.filter((assignment) => !isPastDueAssignment(assignment));
+      const previousAssignments = assignments.filter((assignment) => isPastDueAssignment(assignment));
+
+      const renderAssignmentCard = (assignment) => {
         const started = !!(assignment.workspaceName || assignment.workspaceRootPath || assignment.linkedAt);
         const isLinking = state.linkingAssignmentId === assignment.assignmentId;
+        const pastDue = isPastDueAssignment(assignment);
+        const dueLabel = pastDue
+          ? `Past Due: ${formatDate(assignment.dueDate)}`
+          : `Due: ${formatDate(assignment.dueDate)}`;
         return `
-          <article class="assignment-card">
+          <article class="assignment-card${pastDue ? " past-due" : ""}">
             <div class="assignment-status-row">
               <div>
                 <strong class="assignment-card-title">${escapeHtml(assignment.assignmentName || "Untitled Assignment")}</strong>
                 <span class="assignment-card-copy">${escapeHtml(assignment.description || "No assignment description was provided.")}</span>
               </div>
-              <span class="assignment-status ${started ? "started" : "not-started"}">${started ? "Workspace attached" : "Not yet started"}</span>
+              <span class="assignment-status ${pastDue ? "past-due" : (started ? "started" : "not-started")}">${pastDue ? dueLabel : (started ? "Workspace attached" : "Not yet started")}</span>
             </div>
             <div class="assignment-meta">
               <div><strong>Due:</strong> ${escapeHtml(formatDate(assignment.dueDate))}</div>
@@ -247,7 +292,26 @@
             `}
           </article>
         `;
-      }).join("");
+      };
+
+      const renderSection = (title, items) => {
+        if (!items.length) {
+          return "";
+        }
+        return `
+          <section class="assignment-section">
+            <h4 class="assignment-section-title">${escapeHtml(title)}</h4>
+            <div class="assignment-list-group">
+              ${items.map(renderAssignmentCard).join("")}
+            </div>
+          </section>
+        `;
+      };
+
+      assignmentList.innerHTML = [
+        renderSection("Current Assignments", currentAssignments),
+        renderSection("Previous assignments", previousAssignments)
+      ].filter(Boolean).join("");
 
       assignmentList.querySelectorAll("[data-link-workspace-assignment-id]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -386,6 +450,7 @@
           state.loadingAssignments = false;
           state.linkingAssignmentId = null;
           setVisible($("student-classes-loading"), false);
+          setVisible($("student-classes-empty"), state.classes.length === 0);
           setVisible($("student-assignments-loading"), false);
           renderSelectedClass();
           const save = $("btn-save-account");
@@ -398,10 +463,16 @@
             joinBtn.disabled = false;
             joinBtn.textContent = "Join Class";
           }
+          const errorMessage = buildErrorMessage(
+            msg,
+            state.activeView === "classes"
+              ? "Unable to load classes."
+              : "Unable to update account info."
+          );
           if (state.activeView === "classes") {
-            showClassesError(msg.message || "Unable to load classes.");
+            showClassesError(errorMessage);
           } else {
-            showError(msg.message || "Unable to update account info.");
+            showError(errorMessage);
           }
           break;
         }

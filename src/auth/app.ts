@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { UserRole } from '../dbStorageManager';
+import type { UserRole } from '../apiStorageManager';
 import { WorkspaceAuthSession } from '../auth';
 import { getAuthHtml } from './getHtml';
 import { ApiHttpError } from '../api';

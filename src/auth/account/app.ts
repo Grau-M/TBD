@@ -3,10 +3,34 @@ import * as path from 'path';
 import { WorkspaceAuthSession } from '../../auth';
 import { getAccountHtml } from './getHtml';
 import { getThemePreference, normalizeThemePreference, setThemePreference } from '../../themePreference';
+import { ApiHttpError } from '../../api';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let accountPanel: vscode.WebviewPanel | undefined;
+
+function formatApiErrorDetails(error: unknown, fallbackMessage: string): string {
+    const details: string[] = [];
+    const fallback = String(fallbackMessage || '').trim();
+    if (fallback) {
+        details.push(fallback);
+    }
+
+    if (error instanceof ApiHttpError) {
+        details.push(`HTTP ${error.status}`);
+        const responseBody = String(error.responseBody || '').trim();
+        if (responseBody) {
+            details.push(responseBody);
+        }
+    } else if (error instanceof Error) {
+        const message = String(error.message || '').trim();
+        if (message) {
+            details.push(message);
+        }
+    }
+
+    return details.filter(Boolean).join('\n');
+}
 
 async function promptStudentClassJoin(storageManager: any, authUserId: number): Promise<boolean> {
     const joinCode = await vscode.window.showInputBox({
@@ -20,14 +44,37 @@ async function promptStudentClassJoin(storageManager: any, authUserId: number): 
         return false;
     }
 
-    const linkedClass = await storageManager.findClassByJoinCode(joinCode.trim());
+    let linkedClass;
+    try {
+        linkedClass = await storageManager.findClassByJoinCode(joinCode.trim());
+    } catch (error: any) {
+        const detail = formatApiErrorDetails(error, 'Unable to look up the class join code.');
+        accountPanel?.webview.postMessage({
+            command: 'accountError',
+            message: 'Join code lookup failed.',
+            detail
+        });
+        return false;
+    }
+
     if (!linkedClass) {
         vscode.window.showErrorMessage('Class join code not found. Please verify the code with your teacher.');
         return false;
     }
 
     //see if they were already in the class
-    const isNewEnrollment = await storageManager.enrollStudentInClass(authUserId, linkedClass);
+    let isNewEnrollment: boolean;
+    try {
+        isNewEnrollment = await storageManager.enrollStudentInClass(authUserId, linkedClass);
+    } catch (error: any) {
+        const detail = formatApiErrorDetails(error, 'Unable to enroll in the selected class.');
+        accountPanel?.webview.postMessage({
+            command: 'accountError',
+            message: 'Join class request failed.',
+            detail
+        });
+        return false;
+    }
     
     if (isNewEnrollment) {
         vscode.window.showInformationMessage(`Successfully joined ${linkedClass.courseName} (${linkedClass.courseCode}).`);

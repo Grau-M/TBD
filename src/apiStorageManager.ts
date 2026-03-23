@@ -10,7 +10,7 @@ interface ApiSyncStatus {
     lastConflictAt: string | null;
 }
 
-type UserRole = 'Student' | 'Teacher' | 'Admin';
+export type UserRole = 'Student' | 'Teacher' | 'Admin';
 
 export class ApiStorageManager {
     private context: vscode.ExtensionContext | null = null;
@@ -327,12 +327,16 @@ export class ApiStorageManager {
             '/api/classes/enroll-student',
             '/api/student/enroll-class'
         ], {
+            studentId: studentAuthUserId,
+            StudentId: studentAuthUserId,
             studentAuthUserId,
             StudentAuthUserId: studentAuthUserId,
             classId,
             ClassId: classId,
-            teacherAuthUserId: Number(this.pick(linkedClass, ['teacherAuthUserId', 'TeacherAuthUserId']) ?? 0),
-            TeacherAuthUserId: Number(this.pick(linkedClass, ['teacherAuthUserId', 'TeacherAuthUserId']) ?? 0)
+            teacherId: Number(this.pick(linkedClass, ['teacherId', 'TeacherId', 'teacherAuthUserId', 'TeacherAuthUserId']) ?? 0),
+            TeacherId: Number(this.pick(linkedClass, ['teacherId', 'TeacherId', 'teacherAuthUserId', 'TeacherAuthUserId']) ?? 0),
+            teacherAuthUserId: Number(this.pick(linkedClass, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0),
+            TeacherAuthUserId: Number(this.pick(linkedClass, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0)
         });
         return Boolean(this.pick(result, ['isNewEnrollment', 'IsNewEnrollment', 'enrolled', 'Enrolled']) ?? true);
     }
@@ -483,10 +487,10 @@ export class ApiStorageManager {
             TeacherName: String(input?.teacherName ?? input?.TeacherName ?? ''),
             meetingTime: String(input?.meetingTime ?? input?.MeetingTime ?? ''),
             MeetingTime: String(input?.meetingTime ?? input?.MeetingTime ?? ''),
-            startDate: String(input?.startDate ?? input?.StartDate ?? ''),
-            StartDate: String(input?.startDate ?? input?.StartDate ?? ''),
-            endDate: String(input?.endDate ?? input?.EndDate ?? ''),
-            EndDate: String(input?.endDate ?? input?.EndDate ?? ''),
+            startDate: input?.startDate ?? input?.StartDate ?? null,
+            StartDate: input?.startDate ?? input?.StartDate ?? null,
+            endDate: input?.endDate ?? input?.EndDate ?? null,
+            EndDate: input?.endDate ?? input?.EndDate ?? null,
             joinCode,
             JoinCode: joinCode,
             name: String(input?.courseName ?? input?.CourseName ?? input?.name ?? input?.Name ?? ''),
@@ -661,17 +665,46 @@ export class ApiStorageManager {
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.classes) ? result.classes : (Array.isArray(result?.data) ? result.data : []));
-        return rows;
+        return rows
+            .map((row: any) => ({
+                id: Number(this.pick(row, ['id', 'Id', 'classId', 'ClassId']) ?? 0),
+                courseName: String(this.pick(row, ['courseName', 'CourseName', 'className', 'ClassName', 'courseTitle', 'CourseTitle', 'name', 'Name', 'title', 'Title']) || ''),
+                courseCode: String(this.pick(row, ['courseCode', 'CourseCode', 'code', 'Code']) || ''),
+                teacherName: String(this.pick(row, ['teacherName', 'TeacherName', 'teacherDisplayName', 'TeacherDisplayName', 'teacher', 'Teacher']) || ''),
+                meetingTime: String(this.pick(row, ['meetingTime', 'MeetingTime']) || ''),
+                startDate: this.pick(row, ['startDate', 'StartDate']) ?? null,
+                endDate: this.pick(row, ['endDate', 'EndDate']) ?? null,
+                joinCode: String(this.pick(row, ['joinCode', 'JoinCode']) || ''),
+                teacherAuthUserId: Number(this.pick(row, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0)
+            }))
+            .filter((row: any) => row.id > 0);
     }
 
     async listStudentAssignmentsForClass(studentAuthUserId: number, classId: number): Promise<any[]> {
         const result = await this.apiGetFirst([
             `/api/student/classes/${classId}/assignments?studentAuthUserId=${studentAuthUserId}`,
+            `/api/student/classes/${classId}/assignments?studentId=${studentAuthUserId}`,
+            `/api/classes/${classId}/assignments?studentAuthUserId=${studentAuthUserId}`,
+            `/api/classes/${classId}/assignments?studentId=${studentAuthUserId}`,
             `/api/classes/${classId}/student-assignments?studentAuthUserId=${studentAuthUserId}`
         ]);
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.assignments) ? result.assignments : (Array.isArray(result?.data) ? result.data : []));
-        return rows;
+        return rows
+            .map((row: any) => ({
+                assignmentId: Number(this.pick(row, ['assignmentId', 'AssignmentId', 'id', 'Id']) ?? 0),
+                id: Number(this.pick(row, ['assignmentId', 'AssignmentId', 'id', 'Id']) ?? 0),
+                assignmentName: String(this.pick(row, ['assignmentName', 'AssignmentName', 'name', 'Name', 'title', 'Title']) || 'Untitled Assignment'),
+                name: String(this.pick(row, ['assignmentName', 'AssignmentName', 'name', 'Name', 'title', 'Title']) || 'Untitled Assignment'),
+                description: String(this.pick(row, ['description', 'Description', 'details', 'Details']) || 'No assignment description was provided.'),
+                dueDate: String(this.pick(row, ['dueDate', 'DueDate']) || ''),
+                workspaceName: String(this.pick(row, ['workspaceName', 'WorkspaceName']) || ''),
+                workspaceRootPath: String(this.pick(row, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
+                linkedAt: String(this.pick(row, ['linkedAt', 'LinkedAt']) || ''),
+                classId: Number(this.pick(row, ['classId', 'ClassId']) ?? classId),
+                studentAuthUserId: Number(this.pick(row, ['studentAuthUserId', 'StudentAuthUserId']) ?? studentAuthUserId)
+            }))
+            .filter((row: any) => row.assignmentId > 0);
     }
 }

@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import type { UserRole, ClassActivityRecord } from './dbStorageManager';
 
+// 👉 NEW IMPORTS
+import { state } from './state';
+import { updateTrackingUI } from './statusBar';
+
 export type AuthProvider = 'microsoft' | 'google' | 'email';
 
 interface AuthIdentity {
@@ -221,6 +225,11 @@ export async function initializeWorkspaceAccess(
 ): Promise<WorkspaceAuthSession | undefined> {
     const existing = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
     if (!forcePrompt && existing?.authenticated) {
+        
+        // 👉 NEW: If they were already logged in on startup, sync the state and UI
+        state.currentUserRole = existing.role as 'Student' | 'Teacher' | 'Admin' | 'None';
+        updateTrackingUI();
+        
         return existing;
     }
 
@@ -234,6 +243,11 @@ export async function initializeWorkspaceAccess(
             email: 'test@local'
         };
         await context.workspaceState.update(WORKSPACE_AUTH_KEY, synthetic);
+        
+        // 👉 NEW: Sync test state
+        state.currentUserRole = 'Admin';
+        updateTrackingUI();
+
         return synthetic;
     }
 
@@ -285,6 +299,11 @@ export async function initializeWorkspaceAccess(
     };
 
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+    
+    // 👉 NEW: Update the global state and force the UI to refresh upon successful login
+    state.currentUserRole = session.role as 'Student' | 'Teacher' | 'Admin' | 'None';
+    updateTrackingUI();
+    
     vscode.window.showInformationMessage(`Signed in as ${session.displayName} (${session.role}).`);
     return session;
 }
@@ -295,6 +314,10 @@ export function getWorkspaceAuthSession(context: vscode.ExtensionContext): Works
 
 export async function clearWorkspaceAuthSession(context: vscode.ExtensionContext): Promise<void> {
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, undefined);
+    
+    // 👉 NEW: Clear the global state and update the UI upon logout
+    state.currentUserRole = 'None';
+    updateTrackingUI();
 }
 
 export async function requireRoleAccess(

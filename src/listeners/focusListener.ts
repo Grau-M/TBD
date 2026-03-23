@@ -16,6 +16,10 @@ import { handleFocusLost, handleFocusRegained } from '../handlers/focusHandlers'
 // the visible file changes.
 export function createFocusListener(): vscode.Disposable {
     return vscode.window.onDidChangeActiveTextEditor((editor) => {
+        // 👉 The Student-Only Gate: Cut the microphone
+    if (state.currentUserRole !== 'Student') {
+        return; 
+    }
         state.lastEventTime = Date.now();
         if (!state.isConsentGiven) {return; }
         if (!editor) {

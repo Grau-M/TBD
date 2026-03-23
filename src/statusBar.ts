@@ -1,31 +1,20 @@
 // Module: statusBar.ts
 // Purpose: Create and configure the extension's UI status bar items.
-// Exposes `createStatusBar` which registers a primary status item and an
-// optional secondary (locked) item, registers them for disposal, and
-// exposes the primary item via the global object for other modules.
 import * as vscode from 'vscode';
-import { storageManager } from './state';
+import { state, storageManager } from './state'; 
 
-// Function: createStatusBar
-// Purpose: Construct and register a primary status bar item (and an
-// optional secondary locked item). The returned primary item is shown
-// immediately and pushed onto `context.subscriptions` for disposal.
-//
-// Parameters:
-// - context: VS Code extension context used to register disposables.
-// - hiddenCommandId (optional): command id for the secondary, small
-//   lock-style status item. This command is expected to open the
-//   Teacher Dashboard (the educator/administrator webview). When provided,
-//   a lock icon is shown which invokes `hiddenCommandId` when clicked.
 let forceSyncButton: vscode.StatusBarItem;
-export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandId?: string): vscode.StatusBarItem {
 
-    // Create the primary StatusBarItem; command registration should be handled by the extension entrypoint
+export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandId?: string): vscode.StatusBarItem {
+    // 1. Create the primary StatusBarItem
     const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
-    item.text = 'TBD Logger $(eye)';
-    item.tooltip = 'Capstone TBD: Keystroke Logging Active (display only)';
-    item.show();
     context.subscriptions.push(item);
+    
+    // Expose primary globally so small handler modules can update UI without circular imports
+    (global as any).statusBarItem = item;
+
+    // 2. IMMEDIATELY force the UI to match the current state (No hardcoded strings!)
+    updateTrackingUI();
 
     // Create connection status indicator (database online/offline)
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 9999);
@@ -37,7 +26,6 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
     (global as any).dbStatusBarItem = statusItem;
 
     // Authentication indicator: always clickable so users can reopen login/register flow.
-    // The string ID 'tbd-logger.authStatus' enables right-click context menus via package.json menus contribution.
     const authItem = vscode.window.createStatusBarItem('tbd-logger.authStatus', vscode.StatusBarAlignment.Left, 9998);
     authItem.text = '$(account) Not Logged In';
     authItem.tooltip = 'Click to Login/Register';
@@ -46,8 +34,7 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
     context.subscriptions.push(authItem);
     (global as any).authStatusBarItem = authItem;
 
-    // Optional small secondary item to open the Teacher Dashboard (click the lock to open teacher dashboard)
-    // The `hiddenCommandId` should point to the command that opens the Teacher view/webview.
+    // Optional small secondary item to open the Teacher Dashboard
     if (hiddenCommandId) {
         const hiddenItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10001);
         hiddenItem.text = '$(lock)';
@@ -55,52 +42,70 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
         hiddenItem.command = hiddenCommandId;
         hiddenItem.show();
         context.subscriptions.push(hiddenItem);
-        // expose both via global for other modules to update icon/text if needed
         (global as any).hiddenStatusBarItem = hiddenItem;
     }
 
-    // expose primary globally so small handler modules can update UI without circular imports
-    (global as any).statusBarItem = item;
     return item;
 }
 
 /**
  * Updates the refresh button icon and text during the Sync process.
- * Handles the Sunny Day (Syncing) and Rainy Day (Ready) UI states.
  */
 export function updateSyncStatus(isSyncing: boolean) {
     const dbItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
     if (!dbItem) {return;}
 
     if (isSyncing) {
-        // Change the existing "Online" icon to a spinning sync icon
         dbItem.text = `$(sync~spin) Syncing Data...`;
         dbItem.tooltip = 'Uploading session logs to the cloud database.';
     } else {
-        // Restore standard database status based on connectivity
         const isOnline = storageManager.isOnline(); 
         dbItem.text = isOnline ? '$(database) Online' : '$(database) Offline';
         dbItem.tooltip = isOnline ? 'Database connection is active' : 'Database offline';
     }
 }
+
 export function updateApiKeyStatus(isValidOrPresent: boolean) {
     return;
 }
 
-export function updateTrackingUI(role?: string) {
-    const trackingItem = (global as any).trackingStatusBarItem as vscode.StatusBarItem | undefined;
+/**
+ * 👉 THE STUDENT-ONLY GATE UI LOGIC
+ * Updates the primary tracking icon based on role and away status.
+ */
+export function updateTrackingUI() {
+    const trackingItem = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
     if (!trackingItem) { return; }
 
-    // If a Teacher or Admin is logged in, show tracking as disabled
-    if (role === 'Teacher' || role === 'Admin') {
-        trackingItem.text = "$(circle-slash) Tracking Disabled";
-        trackingItem.tooltip = `Logs are not recorded for ${role} accounts.`;
-        // Optional: Make it stand out with a warning color
+    const role = state.currentUserRole;
+
+    // 1. Not Logged In
+    if (role === 'None') {
+        trackingItem.text = "$(person) TBD: Not Logged In";
+        trackingItem.tooltip = "Please log in to use TBD Logger.";
         trackingItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground'); 
-    } else {
-        // Otherwise (Student or Not Logged In), tracking is active
-        trackingItem.text = "$(play) Tracking Active";
-        trackingItem.tooltip = "Keystroke Logging Active";
-        trackingItem.backgroundColor = undefined; // Reset background
+        trackingItem.show();
+        return; // Exit early!
     }
+
+    // 2. Teacher or Admin Mode
+    if (role === 'Teacher' || role === 'Admin') {
+        trackingItem.text = "$(mortar-board) TBD: Teacher Mode";
+        trackingItem.tooltip = `Logs are not recorded for ${role} accounts.`;
+        trackingItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground'); 
+        trackingItem.show();
+        return; // Exit early!
+    }
+
+    // 3. Student Logic 
+    trackingItem.backgroundColor = undefined; 
+    
+    if (state.focusAwayStartTime !== null) {
+        trackingItem.text = "$(watch) TBD: Away";
+        trackingItem.tooltip = "You are currently marked as away.";
+    } else {
+        trackingItem.text = "$(record-keys) TBD: Recording";
+        trackingItem.tooltip = "Capstone TBD: Keystroke Logging Active";
+    }
+    trackingItem.show();
 }

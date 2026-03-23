@@ -17,6 +17,10 @@ import { flushBuffer } from '../flush';
 // file view.
 export function createSaveListener(): vscode.Disposable {
     return vscode.workspace.onDidSaveTextDocument((doc) => {
+        // 👉 The Student-Only Gate: Cut the microphone
+    if (state.currentUserRole !== 'Student') {
+        return; 
+    }
         const currentTime = Date.now();
         const timeDiff = currentTime - state.lastEventTime;
         state.lastEventTime = currentTime;

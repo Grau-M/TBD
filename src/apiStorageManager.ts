@@ -572,7 +572,9 @@ export class ApiStorageManager {
     async listClassStudentsSummary(classId: number, teacherAuthUserId: number): Promise<any[]> {
         const result = await this.apiGetFirst([
             `/api/classes/${classId}/students?teacherAuthUserId=${teacherAuthUserId}`,
-            `/api/classes/students?classId=${classId}&teacherAuthUserId=${teacherAuthUserId}`
+            `/api/class-students?classId=${classId}&teacherAuthUserId=${teacherAuthUserId}`,
+            `/api/class-students/${classId}?teacherAuthUserId=${teacherAuthUserId}`,
+            `/api/classes/${classId}/students-summary?teacherAuthUserId=${teacherAuthUserId}`
         ]);
         const rows = Array.isArray(result)
             ? result
@@ -654,8 +656,7 @@ export class ApiStorageManager {
 
     async listStudentClasses(studentAuthUserId: number): Promise<any[]> {
         const result = await this.apiGetFirst([
-            `/api/student/classes?studentAuthUserId=${studentAuthUserId}`,
-            `/api/classes/student?studentAuthUserId=${studentAuthUserId}`
+            `/api/student/classes?studentAuthUserId=${studentAuthUserId}`
         ]);
         const rows = Array.isArray(result)
             ? result

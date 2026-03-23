@@ -214,8 +214,20 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             break;
           }
 
-          const students = await storageManager.listClassStudentsSummary(classId, teacherId);
-          const assignments = await storageManager.listClassAssignments(classId, teacherId);
+          let students = [];
+          let assignments = [];
+
+          try {
+            students = await storageManager.listClassStudentsSummary(classId, teacherId);
+          } catch (error) {
+            console.warn('Failed to load class students for openClass:', error);
+          }
+
+          try {
+            assignments = await storageManager.listClassAssignments(classId, teacherId);
+          } catch (error) {
+            console.warn('Failed to load class assignments for openClass:', error);
+          }
 
           panel?.webview.postMessage({
             command: 'classDetails',
@@ -256,7 +268,12 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             break;
           }
 
-          const students = await storageManager.listAssignmentStudentWork(classId, assignmentId, teacherId);
+          let students = [];
+          try {
+            students = await storageManager.listAssignmentStudentWork(classId, assignmentId, teacherId);
+          } catch (error) {
+            console.warn('Failed to load assignment student work for openAssignmentWork:', error);
+          }
           panel?.webview.postMessage({
             command: 'assignmentWorkData',
             data: { classInfo, assignment, students }

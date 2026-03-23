@@ -1,5 +1,13 @@
 import * as vscode from 'vscode';
-import type { UserRole, ClassActivityRecord } from './dbStorageManager';
+import type { UserRole } from './apiStorageManager';
+
+interface ClassActivityRecord {
+    id: number;
+    name: string;
+    description: string;
+    teacherAuthUserId: number;
+    teacherDisplayName: string;
+}
 
 export type AuthProvider = 'microsoft' | 'google' | 'email';
 

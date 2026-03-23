@@ -24,10 +24,6 @@ export async function flushBuffer(context?: vscode.ExtensionContext): Promise<vo
             state.sessionBuffer.splice(0, state.sessionBuffer.length);
             return; 
         }
-    } else {
-        // Fallback: If context wasn't passed, we assume we should log just in case,
-        // or you can adjust this behavior based on how you call flushBuffer.
-        console.warn("[TBD Logger] flushBuffer called without context. Cannot verify user role.");
     }
     
     state.isFlushing = true;

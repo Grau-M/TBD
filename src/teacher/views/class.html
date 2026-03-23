@@ -169,7 +169,6 @@
     style="
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 16px;
       margin-top: 4px;
     "
   ></div>
@@ -184,56 +183,48 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 10px;
         flex-wrap: wrap;
       "
     >
       <div>
-        <h2 id="class-detail-title" style="margin: 0">Class Detail</h2>
         <div id="class-detail-meta" class="meta" style="margin-top: 4px"></div>
       </div>
-      <button id="btn-back-to-classes" class="btn btn-secondary">
-        Back to Classes
+      <button id="btn-new-assignment" class="btn btn-primary" style="display: none;">
+        + New Assignment
       </button>
     </div>
 
-    <div style="display: flex; gap: 8px; margin: 14px 0 12px; flex-wrap: wrap">
+    <div
+      style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 14px 0 12px; flex-wrap: wrap"
+    >
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <button
+          id="class-detail-tab-assignments"
+          class="btn btn-secondary"
+          style="background: var(--accent); color: white"
+        >
+          Assignments
+        </button>
+        <button id="class-detail-tab-students" class="btn btn-secondary">
+          Students
+        </button>
+      </div>
       <button
-        id="class-detail-tab-assignments"
+        id="btn-refresh-students"
         class="btn btn-secondary"
-        style="background: var(--accent); color: white"
+        style="font-size: 12px; padding: 4px 10px"
       >
-        Assignments
-      </button>
-      <button id="class-detail-tab-students" class="btn btn-secondary">
-        Students
+        &#8635; Refresh
       </button>
     </div>
 
     <div id="class-detail-students" style="display: none">
       <div
-        style="
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 8px;
-        "
-      >
-        <span></span>
-        <button
-          id="btn-refresh-students"
-          class="btn btn-secondary"
-          style="font-size: 12px; padding: 4px 10px"
-        >
-          &#8635; Refresh
-        </button>
-      </div>
-      <div
         id="class-students-empty"
         class="meta"
-        style="display: none; padding: 10px 0"
+        style="display: none; padding: 20px 0; text-align: center"
       >
-        No students linked to this class yet.
+        This class has no students yet.
       </div>
       <div style="overflow-x: auto">
         <table
@@ -259,7 +250,7 @@
         class="card"
         style="display: none; padding: 14px; margin-bottom: 12px"
       >
-        <h3 style="margin-top: 0; margin-bottom: 10px">Create Assignment</h3>
+        <h3 style="margin-top: 10px; margin-bottom: 10px">Create Assignment</h3>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
           <div class="form-group" style="margin-bottom: 0">
             <label for="assignment-name">Assignment Name</label>
@@ -297,7 +288,7 @@
             display: none;
           "
         ></p>
-        <button id="btn-create-assignment" class="btn btn-primary">
+        <button id="btn-create-assignment" class="btn btn-primary" style="margin-top: 6px;">
           Create Assignment
         </button>
       </div>
@@ -307,7 +298,7 @@
         class="meta"
         style="display: none; padding: 20px 0; text-align: center"
       >
-        No assignments yet for this class.
+        This class has no assignments yet.
       </div>
       <div id="class-assignments-list" style="margin-bottom: 20px"></div>
     </div>

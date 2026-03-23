@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getThemePreference } from '../themePreference';
 
 export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {
   const nonce = getNonce();
+  const themePreference = getThemePreference(context);
   // add a cache-busting query so updated static script is always loaded in development
   const scriptFile = vscode.Uri.file(context.asAbsolutePath('src/teacher/static/teacher.js')).with({ query: `v=${Date.now()}` });
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'src', 'teacher', 'static', 'teacher.js'));
@@ -57,7 +59,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--fg); }
     .form-group { margin-bottom: 16px; position: relative; }
     label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9rem; color: var(--muted); }
-    input[type="text"], input[type="number"], input[type="date"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; min-height: 42px; }
+    input[type="text"], input[type="number"], input[type="date"], input[type="time"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; min-height: 42px; }
     input[type="date"] {
       color-scheme: dark light;
       cursor: pointer;
@@ -67,6 +69,16 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
       -moz-user-select: none;
       -ms-user-select: none;
       caret-color: transparent;
+    }
+    input[type="time"] {
+      color-scheme: dark light;
+      cursor: pointer;
+    }
+    input[type="time"]::-webkit-datetime-edit,
+    input[type="time"]::-webkit-datetime-edit-hour-field,
+    input[type="time"]::-webkit-datetime-edit-minute-field,
+    input[type="time"]::-webkit-datetime-edit-ampm-field {
+      color: var(--fg);
     }
     input[type="date"]::-webkit-datetime-edit,
     input[type="date"]::-webkit-datetime-edit-text,
@@ -161,7 +173,6 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
           <button id="hamburger" class="btn btn-secondary" style="min-width:40px; height:36px; padding:6px 8px; border-radius:8px;">☰</button>
           <div></div>
         </div>
-        <button id="themeToggle" class="btn btn-secondary" style="min-width:40px; height:36px; padding:6px 8px; border-radius:8px;">🌓</button>
       </div>
 
       ${dashboardHtml}
@@ -174,6 +185,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
   </div>
 
   <script nonce="${nonce}" src="${renderersUri}"></script>
+  <script nonce="${nonce}">window.__TBD_THEME_PREFERENCE__ = '${themePreference}';</script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

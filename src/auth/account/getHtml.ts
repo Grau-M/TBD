@@ -10,6 +10,7 @@ export interface AccountViewData {
     ideUser: string;
     workspaceName: string;
     canViewClasses: boolean;
+  themePreference: 'system' | 'light' | 'dark';
 }
 
 export function getAccountHtml(
@@ -73,17 +74,6 @@ export function getAccountHtml(
         linear-gradient(160deg, var(--bg), color-mix(in srgb, var(--bg) 82%, var(--surface) 18%));
       color: var(--fg);
       font-family: 'Segoe UI', 'Aptos', sans-serif;
-    }
-
-    .top-theme-btn {
-      background: var(--surface-strong);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 7px 10px;
-      cursor: pointer;
-      font-size: 1.1rem;
-      color: var(--fg);
-      line-height: 1;
     }
 
     .account-container {
@@ -253,7 +243,8 @@ export function getAccountHtml(
     .form-group { margin-bottom: 14px; }
     label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 0.88rem; }
 
-    input[type="text"] {
+    input[type="text"],
+    select {
       width: 100%;
       min-height: 42px;
       border-radius: 14px;

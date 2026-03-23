@@ -31,13 +31,74 @@
           placeholder="e.g. Dr. Smith"
         />
       </div>
-      <div class="form-group">
-        <label for="class-meeting-time">Meeting Time</label>
-        <input
-          type="text"
-          id="class-meeting-time"
-          placeholder="e.g. MWF 10:00–11:00 AM"
-        />
+      <div class="form-group" style="grid-column: 1 / -1">
+        <label>Meeting Schedule</label>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px">
+          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-mon" /> Mon</label>
+          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-tue" /> Tue</label>
+          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-wed" /> Wed</label>
+          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-thu" /> Thu</label>
+          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-fri" /> Fri</label>
+          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-sat" /> Sat</label>
+          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-sun" /> Sun</label>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <label for="class-meeting-start" style="margin-bottom:4px;">Start Time</label>
+            <div style="position: relative;">
+              <div
+                id="class-meeting-start-ghost"
+                style="
+                  position: absolute;
+                  left: 12px;
+                  top: 50%;
+                  transform: translateY(-50%);
+                  color: var(--muted);
+                  opacity: 0.65;
+                  pointer-events: none;
+                  white-space: pre;
+                  display: none;
+                  z-index: 1;
+                "
+              ></div>
+              <input
+                type="text"
+                id="class-meeting-start"
+                placeholder="Select start time"
+                autocomplete="off"
+                style="position: relative; z-index: 2; background: transparent"
+              />
+            </div>
+          </div>
+          <div>
+            <label for="class-meeting-end" style="margin-bottom:4px;">End Time</label>
+            <div style="position: relative;">
+              <div
+                id="class-meeting-end-ghost"
+                style="
+                  position: absolute;
+                  left: 12px;
+                  top: 50%;
+                  transform: translateY(-50%);
+                  color: var(--muted);
+                  opacity: 0.65;
+                  pointer-events: none;
+                  white-space: pre;
+                  display: none;
+                  z-index: 1;
+                "
+              ></div>
+              <input
+                type="text"
+                id="class-meeting-end"
+                placeholder="Select end time"
+                autocomplete="off"
+                style="position: relative; z-index: 2; background: transparent"
+              />
+            </div>
+          </div>
+        </div>
+        <input type="hidden" id="class-meeting-time" />
       </div>
       <div class="form-group">
         <label for="class-start-date">Start Date</label>

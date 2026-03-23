@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getThemePreference } from '../themePreference';
 
 export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {
   const nonce = getNonce();
+  const themePreference = getThemePreference(context);
   const scriptUri = webview.asWebviewUri(
     vscode.Uri.joinPath(context.extensionUri, 'src', 'auth', 'static', 'auth.js')
   );
@@ -21,17 +23,15 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
   <title>TBD Logger — Sign In</title>
   <style>
     :root {
-      --bg: #f0f4f8;
-      --surface: #ffffff;
-      --muted: #6b7280;
-      --fg: #111827;
-      --border: rgba(0,0,0,0.1);
-      --accent: #2563eb;
-      --accent-2: #7c3aed;
+      --bg: var(--vscode-editor-background); 
+      --surface: var(--vscode-sideBar-background, var(--vscode-editorWidget-background)); 
+      --muted: var(--vscode-descriptionForeground); 
+      --fg: var(--vscode-editor-foreground);
+      --border: var(--vscode-panel-border, rgba(128, 128, 128, 0.2)); 
+      --accent: var(--vscode-button-background); 
+      --accent-hover: var(--vscode-button-hoverBackground);
+      --success: #16a34a; 
       --error: #dc2626;
-      --error-bg: rgba(220,38,38,0.08);
-      --success: #16a34a;
-      --success-bg: rgba(22,163,74,0.08);
     }
     .dark, :root.dark {
       --bg: #071021;
@@ -59,22 +59,6 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       margin: 0;
       padding: 24px;
     }
-
-    .top-theme-btn {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 7px 10px;
-      cursor: pointer;
-      font-size: 1.1rem;
-      color: var(--fg);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      line-height: 1;
-    }
-    .top-theme-btn:hover { opacity: 0.85; }
 
     .auth-container {
       width: 100%;
@@ -308,6 +292,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
 </head>
 <body>
   ${loginHtml}
+  <script nonce="${nonce}">window.__TBD_THEME_PREFERENCE__ = '${themePreference}';</script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

@@ -4,9 +4,9 @@
 // `storageManager` singleton instance responsible for database persistence,
 // and configuration `CONSTANTS` for thresholds and intervals.
 import { StandardEvent } from './types';
-import { DbStorageManager } from './dbStorageManager';
+import { ApiStorageManager } from './apiStorageManager';
 
-export const storageManager = new DbStorageManager();
+export const storageManager = new ApiStorageManager();
 
 export const state = {
     sessionBuffer: [] as StandardEvent[],

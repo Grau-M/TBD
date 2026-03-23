@@ -20,42 +20,44 @@ import { openTeacherView } from './teacher';
 import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess } from './auth';
 import { openAuthView, openAccountView } from './auth/index';
 import { updateSyncStatus } from './statusBar';
-
+import { ApiHttpError, apiGet, apiPost, configureApiTokenProvider } from './api';
+import { updateApiKeyStatus } from './statusBar';
+import { updateTrackingUI } from './statusBar';
 import * as path from 'path';
 import { openStudentSyncView } from './auth/studentSyncView';
+
+const SESSION_ID_KEY = 'sessionId';
+const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
+const API_TOKEN_SECRET_KEY = 'tbd.api.sessionToken.v1';
 
 // Function to update database status bar item
 async function updateDbStatusBar(): Promise<void> {
     const statusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
     if (!statusItem) { return; }
 
-    const sync = storageManager.getBackgroundSyncStatus();
-    const pendingSuffix = sync.pendingQueueCount > 0 ? ` (${sync.pendingQueueCount} queued)` : '';
+    try {
+        const health = await apiGet('/health');
 
-    if (storageManager.isConnecting()) {
-        statusItem.text = '$(loading~spin) Connecting...';
-        statusItem.tooltip = 'Connecting to database...';
-    } else if (sync.state === 'syncing') {
-        statusItem.text = `$(sync~spin) Syncing${pendingSuffix}`;
-        statusItem.tooltip = 'Uploading queued session data in the background.';
-    } else if (sync.state === 'queue-warning') {
-        statusItem.text = `$(warning) Queue High${pendingSuffix}`;
-        statusItem.tooltip = sync.lastError || 'Offline queue is near limit. Reconnect to continue syncing safely.';
-    } else if (sync.state === 'conflict') {
-        statusItem.text = `$(alert) Synced (Conflict Flagged)`;
-        statusItem.tooltip = sync.lastError || 'A sync conflict was detected and flagged for instructor review using Latest Wins resolution.';
-    } else if (storageManager.isOnline()) {
-        statusItem.text = '$(cloud-upload) Synced';
-        statusItem.tooltip = sync.lastSyncedAt
-            ? `Session data is synchronized. Last sync: ${sync.lastSyncedAt}`
-            : 'Session data is synchronized.';
-    } else {
-        statusItem.text = `$(database) Offline${pendingSuffix}`;
-        statusItem.tooltip = sync.lastError
-            ? `Database offline. Events queued for sync when connection is restored. Last error: ${sync.lastError}`
-            : 'Database offline. Events queued for sync when connection is restored.';
+        try {
+            await apiGet('/api/sessions');
+            statusItem.text = '$(cloud-upload) API Connected';
+            statusItem.tooltip = `API reachable and authenticated. Health status: ${health?.status ?? 'ok'}`;
+            return;
+        } catch (authErr) {
+            if (authErr instanceof ApiHttpError && (authErr.status === 401 || authErr.status === 403)) {
+                statusItem.text = '$(key) API Token Needed';
+                statusItem.tooltip = 'API is reachable, but token is missing or invalid. Use sign in or re-enter token.';
+                return;
+            }
+            throw authErr;
+        }
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        statusItem.text = '$(database) API Offline';
+        statusItem.tooltip = `API is not reachable. Last error: ${msg}`;
     }
 }
+
 
 function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
     const session = getWorkspaceAuthSession(context);
@@ -85,11 +87,11 @@ function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
 
 function updateAuthStatusBar(context: vscode.ExtensionContext): void {
     const authItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
+    const session = getWorkspaceAuthSession(context);
+    updateTrackingUI(session?.role);
     if (!authItem) {
         return;
     }
-
-    const session = getWorkspaceAuthSession(context);
     if (session?.authenticated) {
         if (!state.isConsentGiven) {
             authItem.text = `$(prohibit) Tracking Disabled`;
@@ -126,6 +128,186 @@ export interface ExtensionApi {
 // and background timers. Returns an object useful for tests.
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TBD Logger: activate');
+    // 1. Get the current session (if one exists on startup)
+    const session = getWorkspaceAuthSession(context);
+
+    // 2. Update the tracking UI based on their role
+    updateTrackingUI(session?.role);    
+    configureApiTokenProvider(async () => context.secrets.get(API_TOKEN_SECRET_KEY));
+
+    const isApiTokenValid = async (): Promise<boolean> => {
+        try {
+            await apiGet('/api/sessions');
+            return true;
+        } catch (error) {
+            if (error instanceof ApiHttpError && (error.status === 401 || error.status === 403)) {
+                return false;
+            }
+            // If API is unavailable, do not treat token as invalid.
+            return true;
+        }
+    };
+
+    const promptAndStoreApiToken = async (): Promise<boolean> => {
+        if (process.env.CI === 'true') {
+            return false;
+        }
+
+        const existingToken = await context.secrets.get(API_TOKEN_SECRET_KEY);
+        if (existingToken?.trim()) {
+            const isValid = await isApiTokenValid();
+            if (isValid) {
+                return true;
+            }
+            await context.secrets.delete(API_TOKEN_SECRET_KEY);
+        }
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const tokenInput = await vscode.window.showInputBox({
+                title: 'TBD Logger API Access',
+                prompt: 'Enter your API access token. This is stored securely and reused automatically.',
+                password: true,
+                ignoreFocusOut: true
+            });
+
+            if (!tokenInput?.trim()) {
+                return false;
+            }
+
+            await context.secrets.store(API_TOKEN_SECRET_KEY, tokenInput.trim());
+            const isValid = await isApiTokenValid();
+            if (isValid) {
+                vscode.window.showInformationMessage('API token saved and validated.');
+                return true;
+            }
+
+            await context.secrets.delete(API_TOKEN_SECRET_KEY);
+            vscode.window.showErrorMessage('API token was rejected (401/403). Please try again.');
+        }
+
+        return false;
+    };
+    async function checkInitialApiKeyStatus() {
+    // Check your database/storage to see if a valid key already exists
+    // const existingKey = await apiStorageManager.getApiKey();
+    const hasValidKey = false; // Replace with your actual check
+
+    // This will either hide it (if true) or show the "Set API Key" prompt (if false)
+    updateApiKeyStatus(hasValidKey);
+}
+
+checkInitialApiKeyStatus();
+let enterApiKeyCommand = vscode.commands.registerCommand('tbd-logger.enterApiKey', async () => {
+    const apiKey = await vscode.window.showInputBox({
+        prompt: "Enter your API Key",
+        placeHolder: "Paste your API key here...",
+        password: true,
+        ignoreFocusOut: true
+    });
+
+    if (apiKey) {
+        // 1. Save to your storage/database
+        // await apiStorageManager.storeApiKey(apiKey);
+        
+        // 2. Validate the key (Optional: make a test API call here to ensure it works)
+        const isKeyValid = true; // Replace with actual validation logic
+
+        if (isKeyValid) {
+            vscode.window.showInformationMessage("API Key successfully set!");
+            // 3. Hide the status bar item since we now have a valid key
+            updateApiKeyStatus(true);
+        } else {
+            vscode.window.showErrorMessage("Invalid API Key provided.");
+            updateApiKeyStatus(false);
+        }
+    }
+});
+
+context.subscriptions.push(enterApiKeyCommand);
+    const withApiTokenRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
+        try {
+            return await operation();
+        } catch (error) {
+            const status = (error instanceof ApiHttpError) ? error.status : undefined;
+            if (status !== 401 && status !== 403) {
+                throw error;
+            }
+
+            await context.secrets.delete(API_TOKEN_SECRET_KEY);
+            const stored = await promptAndStoreApiToken();
+            if (!stored) {
+                throw error;
+            }
+
+            return operation();
+        }
+    };
+
+    const ensureProject = async (): Promise<number | undefined> => {
+        const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+        const workspaceName = vscode.workspace.name || 'Unknown Workspace';
+
+        try {
+            const project = await withApiTokenRetry(() => apiPost('/api/projects', {
+                name: workspaceName,
+                workspacePath
+            }));
+
+            const projectId = Number(project?.id ?? project?.Id);
+            if (!Number.isFinite(projectId) || projectId <= 0) {
+                throw new Error('Project API did not return a valid id.');
+            }
+
+            return projectId;
+        } catch (error) {
+            console.warn('[TBD Logger] Unable to ensure API project.', error);
+            return undefined;
+        }
+    };
+
+    const startSession = async (userId: number, projectId: number, sessionNumber: number): Promise<number | undefined> => {
+        try {
+            const session = await withApiTokenRetry(() => apiPost('/api/sessions', {
+                userId,
+                projectId,
+                sessionNumber,
+                startedAt: new Date().toISOString()
+            }));
+
+            const sessionId = Number(session?.id ?? session?.Id);
+            if (!Number.isFinite(sessionId) || sessionId <= 0) {
+                throw new Error('Session API did not return a valid id.');
+            }
+
+            await context.workspaceState.update(SESSION_ID_KEY, sessionId);
+            return sessionId;
+        } catch (error) {
+            await context.workspaceState.update(SESSION_ID_KEY, undefined);
+            const details = error instanceof ApiHttpError ? error.responseBody : String(error);
+            console.warn('[TBD Logger] Unable to start API session.', details);
+            return undefined;
+        }
+    };
+
+    const logEvent = async (eventType: string, data: any): Promise<void> => {
+        const sessionId = context.workspaceState.get<number>(SESSION_ID_KEY);
+        if (!sessionId) {
+            return;
+        }
+
+        try {
+            await withApiTokenRetry(() => apiPost('/api/events', {
+                sessionId,
+                eventType,
+                occurredAt: new Date().toISOString(),
+                eventData: data
+            }));
+        } catch (error) {
+            console.warn(`[TBD Logger] Failed to log event: ${eventType}`, error);
+        }
+    };
+
+    void promptAndStoreApiToken();
 
     try { printSessionInfo(); } catch (e) { /* no-op */ }
 
@@ -140,36 +322,63 @@ export async function activate(context: vscode.ExtensionContext) {
         if (process.env.CI === 'true') {
             console.log('[TBD Logger] CI environment detected: Skipping authentication webview block.');
         } else {
-            await openAuthView(context, storageManager);
+            try {
+                await openAuthView(context, storageManager);
+            } catch (err) {
+                console.warn('[TBD Logger] Authentication view failed during startup. Continuing in offline mode.', err);
+                vscode.window.showWarningMessage('TBD Logger could not reach the database for sign-in. Monitoring will continue offline.');
+            }
         }
     }
-// 👉 UPDATED CONSENT GATE
-    const CURRENT_POLICY_VERSION = 'v1.0'; 
+//  UPDATED CONSENT GATE
+    const CURRENT_POLICY_VERSION = 'v1.1'; 
     const currentAuth = getWorkspaceAuthSession(context);
+
+    if (currentAuth?.authenticated) {
+        const projectId = await ensureProject();
+        if (projectId) {
+            const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
+            const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
+            if (startedSessionId) {
+                await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
+                void logEvent('session_start', {
+                    workspaceName: vscode.workspace.name || 'Unknown Workspace',
+                    workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
+                });
+            }
+        }
+    }
     
     if (currentAuth?.authenticated) {
-        // We now just check consent using the policy version
-        const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
-        
-        if (!hasConsented) {
-            const choice = await vscode.window.showInformationMessage(
-                'Privacy Policy: Coding activity is being recorded for academic integrity purposes. By continuing, you acknowledge and agree to this tracking as a condition of using TBD Logger.',
-                { modal: true },
-                'I Acknowledge and Agree',
-                'Decline'
-            );
+        try {
+            // We now just check consent using the policy version
+            const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
 
-            if (choice === 'I Acknowledge and Agree') {
-                await storageManager.recordUserConsent(CURRENT_POLICY_VERSION);
-                state.isConsentGiven = true;
-                updateAuthStatusBar(context);
+            if (!hasConsented) {
+                const choice = await vscode.window.showInformationMessage(
+                    'Privacy Policy: Coding activity is being recorded for academic integrity purposes. By continuing, you acknowledge and agree to this tracking as a condition of using TBD Logger.',
+                    { modal: true },
+                    'I Acknowledge and Agree',
+                    'Decline'
+                );
+
+                if (choice === 'I Acknowledge and Agree') {
+                    await storageManager.recordUserConsent(CURRENT_POLICY_VERSION);
+                    state.isConsentGiven = true;
+                    updateAuthStatusBar(context);
+                } else {
+                    state.isConsentGiven = false;
+                    updateAuthStatusBar(context);
+                    vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded.');
+                }
             } else {
-                state.isConsentGiven = false;
-                updateAuthStatusBar(context);
-                vscode.window.showWarningMessage('Tracking disabled. Your work will NOT be recorded.');
+                state.isConsentGiven = true;
             }
-        } else {
-            state.isConsentGiven = true;
+        } catch (err) {
+            console.warn('[TBD Logger] Consent check failed. Continuing with local offline mode.', err);
+            state.isConsentGiven = false;
+            updateAuthStatusBar(context);
+            vscode.window.showWarningMessage('TBD Logger could not verify consent with the database. Please retry sign-in/consent once connectivity is restored.');
         }
     } else {
         state.isConsentGiven = false; 
@@ -178,7 +387,7 @@ export async function activate(context: vscode.ExtensionContext) {
         console.log('[TBD Logger] CI environment detected: Auto-granting consent for automated tests.');
         state.isConsentGiven = true;
     }
-    // 👉 END OF CONSENT GATE
+    //  END OF CONSENT GATE
     // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
     await SessionInterruptionTracker.install(context, {
         inactivityThresholdMs: 5 * 60 * 1000, // 5 minutes (change if you want)
@@ -338,6 +547,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (answer === 'Log Out') {
             await clearWorkspaceAuthSession(context);
+            await context.secrets.delete(API_TOKEN_SECRET_KEY);
             updateAuthStatusBar(context);
             vscode.window.showInformationMessage('You have been logged out.');
         }
@@ -412,8 +622,55 @@ export async function activate(context: vscode.ExtensionContext) {
         const docPath = vscode.workspace.asRelativePath(e.document.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void promptIfUnauthenticated();
+
+        const charsAdded = e.contentChanges.reduce((sum, change) => sum + change.text.length, 0);
+        const isPaste = e.contentChanges.some((change) => change.text.length > 1);
+        void logEvent(isPaste ? 'paste' : 'file_edit', {
+            file: docPath,
+            changeCount: e.contentChanges.length,
+            charsAdded
+        });
     });
     context.subscriptions.push(authEditGuard);
+
+    const apiSaveEventListener = vscode.workspace.onDidSaveTextDocument((doc) => {
+        const docPath = vscode.workspace.asRelativePath(doc.uri, false);
+        if (isIgnoredPath(docPath)) { return; }
+        void logEvent('file_save', { file: docPath });
+    });
+    context.subscriptions.push(apiSaveEventListener);
+
+    const apiOpenEventListener = vscode.workspace.onDidOpenTextDocument((doc) => {
+        const docPath = vscode.workspace.asRelativePath(doc.uri, false);
+        if (isIgnoredPath(docPath)) { return; }
+        void logEvent('file_open', { file: docPath });
+    });
+    context.subscriptions.push(apiOpenEventListener);
+
+    const apiCloseEventListener = vscode.workspace.onDidCloseTextDocument((doc) => {
+        const docPath = vscode.workspace.asRelativePath(doc.uri, false);
+        if (isIgnoredPath(docPath)) { return; }
+        void logEvent('file_close', { file: docPath });
+    });
+    context.subscriptions.push(apiCloseEventListener);
+
+    const apiActiveEditorListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (!editor) {
+            void logEvent('active_editor_change', { file: '' });
+            return;
+        }
+        const docPath = vscode.workspace.asRelativePath(editor.document.uri, false);
+        if (isIgnoredPath(docPath)) { return; }
+        void logEvent('active_editor_change', { file: docPath });
+    });
+    context.subscriptions.push(apiActiveEditorListener);
+
+    const apiWindowStateListener = vscode.window.onDidChangeWindowState((windowState) => {
+        void logEvent('window_state_change', {
+            focused: windowState.focused
+        });
+    });
+    context.subscriptions.push(apiWindowStateListener);
 
     // File creates, deletes, renames
     const authCreateGuard = vscode.workspace.onDidCreateFiles(() => void promptIfUnauthenticated());
@@ -427,47 +684,30 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(checkDbStatusCommand);
 
-    // Command: Test Database Connection — shows a detailed popup with connection status
+    // Command: Test Database Connection (migrated) — now checks API health endpoint.
     const testDbCommand = vscode.commands.registerCommand('tbd-logger.testDbConnection', async () => {
-        const { getPool, isConnected } = await import('./db.js');
-        const server = process.env.AZURE_SQL_SERVER || '(not set)';
-        const database = process.env.AZURE_SQL_DATABASE || '(not set)';
-        const user = process.env.AZURE_SQL_USER || '(not set)';
-
-        if (isConnected()) {
-            // Already connected — run a live query to confirm
-            try {
-                const { executeQuery } = await import('./db.js');
-                const result = await executeQuery('SELECT COUNT(*) as cnt FROM Users');
-                vscode.window.showInformationMessage(
-                    `✅ Database ONLINE\nServer: ${server}\nDB: ${database}\nUser: ${user}\nUsers in DB: ${result.recordset[0].cnt}`
-                );
-            } catch (err: any) {
-                vscode.window.showWarningMessage(`Pool says connected but query failed: ${err.message}`);
-            }
-            return;
-        }
-
-        if (storageManager.isConnecting()) {
-            vscode.window.showInformationMessage(
-                `⏳ Still connecting to database...\nServer: ${server}\nDB: ${database}\nUser: ${user}\nPlease wait and try again in a moment.`
-            );
-            return;
-        }
-
-        // Not connected — try a fresh connection now
-        vscode.window.showInformationMessage(`🔄 Attempting connection to ${server}...`);
         try {
-            await getPool();
-            vscode.window.showInformationMessage(`✅ Connection succeeded!\nServer: ${server}\nDB: ${database}\nUser: ${user}`);
+            const result = await apiGet('/health');
+            vscode.window.showInformationMessage(`✅ API ONLINE\nStatus: ${result?.status ?? 'unknown'}`);
         } catch (err: any) {
             vscode.window.showErrorMessage(
-                `❌ Connection failed!\nServer: ${server}\nDB: ${database}\nUser: ${user}\nError: ${err.message}`
+                `❌ API health check failed!\nError: ${err?.message || String(err)}`
             );
         }
         void updateDbStatusBar();
     });
     context.subscriptions.push(testDbCommand);
+
+    const testConnectionCommand = vscode.commands.registerCommand('tbd.testConnection', async () => {
+        try {
+            const result = await apiGet('/health');
+            vscode.window.showInformationMessage(`API status: ${result.status}`);
+        } catch (error: any) {
+            const message = error?.message || String(error);
+            vscode.window.showErrorMessage(`API test failed: ${message}`);
+        }
+    });
+    context.subscriptions.push(testConnectionCommand);
 
     // Periodic flush timer
     const flushTimer = setInterval(() => void flushBuffer(), CONSTANTS.FLUSH_INTERVAL_MS);

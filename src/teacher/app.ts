@@ -60,6 +60,12 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
       throw new Error('Not authenticated. Please restart the extension and log in.');
     }
 
+    // Prefer the authenticated session user ID to avoid unnecessary upsert/role calls.
+    const existingAuthUserId = Number(session.authUserId || 0);
+    if (Number.isFinite(existingAuthUserId) && existingAuthUserId > 0) {
+      return existingAuthUserId;
+    }
+
     // Force-register the local cached user into the new database to get a valid Foreign Key ID
     const authResult = await storageManager.upsertAuthUser({
       provider: session.provider || 'local-cache',
@@ -183,6 +189,18 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             endDate: message.endDate
           });
           panel?.webview.postMessage({ command: 'classUpdated', data: { classId: Number(message.classId) } });
+          break;
+        }
+
+        case 'getClassForEdit': {
+          const teacherId = await getValidTeacherId();
+          const classId = Number(message.classId);
+          const classInfo = await storageManager.getTeacherClassById(classId, teacherId);
+          if (!classInfo) {
+            panel?.webview.postMessage({ command: 'error', message: 'Class not found or access denied.' });
+            break;
+          }
+          panel?.webview.postMessage({ command: 'classEditData', data: classInfo });
           break;
         }
 

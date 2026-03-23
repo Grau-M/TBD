@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { DbStorageManager } from '../../dbStorageManager';
 import { WorkspaceAuthSession } from '../../auth';
 import { getAccountHtml } from './getHtml';
+import { getThemePreference, normalizeThemePreference, setThemePreference } from '../../themePreference';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let accountPanel: vscode.WebviewPanel | undefined;
 
-async function promptStudentClassJoin(storageManager: DbStorageManager, authUserId: number): Promise<boolean> {
+async function promptStudentClassJoin(storageManager: any, authUserId: number): Promise<boolean> {
     const joinCode = await vscode.window.showInputBox({
         title: 'Join Class',
         prompt: 'Enter the class join code provided by your teacher',
@@ -41,12 +41,34 @@ async function promptStudentClassJoin(storageManager: DbStorageManager, authUser
 
 export async function openAccountView(
     context: vscode.ExtensionContext,
-    storageManager: DbStorageManager,
+    storageManager: any,
     details: { ideUser: string; workspaceName: string }
 ): Promise<WorkspaceAuthSession | undefined> {
-    const session = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
-    if (!session?.authenticated) {
+    const storedSession = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
+    if (!storedSession?.authenticated) {
         vscode.window.showErrorMessage('You must be logged in to view account information.');
+        return undefined;
+    }
+
+    let session = storedSession;
+
+    // Always refresh account identity from API so the account form reflects database truth.
+    try {
+        const dbUser = await storageManager.findAuthUserByEmail(storedSession.email);
+        if (!dbUser) {
+            vscode.window.showErrorMessage('Unable to load account information from the database.');
+            return undefined;
+        }
+
+        session = {
+            ...storedSession,
+            authUserId: dbUser.authUserId,
+            role: dbUser.role,
+            displayName: dbUser.displayName || storedSession.displayName
+        };
+        await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+    } catch (error: any) {
+        vscode.window.showErrorMessage(`Unable to load account information from API: ${String(error?.message || error)}`);
         return undefined;
     }
 
@@ -74,7 +96,8 @@ export async function openAccountView(
             email: session.email,
             ideUser: details.ideUser,
             workspaceName: details.workspaceName,
-            canViewClasses: session.role === 'Student'
+            canViewClasses: session.role === 'Student',
+            themePreference: getThemePreference(context)
         });
 
         accountPanel.onDidDispose(() => {
@@ -93,19 +116,34 @@ export async function openAccountView(
                         }
 
                         const newDisplayName = String(message.displayName || '').trim();
+                        const selectedTheme = normalizeThemePreference(message.themePreference);
                         if (!newDisplayName) {
                             accountPanel?.webview.postMessage({ command: 'accountError', message: 'Display name cannot be empty.' });
                             return;
                         }
 
-                        await storageManager.updateAuthUserDisplayName(currentSession.authUserId, newDisplayName);
+                        await setThemePreference(context, selectedTheme);
+                        await storageManager.updateAuthUserDisplayName(currentSession.authUserId, newDisplayName, currentSession.email);
+
+                        // Verify persisted data from API before confirming success in UI.
+                        const refreshedUser = await storageManager.findAuthUserByEmail(currentSession.email);
+                        const persistedDisplayName = String(refreshedUser?.displayName || '').trim();
+                        if (!persistedDisplayName || persistedDisplayName !== newDisplayName) {
+                            accountPanel?.webview.postMessage({
+                                command: 'accountError',
+                                message: 'Unable to confirm the update in the database. Please try again.'
+                            });
+                            return;
+                        }
+
                         const updatedSession: WorkspaceAuthSession = {
                             ...currentSession,
-                            displayName: newDisplayName
+                            displayName: persistedDisplayName
                         };
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, updatedSession);
 
                         accountPanel?.webview.postMessage({ command: 'accountSaved' });
+                        accountPanel?.webview.postMessage({ command: 'themePreferenceApplied', themePreference: selectedTheme });
                         resolve(updatedSession);
                         break;
                     }
@@ -170,7 +208,7 @@ export async function openAccountView(
                         }
 
                         const assignments = await storageManager.listStudentAssignmentsForClass(currentSession.authUserId, classId);
-                        const target = assignments.find(a => a.assignmentId === assignmentId);
+                        const target = assignments.find((a: any) => a.assignmentId === assignmentId);
                         if (!target) {
                             accountPanel?.webview.postMessage({ command: 'accountError', message: 'Assignment not found for this class.' });
                             return;

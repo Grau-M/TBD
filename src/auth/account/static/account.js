@@ -379,7 +379,6 @@
               return;
             }
             clearMessages();
-            showClassesSuccess("");
             state.linkingAssignmentId = assignmentId;
             renderSelectedClass();
             post("linkStudentAssignmentWorkspace", {
@@ -580,11 +579,74 @@
           }
 
           state.linkingAssignmentId = null;
-          state.assignmentsByClassId[payload.classId] = Array.isArray(
-            payload.assignments,
-          )
+          const currentAssignments = Array.isArray(payload.assignments)
             ? payload.assignments
             : [];
+          const linked = payload.linkedAssignment || {};
+          const linkedAssignmentId = Number(
+            linked.assignmentId || linked.AssignmentId || payload.assignmentId || 0,
+          );
+          const linkedWorkspaceName =
+            linked.workspaceName ||
+            linked.WorkspaceName ||
+            payload.workspaceName ||
+            "";
+          const linkedWorkspaceRootPath =
+            linked.workspaceRootPath ||
+            linked.WorkspaceRootPath ||
+            payload.workspaceRootPath ||
+            "";
+          const linkedWorkspaceId =
+            linked.workspaceId ||
+            linked.WorkspaceId ||
+            payload.workspaceId ||
+            payload.WorkspaceId ||
+            "";
+          const mergedAssignments = currentAssignments.map((assignment) => {
+            const assignmentId = Number(assignment.assignmentId || assignment.id || 0);
+            if (!linkedAssignmentId || assignmentId !== linkedAssignmentId) {
+              return assignment;
+            }
+
+            return {
+              ...assignment,
+              ...linked,
+              assignmentId: linkedAssignmentId,
+              id: linkedAssignmentId,
+              assignmentName:
+                linked.assignmentName || linked.name || assignment.assignmentName,
+              name: linked.name || linked.assignmentName || assignment.name,
+              description: linked.description || assignment.description,
+              workspaceId: linkedWorkspaceId || assignment.workspaceId,
+              workspaceName:
+                linkedWorkspaceName || assignment.workspaceName,
+              workspaceRootPath:
+                linkedWorkspaceRootPath || assignment.workspaceRootPath,
+              linkedAt: linked.linkedAt || linked.LinkedAt || assignment.linkedAt,
+            };
+          });
+
+          if (linkedAssignmentId && mergedAssignments.length === currentAssignments.length) {
+            const foundMatch = mergedAssignments.some((assignment) => {
+              return Number(assignment.assignmentId || assignment.id || 0) === linkedAssignmentId;
+            });
+            if (!foundMatch) {
+              mergedAssignments.unshift({
+                assignmentId: linkedAssignmentId,
+                id: linkedAssignmentId,
+                assignmentName: linked.assignmentName || linked.name || payload.assignmentName || "Untitled Assignment",
+                name: linked.name || linked.assignmentName || payload.assignmentName || "Untitled Assignment",
+                description: linked.description || payload.description || "No assignment description was provided.",
+                dueDate: linked.dueDate || payload.dueDate || "",
+                workspaceId: linkedWorkspaceId,
+                workspaceName: linkedWorkspaceName,
+                workspaceRootPath: linkedWorkspaceRootPath,
+                linkedAt: linked.linkedAt || linked.LinkedAt || payload.linkedAt || ""
+              });
+            }
+          }
+
+          state.assignmentsByClassId[payload.classId] = mergedAssignments;
           if (state.selectedClassId === payload.classId) {
             renderSelectedClass();
           }

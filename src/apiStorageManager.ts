@@ -49,6 +49,21 @@ export class ApiStorageManager {
         }
         return `TBD-${suffix}`;
     }
+    private generateWorkspaceId(classAssignmentId: number, workspaceRootPath: string, workspaceName: string): number {
+        const source = `${classAssignmentId}|${workspaceRootPath}|${workspaceName}`;
+        let hash = 2166136261;
+        for (let index = 0; index < source.length; index++) {
+            hash ^= source.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+        const workspaceId = hash >>> 0;
+        return workspaceId > 0 ? workspaceId : 1;
+    }
+
+    private parsePositiveInteger(value: unknown): number | undefined {
+        const parsed = Number(value);
+        return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+    }
 
     private async apiGetFirst(paths: string[]): Promise<any> {
         let lastError: unknown;
@@ -375,19 +390,38 @@ export class ApiStorageManager {
         })).filter((row: any) => row.id > 0);
     }
 
-    async linkStudentWorkspaceToAssignment(input: any): Promise<void> {
-        await this.apiPostFirst([
+    async linkStudentWorkspaceToAssignment(input: any): Promise<any> {
+        const classId = Number(input?.classId ?? input?.ClassId ?? 0);
+        const classAssignmentId = Number(input?.classAssignmentId ?? input?.ClassAssignmentId ?? input?.assignmentId ?? input?.AssignmentId ?? 0);
+        const workspaceRootPath = String(input?.workspaceRootPath ?? input?.WorkspaceRootPath ?? '');
+        const workspaceName = String(input?.workspaceName ?? input?.WorkspaceName ?? '');
+        const workspaceIdValue = this.parsePositiveInteger(input?.workspaceId ?? input?.WorkspaceId)
+            ?? this.generateWorkspaceId(classAssignmentId, workspaceRootPath, workspaceName);
+        const result = await this.apiPostFirst([
             '/api/classes/link-student-assignment-workspace',
-            '/api/student-assignment/link-workspace'
+            '/api/classes/link-workspace',
+            '/api/classes/assignments/link-workspace',
+            `/api/classes/${classId}/assignments/${classAssignmentId}/link-workspace`,
+            `/api/classes/${classId}/assignments/${classAssignmentId}/workspace`,
+            '/api/student-assignments/link-workspace',
+            '/api/student-assignment/link-workspace',
+            `/api/student/classes/${classId}/assignments/${classAssignmentId}/link-workspace`,
+            `/api/student/classes/${classId}/assignments/${classAssignmentId}/workspace`
         ], {
             studentAuthUserId: Number(input?.studentAuthUserId ?? input?.StudentAuthUserId ?? 0),
             StudentAuthUserId: Number(input?.studentAuthUserId ?? input?.StudentAuthUserId ?? 0),
-            teacherAuthUserId: Number(input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? 0),
-            TeacherAuthUserId: Number(input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? 0),
-            classId: Number(input?.classId ?? input?.ClassId ?? 0),
-            ClassId: Number(input?.classId ?? input?.ClassId ?? 0),
-            assignmentId: Number(input?.assignmentId ?? input?.AssignmentId ?? 0),
-            AssignmentId: Number(input?.assignmentId ?? input?.AssignmentId ?? 0),
+            teacherId: Number(input?.teacherId ?? input?.TeacherId ?? input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? 0),
+            TeacherId: Number(input?.teacherId ?? input?.TeacherId ?? input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? 0),
+            teacherAuthUserId: Number(input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? input?.teacherId ?? input?.TeacherId ?? 0),
+            TeacherAuthUserId: Number(input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? input?.teacherId ?? input?.TeacherId ?? 0),
+            classId,
+            ClassId: classId,
+            classAssignmentId,
+            ClassAssignmentId: classAssignmentId,
+            assignmentId: classAssignmentId,
+            AssignmentId: classAssignmentId,
+            workspaceId: workspaceIdValue,
+            WorkspaceId: workspaceIdValue,
             workspaceName: String(input?.workspaceName ?? input?.WorkspaceName ?? ''),
             WorkspaceName: String(input?.workspaceName ?? input?.WorkspaceName ?? ''),
             workspaceRootPath: String(input?.workspaceRootPath ?? input?.WorkspaceRootPath ?? ''),
@@ -395,6 +429,8 @@ export class ApiStorageManager {
             workspaceFoldersJson: String(input?.workspaceFoldersJson ?? input?.WorkspaceFoldersJson ?? '[]'),
             WorkspaceFoldersJson: String(input?.workspaceFoldersJson ?? input?.WorkspaceFoldersJson ?? '[]')
         });
+
+        return result?.link ?? result?.data ?? result;
     }
 
     async validateAssignmentLink(_authUserId: number, workspaceRoot: string): Promise<{
@@ -539,10 +575,6 @@ export class ApiStorageManager {
             TeacherAuthUserId: Number(input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? 0),
             courseName: String(input?.courseName ?? input?.CourseName ?? input?.name ?? input?.Name ?? ''),
             CourseName: String(input?.courseName ?? input?.CourseName ?? input?.name ?? input?.Name ?? ''),
-            courseCode: String(input?.courseCode ?? input?.CourseCode ?? ''),
-            CourseCode: String(input?.courseCode ?? input?.CourseCode ?? ''),
-            teacherName: String(input?.teacherName ?? input?.TeacherName ?? ''),
-            TeacherName: String(input?.teacherName ?? input?.TeacherName ?? ''),
             meetingTime: String(input?.meetingTime ?? input?.MeetingTime ?? ''),
             MeetingTime: String(input?.meetingTime ?? input?.MeetingTime ?? ''),
             startDate: String(input?.startDate ?? input?.StartDate ?? ''),
@@ -710,7 +742,7 @@ export class ApiStorageManager {
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.assignments) ? result.assignments : (Array.isArray(result?.data) ? result.data : []));
-        return rows
+        const normalized = rows
             .map((row: any) => ({
                 assignmentId: Number(this.pick(row, ['assignmentId', 'AssignmentId', 'id', 'Id']) ?? 0),
                 id: Number(this.pick(row, ['assignmentId', 'AssignmentId', 'id', 'Id']) ?? 0),
@@ -722,8 +754,53 @@ export class ApiStorageManager {
                 workspaceRootPath: String(this.pick(row, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
                 linkedAt: String(this.pick(row, ['linkedAt', 'LinkedAt']) || ''),
                 classId: Number(this.pick(row, ['classId', 'ClassId']) ?? classId),
+                teacherAuthUserId: Number(this.pick(row, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0),
                 studentAuthUserId: Number(this.pick(row, ['studentAuthUserId', 'StudentAuthUserId']) ?? studentAuthUserId)
             }))
             .filter((row: any) => row.assignmentId > 0);
+
+        const hydrated = await Promise.all(normalized.map(async (row: any) => {
+            const workspace = await this.getStudentAssignmentWorkspace(studentAuthUserId, classId, row.assignmentId);
+            if (!workspace) {
+                return row;
+            }
+
+            return {
+                ...row,
+                workspaceId: Number(this.pick(workspace, ['workspaceId', 'WorkspaceId']) ?? row.workspaceId ?? 0),
+                workspaceName: String(this.pick(workspace, ['workspaceName', 'WorkspaceName']) || row.workspaceName || ''),
+                workspaceRootPath: String(this.pick(workspace, ['workspaceRootPath', 'WorkspaceRootPath']) || row.workspaceRootPath || ''),
+                workspaceFoldersJson: String(this.pick(workspace, ['workspaceFoldersJson', 'WorkspaceFoldersJson']) || row.workspaceFoldersJson || '[]'),
+                linkedAt: String(this.pick(workspace, ['linkedAt', 'LinkedAt']) || row.linkedAt || ''),
+                updatedAt: String(this.pick(workspace, ['updatedAt', 'UpdatedAt']) || row.updatedAt || ''),
+                teacherAuthUserId: Number(this.pick(workspace, ['teacherAuthUserId', 'TeacherAuthUserId']) ?? row.teacherAuthUserId ?? 0)
+            };
+        }));
+
+        return hydrated;
+    }
+
+    async getStudentAssignmentWorkspace(studentAuthUserId: number, classId: number, assignmentId: number): Promise<any | null> {
+        const result = await this.apiGetFirst([
+            `/api/classes/student/classes/${classId}/assignments/${assignmentId}/workspace?studentAuthUserId=${studentAuthUserId}`,
+            `/api/classes/student/classes/${classId}/assignments/${assignmentId}/workspace?studentId=${studentAuthUserId}`
+        ]);
+        const workspace = result?.workspace ?? result?.data ?? result;
+        if (!workspace) {
+            return null;
+        }
+
+        return {
+            studentAuthUserId: Number(this.pick(workspace, ['studentAuthUserId', 'StudentAuthUserId']) ?? studentAuthUserId),
+            teacherAuthUserId: Number(this.pick(workspace, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0),
+            classId: Number(this.pick(workspace, ['classId', 'ClassId']) ?? classId),
+            classAssignmentId: Number(this.pick(workspace, ['classAssignmentId', 'ClassAssignmentId', 'assignmentId', 'AssignmentId']) ?? assignmentId),
+            workspaceId: Number(this.pick(workspace, ['workspaceId', 'WorkspaceId']) ?? 0),
+            workspaceName: String(this.pick(workspace, ['workspaceName', 'WorkspaceName']) || ''),
+            workspaceRootPath: String(this.pick(workspace, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
+            workspaceFoldersJson: String(this.pick(workspace, ['workspaceFoldersJson', 'WorkspaceFoldersJson']) || '[]'),
+            linkedAt: String(this.pick(workspace, ['linkedAt', 'LinkedAt']) || ''),
+            updatedAt: String(this.pick(workspace, ['updatedAt', 'UpdatedAt']) || '')
+        };
     }
 }

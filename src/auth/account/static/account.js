@@ -15,7 +15,9 @@
     };
 
     function post(command, payload) {
-      try { vscode.postMessage(Object.assign({ command }, payload || {})); } catch (e) {}
+      try {
+        vscode.postMessage(Object.assign({ command }, payload || {}));
+      } catch (e) {}
     }
 
     function setVisible(el, show) {
@@ -26,7 +28,9 @@
     }
 
     function normalizeThemePreference(value) {
-      const v = String(value || "").trim().toLowerCase();
+      const v = String(value || "")
+        .trim()
+        .toLowerCase();
       if (v === "light" || v === "dark" || v === "system") {
         return v;
       }
@@ -35,20 +39,35 @@
 
     function applyThemePreference(pref) {
       const normalized = normalizeThemePreference(pref);
-      const shouldUseDark = normalized === "dark" ||
-        (normalized === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      const shouldUseDark =
+        normalized === "dark" ||
+        (normalized === "system" &&
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.classList.toggle("dark", !!shouldUseDark);
     }
 
     function clearMessages() {
       const err = $("account-error");
       const ok = $("account-success");
-      if (err) { err.textContent = ""; setVisible(err, false); }
-      if (ok) { ok.textContent = ""; setVisible(ok, false); }
+      if (err) {
+        err.textContent = "";
+        setVisible(err, false);
+      }
+      if (ok) {
+        ok.textContent = "";
+        setVisible(ok, false);
+      }
       const classesErr = $("student-classes-error");
       const classesOk = $("student-classes-status");
-      if (classesErr) { classesErr.textContent = ""; setVisible(classesErr, false); }
-      if (classesOk) { classesOk.textContent = ""; setVisible(classesOk, false); }
+      if (classesErr) {
+        classesErr.textContent = "";
+        setVisible(classesErr, false);
+      }
+      if (classesOk) {
+        classesOk.textContent = "";
+        setVisible(classesOk, false);
+      }
     }
 
     function showError(msg) {
@@ -144,7 +163,12 @@
         }
       });
 
-      if (viewName === "classes" && data.canViewClasses && !state.classesLoaded && !state.loadingClasses) {
+      if (
+        viewName === "classes" &&
+        data.canViewClasses &&
+        !state.classesLoaded &&
+        !state.loadingClasses
+      ) {
         loadClasses();
       }
     }
@@ -155,7 +179,9 @@
         return;
       }
 
-      list.innerHTML = state.classes.map((item) => `
+      list.innerHTML = state.classes
+        .map(
+          (item) => `
         <button class="class-list-btn${state.selectedClassId === item.id ? " active" : ""}" type="button" data-class-id="${item.id}">
           <div class="class-list-label-row">
             <strong>${escapeHtml(item.courseName || "Untitled Class")}</strong>
@@ -163,7 +189,9 @@
           </div>
           <span>${escapeHtml(formatClassMeta(item))}</span>
         </button>
-      `).join("");
+      `,
+        )
+        .join("");
 
       list.querySelectorAll("[data-class-id]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -183,8 +211,17 @@
       const assignmentList = $("student-assignment-list");
       const loadingAssignments = $("student-assignments-loading");
 
-      const selected = state.classes.find((item) => item.id === state.selectedClassId);
-      if (!selected || !detail || !placeholder || !assignmentList || !emptyAssignments || !loadingAssignments) {
+      const selected = state.classes.find(
+        (item) => item.id === state.selectedClassId,
+      );
+      if (
+        !selected ||
+        !detail ||
+        !placeholder ||
+        !assignmentList ||
+        !emptyAssignments ||
+        !loadingAssignments
+      ) {
         if (detail) {
           setVisible(detail, false);
         }
@@ -196,12 +233,15 @@
 
       setVisible(detail, true);
       setVisible(placeholder, false);
-      $("student-class-title").textContent = selected.courseName || "Selected Class";
+      $("student-class-title").textContent =
+        selected.courseName || "Selected Class";
       $("student-class-meta").textContent = [
         selected.courseCode,
         selected.teacherName ? `Teacher: ${selected.teacherName}` : "",
         selected.joinCode ? `Join Code: ${selected.joinCode}` : "",
-      ].filter(Boolean).join(" • ");
+      ]
+        .filter(Boolean)
+        .join(" • ");
 
       const assignments = state.assignmentsByClassId[selected.id];
       setVisible(loadingAssignments, state.loadingAssignments);
@@ -218,10 +258,16 @@
       }
 
       setVisible(emptyAssignments, false);
-      assignmentList.innerHTML = assignments.map((assignment) => {
-        const started = !!(assignment.workspaceName || assignment.workspaceRootPath || assignment.linkedAt);
-        const isLinking = state.linkingAssignmentId === assignment.assignmentId;
-        return `
+      assignmentList.innerHTML = assignments
+        .map((assignment) => {
+          const started = !!(
+            assignment.workspaceName ||
+            assignment.workspaceRootPath ||
+            assignment.linkedAt
+          );
+          const isLinking =
+            state.linkingAssignmentId === assignment.assignmentId;
+          return `
           <article class="assignment-card">
             <div class="assignment-status-row">
               <div>
@@ -235,7 +281,10 @@
               <div><strong>Workspace:</strong> ${escapeHtml(assignment.workspaceName || "Not yet started")}</div>
               <div><strong>Path:</strong> ${escapeHtml(assignment.workspaceRootPath || "No workspace linked yet")}</div>
             </div>
-            ${started ? "" : `
+            ${
+              started
+                ? ""
+                : `
               <div style="margin-top:12px;">
                 <button
                   type="button"
@@ -244,27 +293,33 @@
                   ${isLinking ? "disabled" : ""}
                 >${isLinking ? "Linking workspace..." : "Select Workspace"}</button>
               </div>
-            `}
+            `
+            }
           </article>
         `;
-      }).join("");
+        })
+        .join("");
 
-      assignmentList.querySelectorAll("[data-link-workspace-assignment-id]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const assignmentId = Number(button.getAttribute("data-link-workspace-assignment-id"));
-          if (!Number.isFinite(assignmentId) || !state.selectedClassId) {
-            return;
-          }
-          clearMessages();
-          showClassesSuccess("");
-          state.linkingAssignmentId = assignmentId;
-          renderSelectedClass();
-          post("linkStudentAssignmentWorkspace", {
-            classId: state.selectedClassId,
-            assignmentId,
+      assignmentList
+        .querySelectorAll("[data-link-workspace-assignment-id]")
+        .forEach((button) => {
+          button.addEventListener("click", () => {
+            const assignmentId = Number(
+              button.getAttribute("data-link-workspace-assignment-id"),
+            );
+            if (!Number.isFinite(assignmentId) || !state.selectedClassId) {
+              return;
+            }
+            clearMessages();
+            showClassesSuccess("");
+            state.linkingAssignmentId = assignmentId;
+            renderSelectedClass();
+            post("linkStudentAssignmentWorkspace", {
+              classId: state.selectedClassId,
+              assignmentId,
+            });
           });
         });
-      });
     }
 
     function renderStudentClasses(classes) {
@@ -281,7 +336,10 @@
       }
 
       renderSelectedClass();
-      if (state.selectedClassId && !state.assignmentsByClassId[state.selectedClassId]) {
+      if (
+        state.selectedClassId &&
+        !state.assignmentsByClassId[state.selectedClassId]
+      ) {
         loadAssignments(state.selectedClassId);
       }
     }
@@ -320,8 +378,18 @@
     if ($("account-role")) {
       $("account-role").value = data.role || "";
     }
+    if (data.role === "Student") {
+      const consentGroup = $("account-consent-group");
+      if (consentGroup) consentGroup.classList.remove("hidden");
+
+      if ($("account-tracking-consent")) {
+        $("account-tracking-consent").checked = !!data.trackingConsent;
+      }
+    }
     if ($("account-theme-preference")) {
-      $("account-theme-preference").value = normalizeThemePreference(data.themePreference);
+      $("account-theme-preference").value = normalizeThemePreference(
+        data.themePreference,
+      );
     }
     if ($("account-email")) {
       $("account-email").value = data.email || "";
@@ -346,6 +414,7 @@
     saveBtn?.addEventListener("click", () => {
       clearMessages();
       const displayName = ($("account-display-name")?.value || "").trim();
+      const trackingConsent = $("account-tracking-consent")?.checked || false;
       if (!displayName) {
         showError("Display name is required.");
         return;
@@ -355,6 +424,7 @@
       post("saveAccount", {
         displayName,
         themePreference: $("account-theme-preference")?.value || "system",
+        trackingConsent,
       });
     });
 
@@ -416,7 +486,11 @@
           }
           state.loadingAssignments = false;
           state.linkingAssignmentId = null;
-          state.assignmentsByClassId[payload.classId] = Array.isArray(payload.assignments) ? payload.assignments : [];
+          state.assignmentsByClassId[payload.classId] = Array.isArray(
+            payload.assignments,
+          )
+            ? payload.assignments
+            : [];
           if (state.selectedClassId === payload.classId) {
             renderSelectedClass();
           }
@@ -431,7 +505,11 @@
           }
 
           state.linkingAssignmentId = null;
-          state.assignmentsByClassId[payload.classId] = Array.isArray(payload.assignments) ? payload.assignments : [];
+          state.assignmentsByClassId[payload.classId] = Array.isArray(
+            payload.assignments,
+          )
+            ? payload.assignments
+            : [];
           if (state.selectedClassId === payload.classId) {
             renderSelectedClass();
           }

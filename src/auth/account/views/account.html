@@ -4,22 +4,34 @@
       <div class="sidebar-brand">
         <p class="sidebar-eyebrow">Account Dashboard</p>
         <h1 class="sidebar-title">Workspace Profile</h1>
-        <p class="sidebar-copy">Start on your account details, then move through the rest of your dashboard from the same place.</p>
+        <p class="sidebar-copy">
+          Start on your account details, then move through the rest of your
+          dashboard from the same place.
+        </p>
       </div>
 
       <nav class="sidebar-nav" aria-label="Dashboard sections">
-        <button id="nav-account" class="sidebar-nav-btn active" type="button" data-view="account">
+        <button
+          id="nav-account"
+          class="sidebar-nav-btn active"
+          type="button"
+          data-view="account"
+        >
           <strong>Account</strong>
           <span>Profile details and account settings.</span>
         </button>
-        <button id="nav-classes" class="sidebar-nav-btn hidden" type="button" data-view="classes">
+        <button
+          id="nav-classes"
+          class="sidebar-nav-btn hidden"
+          type="button"
+          data-view="classes"
+        >
           <strong>Classes</strong>
           <span>See joined classes and assignment progress.</span>
         </button>
       </nav>
 
-      <div class="sidebar-meta">
-      </div>
+      <div class="sidebar-meta"></div>
     </aside>
 
     <main class="dashboard-main">
@@ -29,15 +41,22 @@
             <div>
               <div class="account-logo">👤</div>
             </div>
-            <div style="flex: 1;">
+            <div style="flex: 1">
               <h2 class="account-title">Account Information</h2>
-              <p class="account-subtitle">Review your account details. Only your display name can be edited.</p>
+              <p class="account-subtitle">
+                Review your account details. Only your display name can be
+                edited.
+              </p>
             </div>
           </div>
 
           <div class="form-group">
             <label for="account-display-name">Display Name</label>
-            <input type="text" id="account-display-name" placeholder="Your display name" />
+            <input
+              type="text"
+              id="account-display-name"
+              placeholder="Your display name"
+            />
           </div>
 
           <div class="form-group">
@@ -49,7 +68,20 @@
             <label for="account-role">Role</label>
             <input type="text" id="account-role" readonly />
           </div>
-
+          <div class="form-group hidden" id="account-consent-group">
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-weight: normal;
+                cursor: pointer;
+              "
+            >
+              <input type="checkbox" id="account-tracking-consent" />
+              <span>Record my coding activity (Tracking Consent)</span>
+            </label>
+          </div>
           <div class="form-group">
             <label for="account-theme-preference">Theme</label>
             <select id="account-theme-preference">
@@ -73,38 +105,59 @@
           <div class="page-header">
             <div>
               <h2 class="page-title">My Classes</h2>
-              <p class="page-subtitle">Choose a class to review every teacher assignment and whether you have already attached a workspace.</p>
+              <p class="page-subtitle">
+                Choose a class to review every teacher assignment and whether
+                you have already attached a workspace.
+              </p>
             </div>
-            <button id="btn-join-class" class="btn-secondary" type="button">Join Class</button>
+            <button id="btn-join-class" class="btn-secondary" type="button">
+              Join Class
+            </button>
           </div>
 
           <div id="student-classes-status" class="account-success hidden"></div>
           <div id="student-classes-error" class="account-error hidden"></div>
 
           <div id="student-classes-empty" class="empty-state hidden">
-            You are not linked to any classes yet. Join a class and connect a workspace before assignments will appear here.
+            You are not linked to any classes yet. Join a class and connect a
+            workspace before assignments will appear here.
           </div>
 
           <div class="classes-layout">
             <div class="class-list-card">
-              <div id="student-classes-loading" class="loading-state hidden">Loading your classes...</div>
+              <div id="student-classes-loading" class="loading-state hidden">
+                Loading your classes...
+              </div>
               <div id="student-classes-list" class="class-list"></div>
             </div>
 
             <div class="class-detail-card">
-              <div id="student-class-detail-placeholder" class="detail-placeholder">
-                Select a class from the left to see the assignments your teacher created for it.
+              <div
+                id="student-class-detail-placeholder"
+                class="detail-placeholder"
+              >
+                Select a class from the left to see the assignments your teacher
+                created for it.
               </div>
 
               <div id="student-class-detail" class="hidden">
                 <div class="page-header">
                   <div>
-                    <h3 id="student-class-title" class="page-title" style="font-size: 1.45rem; margin-bottom: 4px;"></h3>
+                    <h3
+                      id="student-class-title"
+                      class="page-title"
+                      style="font-size: 1.45rem; margin-bottom: 4px"
+                    ></h3>
                     <p id="student-class-meta" class="class-detail-meta"></p>
                   </div>
                 </div>
 
-                <div id="student-assignments-loading" class="loading-state hidden">Loading assignments...</div>
+                <div
+                  id="student-assignments-loading"
+                  class="loading-state hidden"
+                >
+                  Loading assignments...
+                </div>
                 <div id="student-assignments-empty" class="empty-state hidden">
                   This class does not have assignments yet.
                 </div>
@@ -115,5 +168,5 @@
         </div>
       </section>
     </main>
-    </div>
+  </div>
 </div>

@@ -117,17 +117,24 @@ export async function openAccountView(
 
                         const newDisplayName = String(message.displayName || '').trim();
                         const selectedTheme = normalizeThemePreference(message.themePreference);
+                        
+                        // STRICT BOOLEAN CAST: Ensure it is true/false, not "true"/"false"
+                        const trackingConsent = Boolean(message.trackingConsent === true || message.trackingConsent === 'true');
+
                         if (!newDisplayName) {
                             accountPanel?.webview.postMessage({ command: 'accountError', message: 'Display name cannot be empty.' });
                             return;
                         }
 
                         await setThemePreference(context, selectedTheme);
-                        await storageManager.updateAuthUserDisplayName(currentSession.authUserId, newDisplayName, currentSession.email);
+                        
+                        // Call the updated profile method with the boolean
+                        await storageManager.updateAuthUserProfile(currentSession.authUserId, newDisplayName, trackingConsent, currentSession.email);
 
-                        // Verify persisted data from API before confirming success in UI.
+                        // Verify persisted data from API
                         const refreshedUser = await storageManager.findAuthUserByEmail(currentSession.email);
                         const persistedDisplayName = String(refreshedUser?.displayName || '').trim();
+                        
                         if (!persistedDisplayName || persistedDisplayName !== newDisplayName) {
                             accountPanel?.webview.postMessage({
                                 command: 'accountError',
@@ -136,9 +143,11 @@ export async function openAccountView(
                             return;
                         }
 
+                        // Update local session
                         const updatedSession: WorkspaceAuthSession = {
                             ...currentSession,
-                            displayName: persistedDisplayName
+                            displayName: persistedDisplayName,
+                            trackingConsent: refreshedUser.trackingConsent 
                         };
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, updatedSession);
 

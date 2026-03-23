@@ -20,6 +20,7 @@ export interface WorkspaceAuthSession {
     workspaceLinkedActivityId?: number;
     workspaceLinkedClassId?: number;
     workspaceLinkedAssignmentId?: number;
+    trackingConsent?: boolean;
 }
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';

@@ -11,6 +11,7 @@ export interface AccountViewData {
     workspaceName: string;
     canViewClasses: boolean;
   themePreference: 'system' | 'light' | 'dark';
+  trackingConsent?: boolean;
 }
 
 export function getAccountHtml(

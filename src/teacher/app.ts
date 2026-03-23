@@ -214,8 +214,8 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             break;
           }
 
-          let students = [];
-          let assignments = [];
+          let students: any[] = [];
+          let assignments: any[] = [];
 
           try {
             students = await storageManager.listClassStudentsSummary(classId, teacherId);
@@ -268,7 +268,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             break;
           }
 
-          let students = [];
+          let students: any[] = [];
           try {
             students = await storageManager.listAssignmentStudentWork(classId, assignmentId, teacherId);
           } catch (error) {

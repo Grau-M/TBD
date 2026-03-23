@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { UserRole } from '../dbStorageManager';
+import type { UserRole } from '../apiStorageManager';
 import { WorkspaceAuthSession } from '../auth';
 import { getAuthHtml } from './getHtml';
 import { ApiHttpError } from '../api';
@@ -200,6 +200,7 @@ export async function openAuthView(
                             const email = String(message.email || '').toLowerCase();
                             const password = String(message.password || '');
                             const displayName = String(message.displayName || '').trim();
+                            const trackingConsent = Boolean(message.trackingConsent === true || message.trackingConsent === 'true');
                             const result = await storageManager.upsertAuthUser({
                                 provider: 'email',
                                 subjectId: email,
@@ -207,7 +208,8 @@ export async function openAuthView(
                                 email,
                                 displayName,
                                 password,
-                                role
+                                role,
+                                trackingConsent
                             });
 
                             if (!result.isNew) {

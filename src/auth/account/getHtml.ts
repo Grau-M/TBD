@@ -11,6 +11,7 @@ export interface AccountViewData {
     workspaceName: string;
     canViewClasses: boolean;
   themePreference: 'system' | 'light' | 'dark';
+  trackingConsent?: boolean;
 }
 
 export function getAccountHtml(
@@ -294,7 +295,7 @@ export function getAccountHtml(
       display: grid;
       grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
       gap: 18px;
-      min-height: 420px;
+      align-items: start;
     }
 
     .class-list-card,
@@ -358,15 +359,44 @@ export function getAccountHtml(
       border-color: rgba(245,158,11,0.2);
     }
 
+    .assignment-status.past-due {
+      background: rgba(239,68,68,0.12);
+      color: #f87171;
+      border-color: rgba(239,68,68,0.45);
+    }
+
     .assignment-list {
       display: grid;
       gap: 14px;
       margin-top: 20px;
     }
 
+    .assignment-section {
+      display: grid;
+      gap: 12px;
+    }
+
+    .assignment-section-title {
+      margin: 0;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+
+    .assignment-list-group {
+      display: grid;
+      gap: 14px;
+    }
+
     .assignment-card {
       border-radius: 18px;
       padding: 18px;
+    }
+
+    .assignment-card.past-due {
+      border-color: rgba(239,68,68,0.45);
+      background: linear-gradient(180deg, rgba(127,29,29,0.12), var(--surface));
     }
 
     .assignment-card-copy {
@@ -380,7 +410,17 @@ export function getAccountHtml(
     }
 
     .empty-state,
-    .detail-placeholder,
+    .detail-placeholder {
+      border: 1px dashed var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      background: var(--surface-strong);
+      color: var(--muted);
+      line-height: 1.6;
+      text-align: center;
+      display: block;
+    }
+
     .loading-state {
       border: 1px dashed var(--border);
       border-radius: 18px;
@@ -396,6 +436,7 @@ export function getAccountHtml(
       font-size: 0.9rem;
       margin-top: 2px;
       margin-bottom: 8px;
+      white-space: pre-wrap;
     }
     .account-error { background: rgba(220,38,38,0.1); color: var(--error); }
     .account-success { background: rgba(22,163,74,0.12); color: var(--success); }

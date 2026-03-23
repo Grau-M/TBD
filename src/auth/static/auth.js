@@ -11,9 +11,14 @@
     }
 
     // ── Shared theme preference (set in Account page) ────────────
-    const themePreference = String(window.__TBD_THEME_PREFERENCE__ || "system").toLowerCase();
-    const shouldUseDark = themePreference === "dark" ||
-      (themePreference === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const themePreference = String(
+      window.__TBD_THEME_PREFERENCE__ || "system",
+    ).toLowerCase();
+    const shouldUseDark =
+      themePreference === "dark" ||
+      (themePreference === "system" &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.classList.toggle("dark", !!shouldUseDark);
 
     // ── Tab switching ─────────────────────────────────────────────
@@ -144,6 +149,7 @@
       const role = $("register-role")?.value || "Student";
       clearErrors();
 
+      const trackingConsent = $("register-consent")?.checked || false;
       if (!displayName) {
         showError("register-error", "Display name is required.");
         return;
@@ -174,7 +180,7 @@
         btn.disabled = true;
         btn.textContent = "Creating account…";
       }
-      post("register", { displayName, email, password, role });
+      post("register", { displayName, email, password, role, trackingConsent });
     }
 
     $("btn-register")?.addEventListener("click", doRegister);

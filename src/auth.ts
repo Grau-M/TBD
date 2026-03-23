@@ -1,5 +1,13 @@
 import * as vscode from 'vscode';
-import type { UserRole, ClassActivityRecord } from './dbStorageManager';
+import type { UserRole } from './apiStorageManager';
+
+interface ClassActivityRecord {
+    id: number;
+    name: string;
+    description: string;
+    teacherAuthUserId: number;
+    teacherDisplayName: string;
+}
 
 // 👉 NEW IMPORTS
 import { state } from './state';
@@ -24,6 +32,7 @@ export interface WorkspaceAuthSession {
     workspaceLinkedActivityId?: number;
     workspaceLinkedClassId?: number;
     workspaceLinkedAssignmentId?: number;
+    trackingConsent?: boolean;
 }
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';

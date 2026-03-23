@@ -10,7 +10,7 @@ interface ApiSyncStatus {
     lastConflictAt: string | null;
 }
 
-type UserRole = 'Student' | 'Teacher' | 'Admin';
+export type UserRole = 'Student' | 'Teacher' | 'Admin';
 
 export class ApiStorageManager {
     private context: vscode.ExtensionContext | null = null;
@@ -197,7 +197,8 @@ export class ApiStorageManager {
         // Intentionally no-op in API-only mode.
     }
 
-    async upsertAuthUser(identity: { email: string; displayName: string; [key: string]: any }): Promise<{ authUserId: number; role: UserRole; isNew: boolean }> {
+    // 1. Update the signature and payload for upsertAuthUser
+    async upsertAuthUser(identity: { email: string; displayName: string; trackingConsent?: boolean; [key: string]: any }): Promise<{ authUserId: number; role: UserRole; isNew: boolean; trackingConsent: boolean }> {
         const email = String(identity.email || '').toLowerCase();
         const displayName = String(identity.displayName || '').trim();
         const provider = String(identity.provider || 'email').toLowerCase();
@@ -205,32 +206,48 @@ export class ApiStorageManager {
         const username = String(identity.username || email).trim();
         const password = identity.password ? String(identity.password) : undefined;
         const role = identity.role ? this.normalizeRole(identity.role) : undefined;
+        
+        // Ensure it's a native boolean type
+        const trackingConsent = identity.trackingConsent === true; 
 
         const payload = {
-            provider,
-            Provider: provider,
-            subjectId,
-            SubjectId: subjectId,
-            email,
-            Email: email,
-            username,
-            Username: username,
-            displayName,
-            DisplayName: displayName,
-            password,
-            Password: password,
-            role,
-            Role: role
+            provider, Provider: provider,
+            subjectId, SubjectId: subjectId,
+            email, Email: email,
+            username, Username: username,
+            displayName, DisplayName: displayName,
+            password, Password: password,
+            role, Role: role,
+            trackingConsent, TrackingConsent: trackingConsent // Native boolean in JSON
         };
 
         const result = await apiPost('/api/auth/upsert-user', payload);
         const user = result?.user ?? result;
         return {
+            // ... (keep authUserId, role, isNew mapping) ...
             authUserId: Number(this.pick(result, ['authUserId', 'AuthUserId']) ?? this.pick(user, ['id', 'Id', 'authUserId', 'AuthUserId']) ?? 0),
             role: this.normalizeRole(this.pick(result, ['role', 'Role']) ?? this.pick(user, ['role', 'Role'])),
-            isNew: Boolean(this.pick(result, ['isNew', 'IsNew']) ?? false)
+            isNew: Boolean(this.pick(result, ['isNew', 'IsNew']) ?? false),
+            
+            // Extract the returned boolean
+            trackingConsent: Boolean(this.pick(result, ['trackingConsent', 'TrackingConsent']) ?? this.pick(user, ['trackingConsent', 'TrackingConsent']) ?? false)
         };
     }
+    // Create the update profile method to handle the account settings save
+    async updateAuthUserProfile(authUserId: number, displayName: string, trackingConsent: boolean, email?: string): Promise<void> {
+        await apiPost('/api/auth/update-profile', { 
+            authUserId, userId: authUserId, id: authUserId, AuthUserId: authUserId,
+            displayName, DisplayName: displayName,
+            
+            // Strictly pass as native boolean in the JSON payload
+            trackingConsent: trackingConsent === true, 
+            TrackingConsent: trackingConsent === true, 
+            
+            email: email?.toLowerCase(), Email: email?.toLowerCase()
+        });
+    }
+
+
 
     async updateAuthUserRole(authUserId: number, role: UserRole): Promise<void> {
         await apiPost('/api/auth/update-role', {
@@ -254,7 +271,8 @@ export class ApiStorageManager {
         });
     }
 
-    async findAuthUserByEmail(email: string): Promise<{ authUserId: number; role: UserRole; displayName: string } | null> {
+    // Update the login/fetch methods so the session knows the consent state
+    async findAuthUserByEmail(email: string): Promise<{ authUserId: number; role: UserRole; displayName: string; trackingConsent: boolean } | null> {
         const result = await apiGet(`/api/auth/user-by-email?email=${encodeURIComponent(email.toLowerCase())}`);
         const user = result?.user ?? result;
         const authUserId = Number(this.pick(user, ['authUserId', 'AuthUserId', 'id', 'Id']) ?? 0);
@@ -264,7 +282,8 @@ export class ApiStorageManager {
         return {
             authUserId,
             role: this.normalizeRole(this.pick(user, ['role', 'Role'])),
-            displayName: String(this.pick(user, ['displayName', 'DisplayName', 'username', 'Username', 'email', 'Email']) || 'user')
+            displayName: String(this.pick(user, ['displayName', 'DisplayName', 'username', 'Username', 'email', 'Email']) || 'user'),
+            trackingConsent: Boolean(this.pick(user, ['trackingConsent', 'TrackingConsent']) ?? false)
         };
     }
 
@@ -327,12 +346,16 @@ export class ApiStorageManager {
             '/api/classes/enroll-student',
             '/api/student/enroll-class'
         ], {
+            studentId: studentAuthUserId,
+            StudentId: studentAuthUserId,
             studentAuthUserId,
             StudentAuthUserId: studentAuthUserId,
             classId,
             ClassId: classId,
-            teacherAuthUserId: Number(this.pick(linkedClass, ['teacherAuthUserId', 'TeacherAuthUserId']) ?? 0),
-            TeacherAuthUserId: Number(this.pick(linkedClass, ['teacherAuthUserId', 'TeacherAuthUserId']) ?? 0)
+            teacherId: Number(this.pick(linkedClass, ['teacherId', 'TeacherId', 'teacherAuthUserId', 'TeacherAuthUserId']) ?? 0),
+            TeacherId: Number(this.pick(linkedClass, ['teacherId', 'TeacherId', 'teacherAuthUserId', 'TeacherAuthUserId']) ?? 0),
+            teacherAuthUserId: Number(this.pick(linkedClass, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0),
+            TeacherAuthUserId: Number(this.pick(linkedClass, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0)
         });
         return Boolean(this.pick(result, ['isNewEnrollment', 'IsNewEnrollment', 'enrolled', 'Enrolled']) ?? true);
     }
@@ -483,10 +506,10 @@ export class ApiStorageManager {
             TeacherName: String(input?.teacherName ?? input?.TeacherName ?? ''),
             meetingTime: String(input?.meetingTime ?? input?.MeetingTime ?? ''),
             MeetingTime: String(input?.meetingTime ?? input?.MeetingTime ?? ''),
-            startDate: String(input?.startDate ?? input?.StartDate ?? ''),
-            StartDate: String(input?.startDate ?? input?.StartDate ?? ''),
-            endDate: String(input?.endDate ?? input?.EndDate ?? ''),
-            EndDate: String(input?.endDate ?? input?.EndDate ?? ''),
+            startDate: input?.startDate ?? input?.StartDate ?? null,
+            StartDate: input?.startDate ?? input?.StartDate ?? null,
+            endDate: input?.endDate ?? input?.EndDate ?? null,
+            EndDate: input?.endDate ?? input?.EndDate ?? null,
             joinCode,
             JoinCode: joinCode,
             name: String(input?.courseName ?? input?.CourseName ?? input?.name ?? input?.Name ?? ''),
@@ -661,17 +684,46 @@ export class ApiStorageManager {
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.classes) ? result.classes : (Array.isArray(result?.data) ? result.data : []));
-        return rows;
+        return rows
+            .map((row: any) => ({
+                id: Number(this.pick(row, ['id', 'Id', 'classId', 'ClassId']) ?? 0),
+                courseName: String(this.pick(row, ['courseName', 'CourseName', 'className', 'ClassName', 'courseTitle', 'CourseTitle', 'name', 'Name', 'title', 'Title']) || ''),
+                courseCode: String(this.pick(row, ['courseCode', 'CourseCode', 'code', 'Code']) || ''),
+                teacherName: String(this.pick(row, ['teacherName', 'TeacherName', 'teacherDisplayName', 'TeacherDisplayName', 'teacher', 'Teacher']) || ''),
+                meetingTime: String(this.pick(row, ['meetingTime', 'MeetingTime']) || ''),
+                startDate: this.pick(row, ['startDate', 'StartDate']) ?? null,
+                endDate: this.pick(row, ['endDate', 'EndDate']) ?? null,
+                joinCode: String(this.pick(row, ['joinCode', 'JoinCode']) || ''),
+                teacherAuthUserId: Number(this.pick(row, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0)
+            }))
+            .filter((row: any) => row.id > 0);
     }
 
     async listStudentAssignmentsForClass(studentAuthUserId: number, classId: number): Promise<any[]> {
         const result = await this.apiGetFirst([
             `/api/student/classes/${classId}/assignments?studentAuthUserId=${studentAuthUserId}`,
+            `/api/student/classes/${classId}/assignments?studentId=${studentAuthUserId}`,
+            `/api/classes/${classId}/assignments?studentAuthUserId=${studentAuthUserId}`,
+            `/api/classes/${classId}/assignments?studentId=${studentAuthUserId}`,
             `/api/classes/${classId}/student-assignments?studentAuthUserId=${studentAuthUserId}`
         ]);
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.assignments) ? result.assignments : (Array.isArray(result?.data) ? result.data : []));
-        return rows;
+        return rows
+            .map((row: any) => ({
+                assignmentId: Number(this.pick(row, ['assignmentId', 'AssignmentId', 'id', 'Id']) ?? 0),
+                id: Number(this.pick(row, ['assignmentId', 'AssignmentId', 'id', 'Id']) ?? 0),
+                assignmentName: String(this.pick(row, ['assignmentName', 'AssignmentName', 'name', 'Name', 'title', 'Title']) || 'Untitled Assignment'),
+                name: String(this.pick(row, ['assignmentName', 'AssignmentName', 'name', 'Name', 'title', 'Title']) || 'Untitled Assignment'),
+                description: String(this.pick(row, ['description', 'Description', 'details', 'Details']) || 'No assignment description was provided.'),
+                dueDate: String(this.pick(row, ['dueDate', 'DueDate']) || ''),
+                workspaceName: String(this.pick(row, ['workspaceName', 'WorkspaceName']) || ''),
+                workspaceRootPath: String(this.pick(row, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
+                linkedAt: String(this.pick(row, ['linkedAt', 'LinkedAt']) || ''),
+                classId: Number(this.pick(row, ['classId', 'ClassId']) ?? classId),
+                studentAuthUserId: Number(this.pick(row, ['studentAuthUserId', 'StudentAuthUserId']) ?? studentAuthUserId)
+            }))
+            .filter((row: any) => row.assignmentId > 0);
     }
 }

@@ -184,6 +184,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       font-size: 0.88rem;
       margin-bottom: 14px;
       line-height: 1.45;
+      white-space: pre-wrap;
     }
 
     .auth-submit-btn {

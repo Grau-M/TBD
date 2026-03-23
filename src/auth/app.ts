@@ -287,7 +287,10 @@ export async function openAuthView(
                 // If it's an API HTTP error (like 500), show the response body for debugging
                 let errorMessage = String(e?.message || e);
                 if (e instanceof ApiHttpError) {
-                    errorMessage = `API Error ${e.status}: ${e.responseBody}`;
+                    const registrationEmail = String(message.email || '').trim().toLowerCase();
+                    errorMessage = message.command === 'register' && registrationEmail
+                        ? `Registration failed for ${registrationEmail}: ${e.message}`
+                        : e.message;
                     console.error('Auth API error:', { status: e.status, body: e.responseBody });
                 }
                 authPanel?.webview.postMessage({

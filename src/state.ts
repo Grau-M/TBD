@@ -20,6 +20,7 @@ export const state = {
     clipboardOnBlur: '', 
     externalCopiedText: '',
     isConsentGiven: false,
+    currentUserRole: 'None' as 'Student' | 'Teacher' | 'Admin' | 'None', // track the current user's role 
 };
 
 export const CONSTANTS = {

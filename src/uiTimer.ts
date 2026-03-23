@@ -4,16 +4,22 @@
 // duration while the extension is active. Returns a Disposable to stop
 // the timer when the extension is deactivated.
 import * as vscode from 'vscode';
-import { state, CONSTANTS } from './state';
+import { state } from './state';
 import { formatDuration } from './utils';
 
 // Function: startUiTimer
-// Purpose: Start a timer that updates the provided status bar item every
-// second to show either an AWAY duration (if focusAwayStartTime is set)
-// or the current session recording duration. Returns a Disposable to
-// cancel the timer.
 export function startUiTimer(statusBarItem: vscode.StatusBarItem): vscode.Disposable {
     const uiTimer = setInterval(() => {
+        // 👉 Gate 1: Protect the Teacher and Logged-Out UI
+        if (state.currentUserRole !== 'Student') {
+            return; // Go back to sleep! Let updateTrackingUI() handle the display.
+        }
+
+        // 👉 Gate 2: Protect the Pre-Sync State
+        if (!state.isSessionActive) {
+            return; // Go back to sleep! Wait until the API verifies the assignment.
+        }
+
         const now = Date.now();
 
         if (state.focusAwayStartTime) {

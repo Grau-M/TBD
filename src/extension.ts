@@ -165,6 +165,11 @@ export interface ExtensionApi {
 export async function activate(context: vscode.ExtensionContext) {
     installRuntimeWarningFilter();
     console.log('TBD Logger: activate');
+
+    const statusBarItem = createStatusBar(context);
+    const uiTimerDisposable = startUiTimer(statusBarItem);
+    context.subscriptions.push(uiTimerDisposable);
+
     // 1. Get the current session (if one exists on startup)
     const session = getWorkspaceAuthSession(context);
 
@@ -293,6 +298,9 @@ export async function activate(context: vscode.ExtensionContext) {
                 const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
                 if (startedSessionId) {
                     await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
+
+                    state.isSessionActive = true;
+                    
                     void logEvent('session_start', {
                         workspaceName: vscode.workspace.name || 'Unknown Workspace',
                         workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
@@ -518,9 +526,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Create status bar and start UI timer (REC/AWAY timer is display-only).
     // Teacher dashboard lock is role-gated and managed dynamically after auth state is known.
-    const statusBarItem = createStatusBar(context);
-    const uiTimerDisposable = startUiTimer(statusBarItem);
-    context.subscriptions.push(uiTimerDisposable);
     updateAuthStatusBar(context);
 
     // Register listeners

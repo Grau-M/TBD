@@ -20,8 +20,7 @@ import { openTeacherView } from './teacher';
 import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess } from './auth';
 import { openAuthView, openAccountView } from './auth/index';
 import { updateSyncStatus } from './statusBar';
-import { ApiHttpError, apiGet, apiPost, configureApiTokenProvider } from './api';
-import { updateApiKeyStatus } from './statusBar';
+import { ApiHttpError, apiGet, apiPost } from './api';
 import { updateTrackingUI } from './statusBar';
 import * as path from 'path';
 import { openStudentSyncView } from './auth/studentSyncView';
@@ -53,8 +52,6 @@ function installRuntimeWarningFilter(): void {
 
 const SESSION_ID_KEY = 'sessionId';
 const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
-const API_TOKEN_SECRET_KEY = 'tbd.api.sessionToken.v1';
-
 // Function to update database status bar item
 async function updateDbStatusBar(): Promise<void> {
     const statusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
@@ -70,8 +67,8 @@ async function updateDbStatusBar(): Promise<void> {
             return;
         } catch (authErr) {
             if (authErr instanceof ApiHttpError && (authErr.status === 401 || authErr.status === 403)) {
-                statusItem.text = '$(key) API Token Needed';
-                statusItem.tooltip = 'API is reachable, but token is missing or invalid. Use sign in or re-enter token.';
+                statusItem.text = '$(cloud-offline) API Auth Error';
+                statusItem.tooltip = 'API reachable, but authentication failed. Check the backend configuration.';
                 return;
             }
             throw authErr;
@@ -173,114 +170,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // 2. Update the tracking UI based on their role
     updateTrackingUI(session?.role);    
-    configureApiTokenProvider(async () => context.secrets.get(API_TOKEN_SECRET_KEY));
-
-    const isApiTokenValid = async (): Promise<boolean> => {
-        try {
-            await apiGet('/api/sessions');
-            return true;
-        } catch (error) {
-            if (error instanceof ApiHttpError && (error.status === 401 || error.status === 403)) {
-                return false;
-            }
-            // If API is unavailable, do not treat token as invalid.
-            return true;
-        }
-    };
-
-    const promptAndStoreApiToken = async (): Promise<boolean> => {
-        if (process.env.CI === 'true') {
-            return false;
-        }
-
-        const existingToken = await context.secrets.get(API_TOKEN_SECRET_KEY);
-        if (existingToken?.trim()) {
-            const isValid = await isApiTokenValid();
-            if (isValid) {
-                return true;
-            }
-            await context.secrets.delete(API_TOKEN_SECRET_KEY);
-        }
-
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const tokenInput = await vscode.window.showInputBox({
-                title: 'TBD Logger API Access',
-                prompt: 'Enter your API access token. This is stored securely and reused automatically.',
-                password: true,
-                ignoreFocusOut: true
-            });
-
-            if (!tokenInput?.trim()) {
-                return false;
-            }
-
-            await context.secrets.store(API_TOKEN_SECRET_KEY, tokenInput.trim());
-            const isValid = await isApiTokenValid();
-            if (isValid) {
-                vscode.window.showInformationMessage('API token saved and validated.');
-                return true;
-            }
-
-            await context.secrets.delete(API_TOKEN_SECRET_KEY);
-            vscode.window.showErrorMessage('API token was rejected (401/403). Please try again.');
-        }
-
-        return false;
-    };
-    async function checkInitialApiKeyStatus() {
-    // Check your database/storage to see if a valid key already exists
-    // const existingKey = await apiStorageManager.getApiKey();
-    const hasValidKey = false; // Replace with your actual check
-
-    // This will either hide it (if true) or show the "Set API Key" prompt (if false)
-    updateApiKeyStatus(hasValidKey);
-}
-
-checkInitialApiKeyStatus();
-let enterApiKeyCommand = vscode.commands.registerCommand('tbd-logger.enterApiKey', async () => {
-    const apiKey = await vscode.window.showInputBox({
-        prompt: "Enter your API Key",
-        placeHolder: "Paste your API key here...",
-        password: true,
-        ignoreFocusOut: true
-    });
-
-    if (apiKey) {
-        // 1. Save to your storage/database
-        // await apiStorageManager.storeApiKey(apiKey);
-        
-        // 2. Validate the key (Optional: make a test API call here to ensure it works)
-        const isKeyValid = true; // Replace with actual validation logic
-
-        if (isKeyValid) {
-            vscode.window.showInformationMessage("API Key successfully set!");
-            // 3. Hide the status bar item since we now have a valid key
-            updateApiKeyStatus(true);
-        } else {
-            vscode.window.showErrorMessage("Invalid API Key provided.");
-            updateApiKeyStatus(false);
-        }
-    }
-});
-
-context.subscriptions.push(enterApiKeyCommand);
     const withApiTokenRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
-        try {
-            return await operation();
-        } catch (error) {
-            const status = (error instanceof ApiHttpError) ? error.status : undefined;
-            if (status !== 401 && status !== 403) {
-                throw error;
-            }
-
-            await context.secrets.delete(API_TOKEN_SECRET_KEY);
-            const stored = await promptAndStoreApiToken();
-            if (!stored) {
-                throw error;
-            }
-
-            return operation();
-        }
+        return operation();
     };
 
     const ensureProject = async (): Promise<number | undefined> => {
@@ -364,8 +255,6 @@ context.subscriptions.push(enterApiKeyCommand);
             console.warn(`[TBD Logger] Failed to log event: ${eventType}`, error);
         }
     };
-
-    void promptAndStoreApiToken();
 
     try { printSessionInfo(); } catch (e) { /* no-op */ }
 
@@ -621,7 +510,6 @@ context.subscriptions.push(enterApiKeyCommand);
 
         if (answer === 'Log Out') {
             await clearWorkspaceAuthSession(context);
-            await context.secrets.delete(API_TOKEN_SECRET_KEY);
             updateAuthStatusBar(context);
             vscode.window.showInformationMessage('You have been logged out.');
         }

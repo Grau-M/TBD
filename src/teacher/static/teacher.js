@@ -2543,6 +2543,15 @@
       btn.style.display = inClassDetail && currentClassDetailTab === "assignments" ? "inline-flex" : "none";
     }
 
+    function isInClassFlowView() {
+      return (
+        $("class-detail-view")?.style.display === "block" ||
+        $("assignment-work-view")?.style.display === "block" ||
+        $("assignment-student-view")?.style.display === "block" ||
+        $("assignment-session-log-view")?.style.display === "block"
+      );
+    }
+
     function updateClassTabHeading() {
       const heading = document.querySelector("#class-tab .header-row h1");
       if (!heading) {
@@ -3210,10 +3219,18 @@
     }
 
     $("btn-new-class")?.addEventListener("click", () => {
-      const inClassDetail = $("class-detail-view")?.style.display === "block";
-      if (inClassDetail) {
+      if (isInClassFlowView()) {
         if ($("class-detail-view")) {
           $("class-detail-view").style.display = "none";
+        }
+        if ($("assignment-work-view")) {
+          $("assignment-work-view").style.display = "none";
+        }
+        if ($("assignment-student-view")) {
+          $("assignment-student-view").style.display = "none";
+        }
+        if ($("assignment-session-log-view")) {
+          $("assignment-session-log-view").style.display = "none";
         }
         if ($("class-list-view")) {
           $("class-list-view").style.display = "grid";
@@ -3221,6 +3238,7 @@
         currentClassDetailTab = "students";
         currentClassDisplayName = "";
         setAssignmentFormVisible(false);
+        setClassRefreshLoading(false);
         updateTopClassActionButton();
         updateClassTabHeading();
         loadClasses();

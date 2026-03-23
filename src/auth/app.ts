@@ -8,11 +8,6 @@ const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let authPanel: vscode.WebviewPanel | undefined;
 
-function isLegacySqlDisabledError(error: unknown): boolean {
-    const message = String((error as any)?.message || error || '');
-    return message.includes('Direct Azure SQL connectivity is disabled in this extension build');
-}
-
 function buildLocalSession(params: {
     role: UserRole;
     provider: 'microsoft' | 'google' | 'email';
@@ -141,17 +136,7 @@ export async function openAuthView(
                                 email: emailGuess
                             };
                         } catch (error) {
-                            if (!isLegacySqlDisabledError(error)) {
-                                throw error;
-                            }
-                            const fallbackRole = await pickRoleForNewUser() || 'Student';
-                            signedSession = buildLocalSession({
-                                role: fallbackRole,
-                                provider: provider as 'microsoft' | 'google',
-                                displayName: accountName,
-                                email: emailGuess
-                            });
-                            vscode.window.showInformationMessage('TBD Logger is running in API-only mode. Local auth session created.');
+                            throw error;
                         }
 
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, signedSession);
@@ -191,18 +176,7 @@ export async function openAuthView(
                                 email
                             };
                         } catch (error) {
-                            if (!isLegacySqlDisabledError(error)) {
-                                throw error;
-                            }
-                            const email = String(message.email || '').toLowerCase();
-                            const displayName = email.split('@')[0] || email || 'student';
-                            session = buildLocalSession({
-                                role: 'Student',
-                                provider: 'email',
-                                displayName,
-                                email
-                            });
-                            vscode.window.showInformationMessage('TBD Logger is running in API-only mode. Local sign-in session created.');
+                            throw error;
                         }
 
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
@@ -283,16 +257,7 @@ export async function openAuthView(
                                 });
                                 throw error;
                             }
-                            if (!isLegacySqlDisabledError(error)) {
-                                throw error;
-                            }
-                            session = buildLocalSession({
-                                role,
-                                provider: 'email',
-                                displayName: String(message.displayName || 'student'),
-                                email: String(message.email || '').toLowerCase()
-                            });
-                            vscode.window.showInformationMessage('TBD Logger is running in API-only mode. Local registration session created.');
+                            throw error;
                         }
 
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);

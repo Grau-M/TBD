@@ -56,7 +56,9 @@
 
     // Helper to draw and filter the autocomplete dropdown
     function updateAssignmentSearchDropdown() {
-      if (!assignSearchDropdown || !assignSearchInput) return;
+      if (!assignSearchDropdown || !assignSearchInput) {
+        return;
+      }
       const term = assignSearchInput.value.toLowerCase();
 
       // Toggle "X" clear button
@@ -91,7 +93,9 @@
             e.preventDefault(); // Prevents input from losing focus
             assignSearchInput.value = s.studentName || s.studentEmail || "";
             assignSearchDropdown.style.display = "none";
-            if (assignSearchClear) assignSearchClear.style.display = "block";
+            if (assignSearchClear) {
+              assignSearchClear.style.display = "block";
+            }
             renderAssignmentStudentCards();
           });
           assignSearchDropdown.appendChild(div);
@@ -2811,7 +2815,9 @@
       const list = allLists.length > 0 ? allLists[allLists.length - 1] : null;
       const empty = $("assignment-work-empty");
 
-      if (!list || !empty) return;
+      if (!list || !empty) {
+        return;
+      }
       list.innerHTML = "";
 
       if (
@@ -2837,14 +2843,18 @@
       // 2. Apply Sorting
       const sortVal = $("assignment-student-sort")?.value || "nameAsc";
       filtered.sort((a, b) => {
-        if (sortVal === "nameAsc")
+        if (sortVal === "nameAsc") {
           return (a.studentName || "").localeCompare(b.studentName || "");
-        if (sortVal === "nameDesc")
+        }
+        if (sortVal === "nameDesc") {
           return (b.studentName || "").localeCompare(a.studentName || "");
-        if (sortVal === "sessionsDesc")
+        }
+        if (sortVal === "sessionsDesc") {
           return (b.sessionCount || 0) - (a.sessionCount || 0);
-        if (sortVal === "eventsDesc")
+        }
+        if (sortVal === "eventsDesc") {
           return (b.totalEvents || 0) - (a.totalEvents || 0);
+        }
         if (sortVal === "timeDesc" || sortVal === "timeAsc") {
           const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
           const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
@@ -2867,7 +2877,9 @@
       // 4. Draw Cards (Notice we use `filtered.forEach` now, not `students.forEach`)
       filtered.forEach((s) => {
         try {
-          if (!s) return;
+          if (!s) {
+            return;
+          }
 
           const card = document.createElement("div");
           card.className = "card";
@@ -2954,7 +2966,9 @@
           const checkbox = card.querySelector(".assignment-compare-checkbox");
 
           openButton?.addEventListener("click", () => {
-            if (!currentClassId || !currentAssignmentId) return;
+            if (!currentClassId || !currentAssignmentId) {
+              return;
+            }
             post("openAssignmentStudent", {
               classId: currentClassId,
               assignmentId: currentAssignmentId,
@@ -2968,7 +2982,9 @@
               s.authUserId,
               !!event.target.checked,
             );
-            if (!selected) event.target.checked = false;
+            if (!selected) {
+              event.target.checked = false;
+            }
           });
 
           list.appendChild(card);

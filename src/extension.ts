@@ -26,6 +26,31 @@ import { updateTrackingUI } from './statusBar';
 import * as path from 'path';
 import { openStudentSyncView } from './auth/studentSyncView';
 
+const originalEmitWarning = process.emitWarning.bind(process);
+let runtimeWarningFilterInstalled = false;
+
+function installRuntimeWarningFilter(): void {
+    if (runtimeWarningFilterInstalled) {
+        return;
+    }
+
+    runtimeWarningFilterInstalled = true;
+    process.emitWarning = ((warning: any, ...args: any[]) => {
+        const message = typeof warning === 'string'
+            ? warning
+            : String(warning?.message || warning || '');
+
+        if (
+            message.includes('The `punycode` module is deprecated') ||
+            message.includes('SQLite is an experimental feature')
+        ) {
+            return;
+        }
+
+        return originalEmitWarning(warning as any, ...args as any);
+    }) as typeof process.emitWarning;
+}
+
 const SESSION_ID_KEY = 'sessionId';
 const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
 const API_TOKEN_SECRET_KEY = 'tbd.api.sessionToken.v1';
@@ -141,6 +166,7 @@ export interface ExtensionApi {
 // storage, session interruption tracking, UI, commands, listeners,
 // and background timers. Returns an object useful for tests.
 export async function activate(context: vscode.ExtensionContext) {
+    installRuntimeWarningFilter();
     console.log('TBD Logger: activate');
     // 1. Get the current session (if one exists on startup)
     const session = getWorkspaceAuthSession(context);
@@ -260,12 +286,27 @@ context.subscriptions.push(enterApiKeyCommand);
     const ensureProject = async (): Promise<number | undefined> => {
         const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
         const workspaceName = vscode.workspace.name || 'Unknown Workspace';
+        const linkedAssignment = session?.authUserId
+            ? await (storageManager as any).validateAssignmentLink(session.authUserId, workspacePath)
+            : null;
+        const classId = Number(linkedAssignment?.classId ?? session?.workspaceLinkedClassId ?? 0);
+        const assignmentId = Number(linkedAssignment?.assignmentId ?? session?.workspaceLinkedAssignmentId ?? 0);
+        const userId = Number(session?.authUserId ?? 0);
+
+        if (!userId || !classId || !assignmentId) {
+            return undefined;
+        }
+
+        const payload = {
+            userId,
+            classId,
+            assignmentId,
+            workspaceName,
+            workspacePath
+        };
 
         try {
-            const project = await withApiTokenRetry(() => apiPost('/api/projects', {
-                name: workspaceName,
-                workspacePath
-            }));
+            const project = await withApiTokenRetry(() => apiPost('/api/projects', payload));
 
             const projectId = Number(project?.id ?? project?.Id);
             if (!Number.isFinite(projectId) || projectId <= 0) {
@@ -340,7 +381,7 @@ context.subscriptions.push(enterApiKeyCommand);
                 await openAuthView(context, storageManager);
             } catch (err) {
                 console.warn('[TBD Logger] Authentication view failed during startup. Continuing in offline mode.', err);
-                vscode.window.showWarningMessage('TBD Logger could not reach the database for sign-in. Monitoring will continue offline.');
+                vscode.window.showWarningMessage('TBD Logger could not reach the service for sign-in. Monitoring will continue offline.');
             }
         }
     }
@@ -349,16 +390,21 @@ context.subscriptions.push(enterApiKeyCommand);
     const currentAuth = getWorkspaceAuthSession(context);
 
     if (currentAuth?.authenticated) {
-        const projectId = await ensureProject();
-        if (projectId) {
-            const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
-            const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
-            if (startedSessionId) {
-                await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
-                void logEvent('session_start', {
-                    workspaceName: vscode.workspace.name || 'Unknown Workspace',
-                    workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
-                });
+        const hasLinkedWorkspace = Number(currentAuth.workspaceLinkedClassId ?? 0) > 0
+            && Number(currentAuth.workspaceLinkedAssignmentId ?? 0) > 0;
+
+        if (hasLinkedWorkspace) {
+            const projectId = await ensureProject();
+            if (projectId) {
+                const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
+                const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
+                if (startedSessionId) {
+                    await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
+                    void logEvent('session_start', {
+                        workspaceName: vscode.workspace.name || 'Unknown Workspace',
+                        workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
+                    });
+                }
             }
         }
     }
@@ -778,7 +824,7 @@ const forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync',
         vscode.window.showErrorMessage("Sync failed. Check your network connection.");
     } finally {
         isSyncing = false;
-        updateSyncStatus(false);
+            vscode.window.showWarningMessage('TBD Logger could not verify consent with the service. Please retry sign-in/consent once connectivity is restored.');
     }
 });
     // Register the force sync command and add to subscriptions

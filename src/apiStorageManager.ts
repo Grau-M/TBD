@@ -374,12 +374,28 @@ export class ApiStorageManager {
         });
     }
 
-    async validateAssignmentLink(_authUserId: number, workspaceRoot: string): Promise<{ assignmentName: string; workspaceRootPath: string } | null> {
-        if (!workspaceRoot) {
+    async validateAssignmentLink(_authUserId: number, workspaceRoot: string): Promise<{
+        classId: number;
+        assignmentId: number;
+        assignmentName: string;
+        workspaceRootPath: string;
+    } | null> {
+        if (!workspaceRoot || !this.context) {
             return null;
         }
+
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const classId = Number(session?.workspaceLinkedClassId ?? 0);
+        const assignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+
+        if (!classId || !assignmentId) {
+            return null;
+        }
+
         return {
-            assignmentName: 'Current Assignment',
+            classId,
+            assignmentId,
+            assignmentName: String(session?.displayName || 'Current Assignment'),
             workspaceRootPath: workspaceRoot
         };
     }

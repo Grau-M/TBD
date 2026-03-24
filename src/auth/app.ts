@@ -27,8 +27,7 @@ function buildLocalSession(params: {
 async function pickRoleForNewUser(): Promise<UserRole | undefined> {
     const selected = await vscode.window.showQuickPick([
         { label: 'Student', description: 'Link workspace to class assignments' },
-        { label: 'Teacher', description: 'Access teacher dashboard and class management' },
-        { label: 'Admin', description: 'Full system management access' }
+        { label: 'Teacher', description: 'Access teacher dashboard and class management' }
     ], {
         title: 'Select your role for this account',
         placeHolder: 'Choose your role (first-time setup)'
@@ -287,7 +286,10 @@ export async function openAuthView(
                 // If it's an API HTTP error (like 500), show the response body for debugging
                 let errorMessage = String(e?.message || e);
                 if (e instanceof ApiHttpError) {
-                    errorMessage = `API Error ${e.status}: ${e.responseBody}`;
+                    const registrationEmail = String(message.email || '').trim().toLowerCase();
+                    errorMessage = message.command === 'register' && registrationEmail
+                        ? `Registration failed for ${registrationEmail}: ${e.message}`
+                        : e.message;
                     console.error('Auth API error:', { status: e.status, body: e.responseBody });
                 }
                 authPanel?.webview.postMessage({

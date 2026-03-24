@@ -16,16 +16,6 @@
 
     <!-- Sign In form -->
     <div id="auth-signin-panel" class="auth-panel">
-      <div class="oauth-buttons">
-        <button id="btn-signin-microsoft" class="auth-oauth-btn" type="button">
-          Continue with Microsoft
-        </button>
-        <button id="btn-signin-google" class="auth-oauth-btn" type="button">
-          Continue with Google
-        </button>
-      </div>
-      <div class="auth-divider"><span>or use email</span></div>
-
       <div class="form-group">
         <label for="signin-email">Email Address</label>
         <input
@@ -38,7 +28,6 @@
       <div class="form-group">
         <label for="signin-password">
           Password
-          <span class="muted-label">(used for log encryption)</span>
         </label>
         <div class="password-wrapper">
           <input
@@ -70,7 +59,7 @@
     <!-- Register form -->
     <div id="auth-register-panel" class="auth-panel hidden">
       <div class="form-group">
-        <label for="register-name">Display Name</label>
+        <label for="register-name">Full Name</label>
         <input
           type="text"
           id="register-name"
@@ -127,11 +116,23 @@
       </div>
       <div class="form-group">
         <label for="register-role">Role</label>
-        <select id="register-role">
-          <option value="Student">Student</option>
-          <option value="Teacher">Teacher</option>
-          <option value="Admin">Admin</option>
-        </select>
+        <div class="custom-dropdown" id="register-role-dropdown">
+          <input type="hidden" id="register-role" value="Student" />
+          <button
+            type="button"
+            class="custom-dropdown-trigger"
+            id="register-role-trigger"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+          >
+            <span id="register-role-label">Student</span>
+            <span class="custom-dropdown-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="custom-dropdown-menu hidden" id="register-role-menu" role="listbox" aria-label="Register role options">
+            <button type="button" class="custom-dropdown-option" data-value="Student" role="option" aria-selected="true">Student</button>
+            <button type="button" class="custom-dropdown-option" data-value="Teacher" role="option" aria-selected="false">Teacher</button>
+          </div>
+        </div>
       </div>
       <div class="form-group" id="register-consent-group">
         <label
@@ -171,6 +172,24 @@
         <div class="auth-success-icon">✓</div>
         <h2 id="auth-success-title">Signed In!</h2>
         <p id="auth-success-msg" class="auth-success-sub"></p>
+      </div>
+    </div>
+
+    <!-- Custom consent dialog -->
+    <div id="tracking-consent-modal" class="custom-modal hidden" aria-hidden="true">
+      <div class="custom-modal-backdrop"></div>
+      <div class="custom-modal-card" role="dialog" aria-modal="true" aria-labelledby="tracking-consent-title" aria-describedby="tracking-consent-message">
+        <div class="custom-modal-icon" aria-hidden="true">!</div>
+        <div class="custom-modal-copy">
+          <h3 id="tracking-consent-title">Confirm without consent?</h3>
+          <p id="tracking-consent-message">
+            Are you sure you want to continue without tracking consent?
+          </p>
+        </div>
+        <div class="custom-modal-actions">
+          <button type="button" class="custom-modal-btn secondary" id="tracking-consent-cancel">Cancel</button>
+          <button type="button" class="custom-modal-btn primary" id="tracking-consent-continue">Continue</button>
+        </div>
       </div>
     </div>
   </div>

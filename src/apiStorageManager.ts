@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { StandardEvent } from './types';
-import { ApiHttpError, apiGet, apiPost, apiPut } from './api';
+import { ApiHttpError, apiGet, apiPatch, apiPost, apiPut } from './api';
 
 interface ApiSyncStatus {
     state: 'synced' | 'syncing' | 'offline' | 'queue-warning' | 'conflict' | 'idle';
@@ -27,6 +27,18 @@ export class ApiStorageManager {
         if (v === 'teacher') { return 'Teacher'; }
         if (v === 'admin') { return 'Admin'; }
         return 'Student';
+    }
+
+    private normalizeEmail(value: unknown): string {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    private titleCaseName(value: unknown): string {
+        return String(value || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\b([a-z])/g, (_match, letter: string) => letter.toUpperCase())
+            .replace(/\s+/g, ' ');
     }
 
     private pick(obj: any, keys: string[]): any {
@@ -214,8 +226,8 @@ export class ApiStorageManager {
 
     // 1. Update the signature and payload for upsertAuthUser
     async upsertAuthUser(identity: { email: string; displayName: string; trackingConsent?: boolean; [key: string]: any }): Promise<{ authUserId: number; role: UserRole; isNew: boolean; trackingConsent: boolean }> {
-        const email = String(identity.email || '').toLowerCase();
-        const displayName = String(identity.displayName || '').trim();
+        const email = this.normalizeEmail(identity.email);
+        const displayName = this.titleCaseName(identity.displayName);
         const provider = String(identity.provider || 'email').toLowerCase();
         const subjectId = String(identity.subjectId || email).trim();
         const username = String(identity.username || email).trim();
@@ -248,24 +260,28 @@ export class ApiStorageManager {
             trackingConsent: Boolean(this.pick(result, ['trackingConsent', 'TrackingConsent']) ?? this.pick(user, ['trackingConsent', 'TrackingConsent']) ?? false)
         };
     }
-    // Create the update profile method to handle the account settings save
-// Replaces updateAuthUserDisplayName to support saving consent
-    async updateAuthUserProfile(authUserId: number, displayName: string, trackingConsent: boolean, email?: string): Promise<void> {
-        await this.apiPostFirst([
-            '/api/auth/update-profile', 
-            '/api/auth/update-display-name' // Fallback in case backend hasn't updated the route name yet
-        ], {
-            authUserId,
-            userId: authUserId,
-            id: authUserId,
-            AuthUserId: authUserId,
-            displayName,
-            DisplayName: displayName,
-            trackingConsent: Boolean(trackingConsent),
-            TrackingConsent: Boolean(trackingConsent),
-            email: email?.toLowerCase(),
-            Email: email?.toLowerCase()
-        });
+    async updateAuthUserProfile(email: string, changes: { displayName?: string; trackingConsent?: boolean }): Promise<void> {
+        const normalizedEmail = String(email || '').trim().toLowerCase();
+        if (!normalizedEmail) {
+            throw new Error('Email is required to update account information.');
+        }
+
+        const payload: Record<string, any> = {
+            email: normalizedEmail
+        };
+
+        if (typeof changes.displayName === 'string') {
+            const displayName = this.titleCaseName(changes.displayName);
+            if (displayName) {
+                payload.displayName = displayName;
+            }
+        }
+
+        if (typeof changes.trackingConsent === 'boolean') {
+            payload.TrackingConsent = changes.trackingConsent;
+        }
+
+        await apiPatch('/api/auth/update-account-information', payload);
     }
 
 
@@ -297,9 +313,10 @@ export class ApiStorageManager {
     }
 
     async authenticateEmailPassword(email: string, password: string): Promise<{ authUserId: number; role: UserRole; displayName: string; trackingConsent: boolean } | null> {
+        const normalizedEmail = this.normalizeEmail(email);
         const result = await apiPost('/api/auth/login', {
-            email: email.toLowerCase(),
-            Email: email.toLowerCase(),
+            email: normalizedEmail,
+            Email: normalizedEmail,
             password,
             Password: password
         });
@@ -313,7 +330,7 @@ export class ApiStorageManager {
         return {
             authUserId,
             role: this.normalizeRole(this.pick(user, ['role', 'Role'])),
-            displayName: String(this.pick(user, ['displayName', 'DisplayName', 'username', 'Username']) || email),
+            displayName: String(this.pick(user, ['displayName', 'DisplayName', 'username', 'Username']) || normalizedEmail),
             trackingConsent: Boolean(this.pick(user, ['trackingConsent', 'TrackingConsent']) ?? false)
         };
     }

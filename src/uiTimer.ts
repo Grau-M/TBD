@@ -1,8 +1,7 @@
 // Module: uiTimer.ts
-// Purpose: Maintain a UI timer that updates the status bar every second.
-// Shows either an "AWAY" timer when focus is lost or a session recording
-// duration while the extension is active. Returns a Disposable to stop
-// the timer when the extension is deactivated.
+// Purpose: Maintain a UI timer that keeps the tracking status alive.
+// The visible tracking item now shows a static green logging label for
+// linked student workspaces instead of an away/record counter.
 import * as vscode from 'vscode';
 import { state } from './state';
 import { formatDuration } from './utils';
@@ -15,23 +14,19 @@ export function startUiTimer(statusBarItem: vscode.StatusBarItem): vscode.Dispos
             return; // Go back to sleep! Let updateTrackingUI() handle the display.
         }
 
-        // 👉 Gate 2: Protect the Pre-Sync State
+        // 👉 Gate 2: Wait for explicit consent before showing the live timer.
+        if (!state.isConsentGiven) {
+            return;
+        }
+
+        // 👉 Gate 3: Protect the Pre-Sync State
         if (!state.isSessionActive) {
             return; // Go back to sleep! Wait until the API verifies the assignment.
         }
 
-        const now = Date.now();
-
-        if (state.focusAwayStartTime) {
-            const awayDuration = now - state.focusAwayStartTime;
-            statusBarItem.text = `$(warning) AWAY ${formatDuration(awayDuration)}`;
-            statusBarItem.color = new vscode.ThemeColor('charts.yellow');
-        } else {
-            const sessionDuration = now - state.sessionStartTime;
-            statusBarItem.text = `$(circle-filled) REC ${formatDuration(sessionDuration)}`;
-            statusBarItem.color = new vscode.ThemeColor('errorForeground');
-            statusBarItem.tooltip = "TBD Extension: Session Recording in Progress.";
-        }
+        statusBarItem.text = `$(record-keys) Logging Active | ${state.activeAssignment || 'Linked Assignment'}`;
+        statusBarItem.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment || 'Linked Assignment'}`;
+        statusBarItem.color = new vscode.ThemeColor('testing.iconPassed');
     }, 1000);
 
     return { dispose: () => clearInterval(uiTimer) } as vscode.Disposable;

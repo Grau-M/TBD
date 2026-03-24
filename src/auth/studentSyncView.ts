@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { WorkspaceAuthSession } from '../auth';
-import { storageManager } from '../state';
+import { state, storageManager } from '../state';
 import { apiGet } from '../api';
+import { updateApiKeyStatus } from '../statusBar';
 
 interface ClassQuickPickItem extends vscode.QuickPickItem {
     classId: number;
@@ -60,8 +61,11 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                                 classId: c.id,
                                 courseName: c.courseName || c.courseCode || `Class ID: ${c.id}`,
                                 assignmentId: linked.assignmentId,
-                                assignmentName: linked.assignmentName || linked.name || `Assignment ID: ${linked.assignmentId}`
+                                assignmentName: linked.assignmentName || linked.name || linked.WorkplaceName || linked.workplaceName || `Assignment ID: ${linked.assignmentId}`
                             };
+
+                            state.activeCourse = assignmentInfo.courseName;
+                            state.activeAssignment = assignmentInfo.assignmentName;
                             
                             // Heal the local session state so other parts of the extension know it's linked
                             session.workspaceLinkedClassId = c.id;
@@ -80,7 +84,14 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
         if (!assignmentInfo) {
             assignmentInfo = await (storageManager as any).validateAssignmentLink(session.authUserId, workspaceRoot);
         }
+
+        if (assignmentInfo) {
+            state.activeCourse = assignmentInfo.courseName || state.activeCourse;
+            state.activeAssignment = assignmentInfo.assignmentName || state.activeAssignment;
+        }
     }
+
+    updateApiKeyStatus(apiStatus === 'Online');
 
     const render = () => {
         panel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus);
@@ -184,6 +195,10 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 session.workspaceLinkedAssignmentId = selectedAssignment.assignmentId;
                 await context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
 
+                state.activeCourse = selectedClass.label;
+                state.activeAssignment = selectedAssignment.label;
+                updateApiKeyStatus(apiStatus === 'Online');
+
                 vscode.window.showInformationMessage(`Successfully linked workspace to ${selectedAssignment.label}.`);
                 
                 // Inject the names directly into the UI state so they display correctly right away
@@ -193,6 +208,10 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                     assignmentId: selectedAssignment.assignmentId,
                     assignmentName: selectedAssignment.label
                 };
+
+                state.activeCourse = selectedClass.label;
+                state.activeAssignment = selectedAssignment.label;
+                updateApiKeyStatus(apiStatus === 'Online');
 
                 render();
 

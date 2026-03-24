@@ -37,6 +37,9 @@ suite('Code Coverage: UI Components', () => {
         state.sessionBuffer = [];
         state.focusAwayStartTime = null;
         state.sessionStartTime = Date.now();
+        state.currentUserRole = 'None';
+        state.isSessionActive = false;
+        state.isConsentGiven = false;
 
         disposables = [];
     });
@@ -133,6 +136,9 @@ suite('Code Coverage: UI Components', () => {
 
         test('uiTimer updates status bar text with session duration', async () => {
             const mockItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+            state.currentUserRole = 'Student';
+            state.isConsentGiven = true;
+            state.isSessionActive = true;
             state.focusAwayStartTime = null;
             state.sessionStartTime = Date.now() - 5000;
             
@@ -148,6 +154,9 @@ suite('Code Coverage: UI Components', () => {
 
         test('uiTimer shows AWAY when focus is lost', async () => {
             const mockItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+            state.currentUserRole = 'Student';
+            state.isConsentGiven = true;
+            state.isSessionActive = true;
             state.focusAwayStartTime = Date.now() - 3000;
             
             const timer = startUiTimer(mockItem);
@@ -156,6 +165,22 @@ suite('Code Coverage: UI Components', () => {
             
             assert.ok(mockItem.text.includes('AWAY'), 'Should show AWAY when focus lost');
             
+            disposables.push(timer, mockItem);
+        });
+
+        test('uiTimer stays idle when consent is missing', async () => {
+            const mockItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+            mockItem.text = 'sentinel';
+            state.currentUserRole = 'Student';
+            state.isConsentGiven = false;
+            state.isSessionActive = true;
+
+            const timer = startUiTimer(mockItem);
+
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            assert.strictEqual(mockItem.text, 'sentinel', 'Should not update the timer without consent');
+
             disposables.push(timer, mockItem);
         });
 

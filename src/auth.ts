@@ -318,10 +318,13 @@ export async function initializeWorkspaceAccess(
     state.currentUserRole = session.role as 'Student' | 'Teacher' | 'Admin' | 'None';
     
     if (session.role === 'Student') {
-        state.isSessionActive = true;  
-        state.isConsentGiven = true;        // Open the gate for the timer
+        state.isConsentGiven = session.trackingConsent === true;
+        state.isSessionActive = state.isConsentGiven;
         state.focusAwayStartTime = null;       // Clear the "Away" state caused by the dropdown menu
-        state.sessionStartTime = Date.now();   // Reset the clock to 00:00:00
+
+        if (state.isConsentGiven) {
+            state.sessionStartTime = Date.now();   // Reset the clock to 00:00:00
+        }
     }
     
     updateTrackingUI(); // Instantly paint the status bar

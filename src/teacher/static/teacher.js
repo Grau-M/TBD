@@ -512,6 +512,9 @@
       const lastSuggestedByInputId = new Map();
 
       const closeDropdown = () => {
+        if (activeInput) {
+          hideGhost(activeInput);
+        }
         if (dropdown) {
           dropdown.style.display = "none";
         }
@@ -583,6 +586,25 @@
         ghost.style.padding = computed.padding;
       };
 
+      const measureTextWidth = (inputEl, text) => {
+        if (!(inputEl instanceof HTMLInputElement)) {
+          return 0;
+        }
+
+        const canvas = measureTextWidth._canvas || (measureTextWidth._canvas = document.createElement("canvas"));
+        const context = canvas.getContext("2d");
+        if (!context) {
+          return 0;
+        }
+
+        const computed = window.getComputedStyle(inputEl);
+        context.font = computed.font;
+
+        const baseWidth = context.measureText(text).width;
+        const letterSpacing = Number.parseFloat(computed.letterSpacing || "0");
+        return baseWidth + (Number.isFinite(letterSpacing) ? Math.max(0, text.length - 1) * letterSpacing : 0);
+      };
+
       const updateGhost = (inputEl) => {
         const ghost = getGhostEl(inputEl);
         if (!ghost || activeInput !== inputEl || highlightedIndex < 0 || highlightedIndex >= currentVisibleTimes.length) {
@@ -598,24 +620,23 @@
         }
 
         syncGhostTypography(inputEl);
-        ghost.innerHTML = "";
-
-        const typedSpan = document.createElement("span");
-        typedSpan.textContent = typed;
-        typedSpan.style.visibility = "hidden";
-
-        const suffixSpan = document.createElement("span");
-        suffixSpan.textContent = suggestion.slice(typed.length);
-        suffixSpan.style.color = "var(--muted)";
-        suffixSpan.style.opacity = "0.85";
-
-        if (!suffixSpan.textContent) {
+        const suffixText = suggestion.slice(typed.length);
+        if (!suffixText) {
           hideGhost(inputEl);
           return;
         }
 
-        ghost.appendChild(typedSpan);
-        ghost.appendChild(suffixSpan);
+        const computed = window.getComputedStyle(inputEl);
+        const paddingLeft = Number.parseFloat(computed.paddingLeft || "0");
+        const typedWidth = measureTextWidth(inputEl, typed);
+
+        ghost.style.left = `${paddingLeft + typedWidth}px`;
+        ghost.style.right = "auto";
+        ghost.style.transform = "translateY(-50%)";
+        ghost.style.color = "var(--muted)";
+        ghost.style.opacity = "0.65";
+        ghost.style.whiteSpace = "pre";
+        ghost.textContent = suffixText;
         ghost.style.display = "block";
       };
 
@@ -909,9 +930,23 @@
 
         let canonical = "";
         if (normalized) {
-          // Interpret naked 12h input as AM by default for storage until a concrete selection occurs.
-          const maybe12Hour = `${normalized} AM`;
-          canonical = parseDisplayTimeTo24Hour(maybe12Hour) || parseDisplayTimeTo24Hour(normalized) || "";
+          const nakedMatch = normalized.match(/^\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM|A|P)?\s*$/i);
+          if (nakedMatch) {
+            const hour12 = Number(nakedMatch[1]);
+            const minute = String(nakedMatch[2] || "00");
+            let period = String(nakedMatch[3] || "").toUpperCase();
+            if (period === "A") {
+              period = "AM";
+            } else if (period === "P") {
+              period = "PM";
+            }
+            if (!period) {
+              period = getPreferredPeriodFromHour12(hour12);
+            }
+            canonical = parseDisplayTimeTo24Hour(`${hour12}:${minute} ${period}`) || parseDisplayTimeTo24Hour(normalized) || "";
+          } else {
+            canonical = parseDisplayTimeTo24Hour(normalized) || "";
+          }
         }
 
         inputEl.dataset.timeValue = canonical;
@@ -975,6 +1010,7 @@
         }
         inputEl.dataset.timeValue = entry.value;
         inputEl.value = entry.label;
+        hideGhost(inputEl);
       };
 
       const coerceTypedTime = (inputEl) => {
@@ -2659,7 +2695,6 @@
             <div></div>
             <div><span style="color:var(--muted);">End:</span> ${formatClassDateDisplay(cls.endDate)}</div>
           </div>
-          <div class="meta" style="font-size:0.78rem;">Join Code: <strong style="font-family:monospace; font-size:0.9rem; color:var(--accent);">${cls.joinCode}</strong> &mdash; share this with students to link their workspace to this class.</div>
           <div style="display:flex; gap:8px; margin-top:2px;">
             <button class="btn btn-primary class-open-btn" style="padding:6px 10px;">Open Class</button>
             <button class="btn btn-secondary class-edit-btn" style="padding:6px 10px;">Edit</button>
@@ -2907,9 +2942,16 @@
         return card;
       };
 
-      activeAssignments.forEach((assignment) => {
-        list.appendChild(buildAssignmentCard(assignment, false));
-      });
+      if (activeAssignments.length > 0) {
+        const activeHeader = document.createElement("div");
+        activeHeader.style.cssText = "margin: 8px 0 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem;";
+        activeHeader.textContent = "Current Assignments";
+        list.appendChild(activeHeader);
+
+        activeAssignments.forEach((assignment) => {
+          list.appendChild(buildAssignmentCard(assignment, false));
+        });
+      }
 
       if (pastAssignments.length > 0) {
         const pastHeader = document.createElement("div");

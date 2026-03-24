@@ -178,12 +178,14 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
 
         case 'updateClass': {
           const teacherId = await getValidTeacherId();
+          const session = getWorkspaceAuthSession(context) as any;
+          const fallbackTeacherName = String(session?.displayName || session?.name || '').trim();
           await storageManager.updateClass({
             classId: Number(message.classId),
             teacherAuthUserId: teacherId, 
             courseName: message.courseName,
             courseCode: message.courseCode,
-            teacherName: message.teacherName,
+            teacherName: String(message.teacherName || fallbackTeacherName),
             meetingTime: message.meetingTime,
             startDate: message.startDate,
             endDate: message.endDate

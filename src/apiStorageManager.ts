@@ -147,6 +147,32 @@ export class ApiStorageManager {
     }
 
     async flush(_newEvents: StandardEvent[]): Promise<void> {
+        if (!this.context) {
+            throw new Error('Storage manager is not initialized.');
+        }
+
+        const sessionId = this.context.workspaceState.get<number>('sessionId');
+        if (!sessionId) {
+            throw new Error('Cannot flush logs without an active session id.');
+        }
+
+        for (const event of _newEvents) {
+            await apiPost('/api/events', {
+                sessionId,
+                eventType: event.eventType,
+                occurredAt: event.time,
+                eventData: {
+                    time: event.time,
+                    flightTime: event.flightTime,
+                    fileEdit: event.fileEdit,
+                    fileView: event.fileView,
+                    possibleAiDetection: event.possibleAiDetection,
+                    fileFocusCount: event.fileFocusCount,
+                    pasteCharCount: event.pasteCharCount
+                }
+            });
+        }
+
         this.syncStatus.lastSyncedAt = new Date().toISOString();
         this.syncStatus.state = 'synced';
     }
@@ -470,7 +496,7 @@ export class ApiStorageManager {
                 return {
                     classId: Number(result.classId || result.ClassId),
                     assignmentId: Number(result.assignmentId || result.AssignmentId),
-                    assignmentName: String(result.assignmentName || result.AssignmentName || 'Linked Assignment'),
+                    assignmentName: String(result.assignmentName || result.AssignmentName || result.WorkplaceName || result.workplaceName || 'Linked Assignment'),
                     workspaceRootPath: workspaceRoot
                 };
             }
@@ -490,7 +516,7 @@ export class ApiStorageManager {
         return {
             classId,
             assignmentId,
-            assignmentName: String(session?.displayName || 'Current Assignment'),
+            assignmentName: String(session?.assignmentName || session?.AssignmentName || session?.workplaceName || session?.WorkplaceName || session?.displayName || 'Current Assignment'),
             workspaceRootPath: workspaceRoot
         };
     }
@@ -611,6 +637,10 @@ export class ApiStorageManager {
             TeacherAuthUserId: Number(input?.teacherAuthUserId ?? input?.TeacherAuthUserId ?? 0),
             courseName: String(input?.courseName ?? input?.CourseName ?? input?.name ?? input?.Name ?? ''),
             CourseName: String(input?.courseName ?? input?.CourseName ?? input?.name ?? input?.Name ?? ''),
+            courseCode: String(input?.courseCode ?? input?.CourseCode ?? ''),
+            CourseCode: String(input?.courseCode ?? input?.CourseCode ?? ''),
+            teacherName: String(input?.teacherName ?? input?.TeacherName ?? ''),
+            TeacherName: String(input?.teacherName ?? input?.TeacherName ?? ''),
             meetingTime: String(input?.meetingTime ?? input?.MeetingTime ?? ''),
             MeetingTime: String(input?.meetingTime ?? input?.MeetingTime ?? ''),
             startDate: String(input?.startDate ?? input?.StartDate ?? ''),

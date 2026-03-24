@@ -3,10 +3,12 @@ import { UserRole } from '../apiStorageManager';
 import { WorkspaceAuthSession } from '../auth';
 import { getAuthHtml } from './getHtml';
 import { ApiHttpError } from '../api';
+import { getThemePreference } from '../themePreference';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let authPanel: vscode.WebviewPanel | undefined;
+let logoutConfirmPanel: vscode.WebviewPanel | undefined;
 
 function buildLocalSession(params: {
     role: UserRole;
@@ -300,4 +302,212 @@ export async function openAuthView(
             }
         }, undefined, context.subscriptions);
     });
+}
+
+export async function openLogoutConfirmView(
+        context: vscode.ExtensionContext,
+        details: { displayName: string; role: string }
+): Promise<boolean> {
+        if (logoutConfirmPanel) {
+                logoutConfirmPanel.reveal(vscode.ViewColumn.One);
+                return false;
+        }
+
+        return new Promise<boolean>((resolve) => {
+                let settled = false;
+
+                const finish = (confirmed: boolean) => {
+                        if (settled) {
+                                return;
+                        }
+                        settled = true;
+                        resolve(confirmed);
+                        logoutConfirmPanel?.dispose();
+                };
+
+                const themePreference = getThemePreference(context);
+                const panel = vscode.window.createWebviewPanel(
+                        'tbdLogoutConfirmView',
+                        'TBD Logger — Log Out',
+                        { viewColumn: vscode.ViewColumn.One, preserveFocus: false },
+                        {
+                                enableScripts: true,
+                                localResourceRoots: [vscode.Uri.file(context.extensionPath)],
+                                retainContextWhenHidden: false
+                        }
+                );
+
+                logoutConfirmPanel = panel;
+
+                const nonce = getNonce();
+                const payload = JSON.stringify({
+                        displayName: details.displayName,
+                        role: details.role,
+                        themePreference
+                }).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+
+                panel.webview.html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${panel.webview.cspSource} https:; script-src 'nonce-${nonce}' ${panel.webview.cspSource}; style-src ${panel.webview.cspSource} https: 'unsafe-inline';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TBD Logger — Log Out</title>
+    <style>
+        :root {
+            --bg: #eef2f6;
+            --surface: #ffffff;
+            --muted: #5b6472;
+            --fg: #0f172a;
+            --border: rgba(15,23,42,0.1);
+            --accent: #0f766e;
+            --accent-hover: #115e59;
+        }
+        .dark, :root.dark {
+            --bg: #08131f;
+            --surface: #0f1b2d;
+            --muted: #96a3b8;
+            --fg: #e7edf6;
+            --border: rgba(255,255,255,0.08);
+            --accent: #38b2ac;
+            --accent-hover: #2c948f;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at top left, rgba(15,118,110,0.18), transparent 34%),
+                linear-gradient(160deg, var(--bg), color-mix(in srgb, var(--bg) 82%, var(--surface) 18%));
+            color: var(--fg);
+            font-family: 'Segoe UI', 'Aptos', sans-serif;
+        }
+        .custom-modal-card {
+            width: min(100%, 460px);
+            border-radius: 24px;
+            padding: 24px;
+            background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, white 4%), var(--surface));
+            border: 1px solid color-mix(in srgb, var(--border) 82%, white 18%);
+            box-shadow: 0 24px 72px rgba(0, 0, 0, 0.36);
+        }
+        .custom-modal-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: grid;
+            place-items: center;
+            margin-bottom: 14px;
+            background: rgba(239, 68, 68, 0.14);
+            color: #ef4444;
+            font-size: 1.2rem;
+            font-weight: 800;
+        }
+        .custom-modal-copy h3 {
+            margin: 0 0 8px;
+            font-size: 1.1rem;
+            color: var(--fg);
+        }
+        .custom-modal-copy p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.55;
+            font-size: 0.94rem;
+        }
+        .custom-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 22px;
+        }
+        .custom-modal-btn {
+            min-height: 42px;
+            padding: 0 16px;
+            border-radius: 14px;
+            border: 1px solid transparent;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .custom-modal-btn.secondary {
+            background: color-mix(in srgb, var(--bg) 82%, var(--surface) 18%);
+            color: var(--fg);
+            border-color: color-mix(in srgb, var(--border) 72%, white 28%);
+        }
+        .custom-modal-btn.primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+            color: #fff;
+            box-shadow: 0 12px 24px rgba(56, 178, 172, 0.22);
+        }
+        .custom-modal-btn:hover { transform: translateY(-1px); }
+    </style>
+</head>
+<body>
+    <div class="custom-modal-card" role="dialog" aria-modal="true" aria-labelledby="logout-title" aria-describedby="logout-message">
+        <div class="custom-modal-icon" aria-hidden="true">!</div>
+        <div class="custom-modal-copy">
+            <h3 id="logout-title">Log out of TBD Logger?</h3>
+            <p id="logout-message"></p>
+        </div>
+        <div class="custom-modal-actions">
+            <button type="button" class="custom-modal-btn secondary" id="logout-cancel">Cancel</button>
+            <button type="button" class="custom-modal-btn primary" id="logout-confirm">Log Out</button>
+        </div>
+    </div>
+    <script nonce="${nonce}">
+        const logoutData = ${payload};
+        const vscode = acquireVsCodeApi();
+        if (logoutData.themePreference === 'dark' || (logoutData.themePreference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.body.classList.add('dark');
+        }
+        const message = document.getElementById('logout-message');
+        const cancelBtn = document.getElementById('logout-cancel');
+        const confirmBtn = document.getElementById('logout-confirm');
+
+        if (message) {
+            message.textContent = 'Are you sure you want to log out? (' + logoutData.displayName + ' - ' + logoutData.role + ')';
+        }
+
+        function resolve(confirmed) {
+            vscode.postMessage({ command: confirmed ? 'confirmLogout' : 'cancelLogout' });
+        }
+
+        cancelBtn?.addEventListener('click', () => resolve(false));
+        confirmBtn?.addEventListener('click', () => resolve(true));
+        window.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                resolve(false);
+            }
+            if (event.key === 'Enter') {
+                resolve(true);
+            }
+        });
+    </script>
+</body>
+</html>`;
+
+                panel.onDidDispose(() => {
+                        logoutConfirmPanel = undefined;
+                        finish(false);
+                }, null, context.subscriptions);
+
+                panel.webview.onDidReceiveMessage((message) => {
+                        if (message.command === 'confirmLogout') {
+                                finish(true);
+                        } else if (message.command === 'cancelLogout') {
+                                finish(false);
+                        }
+                }, undefined, context.subscriptions);
+        });
+}
+
+function getNonce(): string {
+        let text = '';
+        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        for (let i = 0; i < 32; i++) {
+                text += possible.charAt(Math.floor(Math.random() * possible.length));
+        }
+        return text;
 }

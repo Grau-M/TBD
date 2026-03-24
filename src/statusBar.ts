@@ -3,21 +3,29 @@ import * as vscode from 'vscode';
 import { state, storageManager } from './state'; 
 
 export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandId?: string): vscode.StatusBarItem {
-    const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10000);
+    const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1000);
     context.subscriptions.push(item);
     
     (global as any).statusBarItem = item;
     updateTrackingUI();
 
-    const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 9999);
-    statusItem.text = '$(database) Offline';
-    statusItem.tooltip = 'Database connection status. Click to refresh';
+    const apiStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 950);
+    apiStatusItem.text = '$(cloud-upload)';
+    apiStatusItem.tooltip = 'Sync: offline | Linked To: None';
+    apiStatusItem.command = 'tbd-logger.openStudentSyncView';
+    apiStatusItem.show();
+    context.subscriptions.push(apiStatusItem);
+    (global as any).apiStatusBarItem = apiStatusItem;
+
+    const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 900);
+    statusItem.text = '$(sync)';
+    statusItem.tooltip = 'Sync status. Click to open the sync dashboard.';
     statusItem.command = 'tbd-logger.openStudentSyncView';
     statusItem.show();
     context.subscriptions.push(statusItem);
     (global as any).dbStatusBarItem = statusItem;
 
-    const authItem = vscode.window.createStatusBarItem('tbd-logger.authStatus', vscode.StatusBarAlignment.Left, 9998);
+    const authItem = vscode.window.createStatusBarItem('tbd-logger.authStatus', vscode.StatusBarAlignment.Left, 800);
     authItem.text = '$(account) Not Logged In';
     authItem.tooltip = 'Click to Login/Register';
     authItem.command = 'tbd-logger.authSignIn';
@@ -27,7 +35,7 @@ export function createStatusBar(context: vscode.ExtensionContext, hiddenCommandI
 
     if (hiddenCommandId) {
         const hiddenItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10001);
-        hiddenItem.text = '$(lock)';
+        hiddenItem.text = '$(layout)';
         hiddenItem.tooltip = 'Show Teacher Dashboard!';
         hiddenItem.command = hiddenCommandId;
         hiddenItem.show();
@@ -53,11 +61,18 @@ export function updateSyncStatus(isSyncing: boolean) {
 }
 
 export function updateApiKeyStatus(isValidOrPresent: boolean) {
-    return;
+    const apiStatusItem = (global as any).apiStatusBarItem as vscode.StatusBarItem | undefined;
+    if (!apiStatusItem) { return; }
+
+    apiStatusItem.text = '$(cloud-upload)';
+    apiStatusItem.tooltip = `Sync: ${isValidOrPresent ? 'online' : 'offline'} | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
+    apiStatusItem.command = 'tbd-logger.openStudentSyncView';
+    apiStatusItem.show();
 }
 
 export function updateTrackingUI(role?: string) {
     const trackingItem = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
+    const dbItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
     if (!trackingItem) { return; }
 
     const currentRole = role || state.currentUserRole;
@@ -73,16 +88,25 @@ export function updateTrackingUI(role?: string) {
     if (currentRole === 'Teacher' || currentRole === 'Admin') {
         trackingItem.text = "$(mortar-board) TBD: Teacher Mode";
         trackingItem.tooltip = `Logs are not recorded for ${currentRole} accounts.`;
-        trackingItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground'); 
+        trackingItem.backgroundColor = undefined;
+        trackingItem.color = new vscode.ThemeColor('descriptionForeground');
         trackingItem.show();
         return; 
     }
 
     // 3. Student Logic 
     trackingItem.backgroundColor = undefined; 
+    trackingItem.color = undefined;
+
+    if (dbItem) {
+        dbItem.show();
+        dbItem.command = 'tbd-logger.openStudentSyncView';
+        dbItem.text = '$(sync)';
+        dbItem.tooltip = 'Sync status. Click to open the sync dashboard.';
+    }
     
     // 👉 NEW: If they haven't finished selecting an assignment, hold the UI
-    if (!state.isSessionActive) {
+    if (!state.isSessionActive && !state.activeAssignment) {
         trackingItem.text = "$(gear) TBD: Setup Pending";
         trackingItem.tooltip = "Please finish linking your workspace.";
         trackingItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -90,13 +114,9 @@ export function updateTrackingUI(role?: string) {
         return; 
     }
 
-    // Only show Away/Recording if the session is actively running
-    if (state.focusAwayStartTime !== null) {
-        trackingItem.text = "$(watch) TBD: Away";
-        trackingItem.tooltip = "You are currently marked as away.";
-    } else {
-        trackingItem.text = "$(record-keys) TBD: Recording";
-        trackingItem.tooltip = "Capstone TBD: Keystroke Logging Active";
-    }
+    trackingItem.text = `$(record-keys) Logging Active | ${state.activeAssignment || 'Linked Assignment'}`;
+    trackingItem.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment || 'Linked Assignment'}`;
+    trackingItem.color = new vscode.ThemeColor('testing.iconPassed');
+    trackingItem.backgroundColor = undefined;
     trackingItem.show();
 }

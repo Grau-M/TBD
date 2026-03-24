@@ -213,7 +213,18 @@
 
     function renderClassButtons() {
       const list = $("student-classes-list");
+      const emptyState = $("student-classes-empty");
+      const loadingState = $("student-classes-loading");
       if (!list) {
+        return;
+      }
+
+      const hasClasses = state.classes.length > 0;
+      setVisible(emptyState, !hasClasses && !state.loadingClasses);
+      setVisible(loadingState, !!state.loadingClasses);
+
+      if (!hasClasses) {
+        list.innerHTML = "";
         return;
       }
 
@@ -395,7 +406,6 @@
       state.loadingClasses = false;
 
       setVisible($("student-classes-loading"), false);
-      // We don't hide the empty state here anymore, it's handled by CSS and the wrapper div
       renderClassButtons();
 
       if (!state.classes.some((item) => item.id === state.selectedClassId)) {

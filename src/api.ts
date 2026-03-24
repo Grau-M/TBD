@@ -10,6 +10,24 @@ function formatErrorBody(raw: string): string {
   try {
     const parsed = JSON.parse(text);
     if (parsed && typeof parsed === 'object') {
+      const parts: string[] = [];
+      if (typeof parsed.error === 'string' && parsed.error.trim()) {
+        parts.push(parsed.error.trim());
+      }
+      if (typeof parsed.message === 'string' && parsed.message.trim() && parsed.message.trim() !== parsed.error?.trim()) {
+        parts.push(parsed.message.trim());
+      }
+      if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
+        parts.push(parsed.detail.trim());
+      }
+      if (typeof parsed.details === 'string' && parsed.details.trim()) {
+        parts.push(parsed.details.trim());
+      }
+
+      if (parts.length > 0) {
+        return parts.join(' | ');
+      }
+
       return JSON.stringify(parsed, null, 2);
     }
   } catch {
@@ -83,6 +101,16 @@ export async function apiPost(path: string, body: any): Promise<any> {
 export async function apiPut(path: string, body: any): Promise<any> {
   return apiRequest(path, {
     method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+export async function apiPatch(path: string, body: any): Promise<any> {
+  return apiRequest(path, {
+    method: 'PATCH',
     headers: {
       'Content-Type': 'application/json'
     },

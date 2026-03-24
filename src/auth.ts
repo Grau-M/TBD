@@ -61,8 +61,7 @@ async function pickRole(): Promise<UserRole | undefined> {
     const selected = await vscode.window.showQuickPick(
         [
             { label: 'Student', description: 'Link this workspace to a class activity' },
-            { label: 'Teacher', description: 'Access teacher dashboard and class activities' },
-            { label: 'Admin', description: 'Full system management and troubleshooting access' }
+            { label: 'Teacher', description: 'Access teacher dashboard and class activities' }
         ],
         {
             title: 'Select your role for this account',

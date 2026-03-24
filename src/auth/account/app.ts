@@ -128,26 +128,56 @@ export async function openAccountView(
                             return;
                         }
 
-                        await setThemePreference(context, selectedTheme);
-                        
-                        // CALL THE NEW PROFILE UPDATER WITH THE CONSENT FLAG
-                        await storageManager.updateAuthUserProfile(currentSession.authUserId, newDisplayName, trackingConsent, currentSession.email);
+                        const titleCaseDisplayName = newDisplayName
+                            .toLowerCase()
+                            .replace(/\b([a-z])/g, (_match, letter: string) => letter.toUpperCase())
+                            .replace(/\s+/g, ' ');
 
-                        // Verify persisted data from API before confirming success in UI.
-                        const refreshedUser = await storageManager.findAuthUserByEmail(currentSession.email);
-                        const persistedDisplayName = String(refreshedUser?.displayName || '').trim();
-                        if (!persistedDisplayName || persistedDisplayName !== newDisplayName) {
-                            accountPanel?.webview.postMessage({
-                                command: 'accountError',
-                                message: 'Unable to confirm the update in the database. Please try again.'
-                            });
-                            return;
+                        await setThemePreference(context, selectedTheme);
+
+                        const existingDisplayName = String(currentSession.displayName || '').trim();
+                        const existingTrackingConsent = Boolean(currentSession.trackingConsent === true);
+                        const changes: { displayName?: string; trackingConsent?: boolean } = {};
+
+                        if (titleCaseDisplayName && titleCaseDisplayName !== existingDisplayName) {
+                            changes.displayName = titleCaseDisplayName;
+                        }
+
+                        if (trackingConsent !== existingTrackingConsent) {
+                            changes.trackingConsent = trackingConsent;
+                        }
+
+                        if (Object.keys(changes).length > 0) {
+                            await storageManager.updateAuthUserProfile(currentSession.email, changes);
+
+                            // Verify persisted data from API before confirming success in UI.
+                            const refreshedUser = await storageManager.findAuthUserByEmail(currentSession.email);
+                            const persistedDisplayName = String(refreshedUser?.displayName || existingDisplayName).trim();
+                            if (changes.displayName && (!persistedDisplayName || persistedDisplayName !== titleCaseDisplayName)) {
+                                accountPanel?.webview.postMessage({
+                                    command: 'accountError',
+                                    message: 'Unable to confirm the update in the database. Please try again.'
+                                });
+                                return;
+                            }
+
+                            const updatedSession: WorkspaceAuthSession = {
+                                ...currentSession,
+                                displayName: changes.displayName ? persistedDisplayName : existingDisplayName,
+                                trackingConsent: typeof refreshedUser?.trackingConsent === 'boolean' ? refreshedUser.trackingConsent : trackingConsent
+                            };
+                            await context.workspaceState.update(WORKSPACE_AUTH_KEY, updatedSession);
+
+                            accountPanel?.webview.postMessage({ command: 'accountSaved' });
+                            accountPanel?.webview.postMessage({ command: 'themePreferenceApplied', themePreference: selectedTheme });
+                            resolve(updatedSession);
+                            break;
                         }
 
                         const updatedSession: WorkspaceAuthSession = {
                             ...currentSession,
-                            displayName: persistedDisplayName,
-                            trackingConsent: refreshedUser.trackingConsent // SAVE TO SESSION
+                            displayName: existingDisplayName,
+                            trackingConsent: existingTrackingConsent
                         };
                         await context.workspaceState.update(WORKSPACE_AUTH_KEY, updatedSession);
 

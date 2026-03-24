@@ -157,7 +157,7 @@ export class ApiStorageManager {
         }
 
         for (const event of _newEvents) {
-            await apiPost('/api/events', {
+            const response = await apiPost('/api/events', {
                 sessionId,
                 eventType: event.eventType,
                 occurredAt: event.time,
@@ -171,10 +171,17 @@ export class ApiStorageManager {
                     pasteCharCount: event.pasteCharCount
                 }
             });
+
+            const eventId = response?.event?.Id ?? response?.event?.id ?? response?.id ?? response?.Id;
+            console.log(
+                `[TBD Logger] Pushed event to /api/events: ${event.eventType} @ ${event.time}` +
+                (eventId ? ` (event id: ${eventId})` : '')
+            );
         }
 
         this.syncStatus.lastSyncedAt = new Date().toISOString();
         this.syncStatus.state = 'synced';
+        console.log(`[TBD Logger] Flush complete: ${_newEvents.length} event(s) pushed to /api/events.`);
     }
 
     isOnline(): boolean {

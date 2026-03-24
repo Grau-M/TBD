@@ -4,7 +4,6 @@
 // linked student workspaces instead of an away/record counter.
 import * as vscode from 'vscode';
 import { state } from './state';
-import { formatDuration } from './utils';
 
 // Function: startUiTimer
 export function startUiTimer(statusBarItem: vscode.StatusBarItem): vscode.Disposable {
@@ -24,10 +23,7 @@ export function startUiTimer(statusBarItem: vscode.StatusBarItem): vscode.Dispos
             return; // Go back to sleep! Wait until the API verifies the assignment.
         }
 
-        statusBarItem.text = `$(record-keys) Logging Active
-        `;
         statusBarItem.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment || 'Linked Assignment'}`;
-        statusBarItem.color = new vscode.ThemeColor('testing.iconPassed');
     }, 1000);
 
     return { dispose: () => clearInterval(uiTimer) } as vscode.Disposable;

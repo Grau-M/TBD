@@ -574,11 +574,21 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const startSession = async (userId: number, projectId: number, sessionNumber: number): Promise<number | undefined> => {
         try {
-            const apiSession = await withApiTokenRetry(() => apiPost('/api/sessions', {
+            const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+            if (!Number.isFinite(studentWorkspaceAssignmentId) || studentWorkspaceAssignmentId <= 0) {
+                throw new Error('Cannot start API session without a valid studentWorkspaceAssignmentId.');
+            }
+
+            const payload = {
                 userId,
                 projectId,
                 sessionNumber,
-                startedAt: new Date().toISOString()
+                startedAt: new Date().toISOString(),
+                studentWorkspaceAssignmentId
+            };
+
+            const apiSession = await withApiTokenRetry(() => apiPost('/api/sessions', {
+                ...payload
             }));
 
             const sessionId = Number(apiSession?.id ?? apiSession?.Id);

@@ -17,7 +17,7 @@ import { storageManager, state, CONSTANTS } from './state';
 import { isIgnoredPath, formatTimestamp } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
-import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess } from './auth';
+import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess, WorkspaceAuthSession } from './auth';
 import { openAuthView, openAccountView } from './auth/index';
 import { updateSyncStatus } from './statusBar';
 import { ApiHttpError, apiGet, apiPost } from './api';
@@ -52,10 +52,17 @@ function installRuntimeWarningFilter(): void {
 
 const SESSION_ID_KEY = 'sessionId';
 const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
+const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
+
 // Function to update database status bar item
 async function updateDbStatusBar(): Promise<void> {
     const statusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
     if (!statusItem) { return; }
+    
+    if (state.isPersonalWorkspace) {
+        statusItem.hide();
+        return;
+    }
 
     try {
         const health = await apiGet('/health');
@@ -83,7 +90,7 @@ async function updateDbStatusBar(): Promise<void> {
 
 function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
     const session = getWorkspaceAuthSession(context);
-    const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin'));
+    const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin')) && !state.isPersonalWorkspace;
     const hiddenItem = (global as any).hiddenStatusBarItem as vscode.StatusBarItem | undefined;
 
     void vscode.commands.executeCommand('setContext', 'tbd.hasTeacherDashboardAccess', shouldShowLock);
@@ -109,22 +116,43 @@ function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
 
 function updateAuthStatusBar(context: vscode.ExtensionContext): void {
     const authItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
+    const globalSb = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
+    const dbItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
     const session = getWorkspaceAuthSession(context);
     
     // 1. Sync the global role state automatically whenever auth changes
     state.currentUserRole = session?.role || 'None';
     
+    // A. Personal Workspace Override (Hides all UI elements)
+    if (state.isPersonalWorkspace) {
+        authItem?.hide();
+        globalSb?.hide();
+        dbItem?.hide();
+        syncTeacherDashboardLock(context);
+        return;
+    } else {
+        authItem?.show();
+        globalSb?.show();
+        dbItem?.show();
+    }
+
     updateTrackingUI(session?.role);
-    if (!authItem) {
+    if (!authItem || !globalSb) {
         return;
     }
+    
     if (session?.authenticated) {
-        // 2. NEW: Override UI for teachers so they bypass tracking cleanly
+        // 2. Override UI for teachers so they bypass tracking cleanly
         if (session.role !== 'Student') {
             authItem.text = `$(account) ${session.role}`;
             authItem.tooltip = `Logged in as ${session.role}. Activity logging is permanently disabled for educators.`;
             authItem.backgroundColor = undefined;
             authItem.color = new vscode.ThemeColor('terminal.ansiBrightBlue');
+            
+            globalSb.text = `$(stop-circle) Tracking Disabled (Educator)`;
+            globalSb.tooltip = `Logging is strictly disabled for Teachers/Admins.`;
+            globalSb.color = new vscode.ThemeColor('descriptionForeground');
+            globalSb.command = undefined;
             syncTeacherDashboardLock(context);
             return;
         }
@@ -134,13 +162,31 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
             authItem.tooltip = `Consent declined. Work is NOT being recorded for academic integrity.`;
             authItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
             authItem.color = new vscode.ThemeColor('statusBarItem.errorForeground');
+            
+            globalSb.text = `$(stop-circle) Tracking Disabled (No Consent)`;
+            globalSb.color = new vscode.ThemeColor('statusBarItem.errorForeground');
             syncTeacherDashboardLock(context);
             return;
         }
+        
         authItem.text = `$(account) ${session.role}`;
         authItem.tooltip = `Logged in as ${session.role}. Click to view account details.`;
         authItem.backgroundColor = undefined;
         authItem.color = new vscode.ThemeColor('terminal.ansiBrightBlue');
+        
+        // 3. WORKSPACE LINKED STATUS
+        if (state.activeAssignment) {
+            globalSb.text = `$(record) Recording: ${state.activeAssignment}`;
+            globalSb.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'}`;
+            globalSb.color = new vscode.ThemeColor('testing.iconPassed'); // Green text
+            globalSb.command = 'tbd-logger.openStudentSyncView';
+        } else {
+            globalSb.text = `$(warning) Finish Linking Workspace`;
+            globalSb.tooltip = `Click to connect this workspace to an assignment.`;
+            globalSb.color = new vscode.ThemeColor('list.warningForeground'); // Yellow/Orange text
+            globalSb.command = 'tbd-logger.openStudentSyncView';
+        }
+
         syncTeacherDashboardLock(context);
         return;
     }
@@ -149,6 +195,10 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
     authItem.tooltip = 'Click to open Login/Register';
     authItem.backgroundColor = undefined;
     authItem.color = undefined;
+    
+    globalSb.text = `$(stop-circle) Tracking Inactive`;
+    globalSb.color = new vscode.ThemeColor('descriptionForeground');
+    globalSb.command = undefined;
     syncTeacherDashboardLock(context);
 }
 
@@ -159,9 +209,6 @@ export interface ExtensionApi {
 }
 
 // Function: activate
-// Purpose: VS Code extension activation entrypoint. Initializes
-// storage, session interruption tracking, UI, commands, listeners,
-// and background timers. Returns an object useful for tests.
 export async function activate(context: vscode.ExtensionContext) {
     installRuntimeWarningFilter();
     console.log('TBD Logger: activate');
@@ -170,10 +217,80 @@ export async function activate(context: vscode.ExtensionContext) {
     const uiTimerDisposable = startUiTimer(statusBarItem);
     context.subscriptions.push(uiTimerDisposable);
 
-    // 1. Get the current session (if one exists on startup)
-    const session = getWorkspaceAuthSession(context);
+    // 1. Get the current session
+    let session = getWorkspaceAuthSession(context) as any;
 
-    // 2. Update the tracking UI based on their role
+    // 2. AUTOMATED LOGGING & WORKSPACE VALIDATION ON STARTUP
+    const currentWorkspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceRoot = currentWorkspaceFolder?.uri.fsPath || '';
+
+    if (session?.authenticated && session.role === 'Student' && workspaceRoot) {
+        const personalFlagKey = `tbd.personalWorkspace.${workspaceRoot}`;
+        const isAlreadyPersonal = context.workspaceState.get<boolean>(personalFlagKey);
+
+        if (isAlreadyPersonal) {
+            state.isPersonalWorkspace = true;
+        } else {
+            let assignmentInfo: any = null;
+
+            // Perform API call to verify if WorkspaceRootPath matches existing DB entries
+            try {
+                const classes = await (storageManager as any).listStudentClasses(session.authUserId);
+                if (classes && classes.length > 0) {
+                    for (const c of classes) {
+                        const assignments = await (storageManager as any).listStudentAssignmentsForClass(session.authUserId, c.id);
+                        if (assignments) {
+                            const linked = assignments.find((a: any) => 
+                                a.workspaceRootPath && 
+                                vscode.Uri.file(a.workspaceRootPath).fsPath === vscode.Uri.file(workspaceRoot).fsPath
+                            );
+                            
+                            if (linked) {
+                                assignmentInfo = {
+                                    classId: c.id,
+                                    courseName: c.courseName || c.courseCode,
+                                    assignmentId: linked.assignmentId,
+                                    assignmentName: linked.assignmentName || linked.name
+                                };
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('[TBD Logger] DB workspace validation failed. Checking local storage fallback.', err);
+                assignmentInfo = await (storageManager as any).validateAssignmentLink(session.authUserId, workspaceRoot);
+            }
+
+            if (assignmentInfo) {
+                // MATCHED PATH: Initialize logging and route data
+                state.activeCourse = assignmentInfo.courseName || `Class ID: ${assignmentInfo.classId}`;
+                state.activeAssignment = assignmentInfo.assignmentName || `Assignment ID: ${assignmentInfo.assignmentId}`;
+                
+                session.workspaceLinkedClassId = assignmentInfo.classId;
+                session.workspaceLinkedAssignmentId = assignmentInfo.assignmentId;
+                await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+            } else {
+                // UNMATCHED PATH: Trigger modal categorization
+                const choice = await vscode.window.showInformationMessage(
+                    'TBD Logger: Unrecognized Workspace. Is this a Personal Project or a School Assignment?',
+                    { modal: true },
+                    'School Project',
+                    'Personal Project'
+                );
+
+                if (choice === 'Personal Project') {
+                    state.isPersonalWorkspace = true;
+                    await context.workspaceState.update(personalFlagKey, true);
+                    vscode.window.showInformationMessage('TBD Logger UI and Tracking hidden for this personal workspace.');
+                } else if (choice === 'School Project') {
+                    vscode.commands.executeCommand('tbd-logger.openStudentSyncView');
+                }
+            }
+        }
+    }
+
+    // 3. Update the tracking UI based on role and validation results
     updateTrackingUI(session?.role);    
     const withApiTokenRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
         return operation();
@@ -218,14 +335,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const startSession = async (userId: number, projectId: number, sessionNumber: number): Promise<number | undefined> => {
         try {
-            const session = await withApiTokenRetry(() => apiPost('/api/sessions', {
+            const apiSession = await withApiTokenRetry(() => apiPost('/api/sessions', {
                 userId,
                 projectId,
                 sessionNumber,
                 startedAt: new Date().toISOString()
             }));
 
-            const sessionId = Number(session?.id ?? session?.Id);
+            const sessionId = Number(apiSession?.id ?? apiSession?.Id);
             if (!Number.isFinite(sessionId) || sessionId <= 0) {
                 throw new Error('Session API did not return a valid id.');
             }
@@ -241,9 +358,10 @@ export async function activate(context: vscode.ExtensionContext) {
     };
 
     const logEvent = async (eventType: string, data: any): Promise<void> => {
-        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') {
-            return;
-        }
+        // ROLE-BASED RESTRICTIONS
+        if (state.isPersonalWorkspace) { return; }
+        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+        
         const sessionId = context.workspaceState.get<number>(SESSION_ID_KEY);
         if (!sessionId) {
             return;
@@ -263,72 +381,47 @@ export async function activate(context: vscode.ExtensionContext) {
 
     try { printSessionInfo(); } catch (e) { /* no-op */ }
 
-    // Initialize storage manager (creates/ensures encrypted file)
     await storageManager.init(context);
 
-    // Unified workspace authentication + role assignment + student activity mapping.
-    // Open the auth GUI webview if the workspace is not yet authenticated.
-    const existingSession = getWorkspaceAuthSession(context);
-    if (!existingSession?.authenticated) {
-        // prevents the extension from hanging in CI
+    if (!session?.authenticated) {
         if (process.env.CI === 'true') {
             console.log('[TBD Logger] CI environment detected: Skipping authentication webview block.');
         } else {
             try {
                 await openAuthView(context, storageManager);
+                session = getWorkspaceAuthSession(context) as any;
             } catch (err) {
                 console.warn('[TBD Logger] Authentication view failed during startup. Continuing in offline mode.', err);
                 vscode.window.showWarningMessage('TBD Logger could not reach the service for sign-in. Monitoring will continue offline.');
             }
         }
     }
-//  UPDATED CONSENT GATE
+
     const CURRENT_POLICY_VERSION = 'v1.1'; 
-    const currentAuth = getWorkspaceAuthSession(context) as any;
 
-    // 1. Only start an API session if the user is explicitly a Student
-    if (currentAuth?.authenticated && currentAuth.role === 'Student') {
-        
-        // 👉 ROCK SOLID PATH DETECTION: Compare local memory, ignore capitalization!
-        const currentWorkspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
-        const savedPath = ((currentAuth as any).workspaceRootPath || '').toLowerCase();        const activePath = currentWorkspacePath.toLowerCase();
-        
-        const isWorkspaceLinked = (savedPath === activePath) 
-            && Number(currentAuth.workspaceLinkedClassId ?? 0) > 0 
-            && Number(currentAuth.workspaceLinkedAssignmentId ?? 0) > 0;
+    if (session?.authenticated && session.role === 'Student' && !state.isPersonalWorkspace) {
+        const hasLinkedWorkspace = Number(session.workspaceLinkedClassId ?? 0) > 0 
+            && Number(session.workspaceLinkedAssignmentId ?? 0) > 0;
 
-        if (isWorkspaceLinked) {
+        if (hasLinkedWorkspace) {
             const projectId = await ensureProject();
             if (projectId) {
                 const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
-                const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
-                
+                const startedSessionId = await startSession(session.authUserId, projectId, nextSessionNumber);
                 if (startedSessionId) {
                     await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
-                    
-                    // 👉 WAKE UP THE RECORDING
-                    state.isSessionActive = true;
-                    state.isConsentGiven = true; 
-                    state.focusAwayStartTime = null; 
-                    state.sessionStartTime = Date.now();
-                    
-                    updateTrackingUI();
-                    
                     void logEvent('session_start', {
                         workspaceName: vscode.workspace.name || 'Unknown Workspace',
-                        workspacePath: currentWorkspacePath
+                        workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
                     });
                 }
             }
-        } else {
-            console.log(`[TBD Logger] Path Guard Blocked: Expected ${savedPath}, Got ${activePath}`);
         }
     }
     
-    // 2. Consent Check Gate
-    if (currentAuth?.authenticated) {
-        // ONLY prompt for consent if they are a student
-        if (currentAuth.role === 'Student' && state.isSessionActive) {
+    // Consent Check Gate
+    if (session?.authenticated) {
+        if (session.role === 'Student' && !state.isPersonalWorkspace) {
             try {
                 const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
 
@@ -363,24 +456,19 @@ export async function activate(context: vscode.ExtensionContext) {
             updateAuthStatusBar(context); 
         }
     } else {
-        // For unauthenticated users
         state.isConsentGiven = false; 
     }
 
     if (process.env.CI === 'true') {
-        console.log('[TBD Logger] CI environment detected: Auto-granting consent for automated tests.');
         state.isConsentGiven = true;
     }
-    //  END OF CONSENT GATE
-    // Detect Session Interruptions (inactivity / abnormal end / clean shutdown)
+
     await SessionInterruptionTracker.install(context, {
-        inactivityThresholdMs: 5 * 60 * 1000, // 5 minutes (change if you want)
+        inactivityThresholdMs: 5 * 60 * 1000,
         checkEveryMs: 10_000
     });
 
-
-    // Log Session Start 
-   if (state.currentUserRole === 'Student' || state.currentUserRole === 'None') {
+    if ((state.currentUserRole === 'Student' || state.currentUserRole === 'None') && !state.isPersonalWorkspace) {
         state.sessionBuffer.push({
             time: formatTimestamp(Date.now()),
             flightTime: '0',
@@ -390,21 +478,16 @@ export async function activate(context: vscode.ExtensionContext) {
         });
     }
 
-    // Initialize focused file state
     const initialActive = vscode.window.activeTextEditor;
     const initialPath = initialActive && initialActive.document ? vscode.workspace.asRelativePath(initialActive.document.uri, false) : '';
     state.currentFocusedFile = isIgnoredPath(initialPath) ? '' : initialPath;
     state.focusStartTime = Date.now();
 
-    //Open Logs Command with Password Prompt
     const openLogs = async () => {
         const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Log access');
-        if (!allowed) {
-            return;
-        }
+        if (!allowed) { return; }
 
         try {
-            // Determine if the active editor is focused on an integrity log
             const active = vscode.window.activeTextEditor;
             let targetUri: vscode.Uri | null = null;
 
@@ -415,7 +498,6 @@ export async function activate(context: vscode.ExtensionContext) {
                 }
             }
 
-            // If no focused log file, present a QuickPick of available session logs
             if (!targetUri) {
                 const files = await storageManager.listLogFiles();
                 if (files.length === 0) {
@@ -429,7 +511,6 @@ export async function activate(context: vscode.ExtensionContext) {
                 targetUri = chosen.uri;
             }
 
-            // 1. Ask for Password
             const password = await vscode.window.showInputBox({
                 prompt: `Enter Administrator Password to view ${path.basename(targetUri.fsPath)}`,
                 password: true,
@@ -437,12 +518,9 @@ export async function activate(context: vscode.ExtensionContext) {
                 placeHolder: 'TBD_CAPSTONE...'
             });
 
-            if (!password) {return;} // User cancelled
+            if (!password) {return;}
 
-            // 2. Retrieve & Decrypt selected file
             const content = await storageManager.retrieveLogContentForUri(password, targetUri);
-
-            // 3. Display
             const doc = await vscode.workspace.openTextDocument({
                 content: content,
                 language: 'json'
@@ -454,15 +532,11 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(`Access Denied: ${err}`);
         }
     };
-    const openLogsCommand = vscode.commands.registerCommand('tbd-logger.openLogs', openLogs);
-    context.subscriptions.push(openLogsCommand);
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.openLogs', openLogs));
 
-    // Command: Show Hidden Deletions — open the single deletion activity file after password
     const showHidden = async () => {
         const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Deletion activity log');
-        if (!allowed) {
-            return;
-        }
+        if (!allowed) { return; }
 
         try {
             const password = await vscode.window.showInputBox({
@@ -478,55 +552,42 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(`Unable to access deletion activity log: ${err}`);
         }
     };
-    const showHiddenCommand = vscode.commands.registerCommand('tbd-logger.showHiddenDeletions', showHidden);
-    context.subscriptions.push(showHiddenCommand);
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.showHiddenDeletions', showHidden));
 
-    // Command: Open Teacher Dashboard (Webview)
-    const openTeacherCommand = vscode.commands.registerCommand('tbd-logger.openTeacherView', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.openTeacherView', async () => {
         const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Teacher Dashboard');
-        if (!allowed) {
-            return;
-        }
+        if (!allowed) { return; }
         await openTeacherView(context);
-    });
-    context.subscriptions.push(openTeacherCommand);
+    }));
 
-    // Command: Teacher/Admin class-activity management for student workspace mapping.
-    const manageActivitiesCommand = vscode.commands.registerCommand('tbd-logger.manageClassActivities', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.manageClassActivities', async () => {
         await manageClassActivities(context, storageManager);
-    });
-    context.subscriptions.push(manageActivitiesCommand);
+    }));
 
-    // Command: Re-open login/register flow from status bar.
-    const authSignInCommand = vscode.commands.registerCommand('tbd-logger.authSignIn', async () => {
-        const session = getWorkspaceAuthSession(context);
-        if (session?.authenticated) {
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.authSignIn', async () => {
+        const curSession = getWorkspaceAuthSession(context);
+        if (curSession?.authenticated) {
             const ideIdentity = getSessionInfo().user;
             const workspaceName = vscode.workspace.name || 'Unknown Workspace';
 
-            await openAccountView(context, storageManager, {
-                ideUser: ideIdentity,
-                workspaceName
-            });
+            await openAccountView(context, storageManager, { ideUser: ideIdentity, workspaceName });
             updateAuthStatusBar(context);
             return;
         }
 
         await openAuthView(context, storageManager);
         updateAuthStatusBar(context);
-    });
-    context.subscriptions.push(authSignInCommand);
+    }));
 
-    // Command: Sign out (triggered via right-click context menu on the auth status bar item).
-    const signOutCommand = vscode.commands.registerCommand('tbd-logger.signOut', async () => {
-        const session = getWorkspaceAuthSession(context);
-        if (!session?.authenticated) {
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.signOut', async () => {
+        const curSession = getWorkspaceAuthSession(context);
+        if (!curSession?.authenticated) {
             vscode.window.showInformationMessage('You are not currently logged in.');
             return;
         }
 
         const answer = await vscode.window.showWarningMessage(
-            `Are you sure you want to log out? (${session.displayName} — ${session.role})`,
+            `Are you sure you want to log out? (${curSession.displayName} — ${curSession.role})`,
             { modal: true },
             'Log Out'
         );
@@ -536,46 +597,35 @@ export async function activate(context: vscode.ExtensionContext) {
             updateAuthStatusBar(context);
             vscode.window.showInformationMessage('You have been logged out.');
         }
-    });
-    context.subscriptions.push(signOutCommand);
+    }));
 
-    // Create status bar and start UI timer (REC/AWAY timer is display-only).
-    // Teacher dashboard lock is role-gated and managed dynamically after auth state is known.
     updateAuthStatusBar(context);
 
     // Register listeners
-    const editListener = createEditListener();
-    context.subscriptions.push(editListener);
+    context.subscriptions.push(createEditListener());
+    context.subscriptions.push(createFocusListener());
+    context.subscriptions.push(createWindowStateListener());
+    context.subscriptions.push(createSaveListener());
 
-    const focusListener = createFocusListener();
-    context.subscriptions.push(focusListener);
-
-    const windowStateListener = createWindowStateListener();
-    context.subscriptions.push(windowStateListener);
-
-    const saveListener = createSaveListener();
-    context.subscriptions.push(saveListener);
-
-    // Auth guard: prompt unauthenticated users when they make any workspace changes.
-    // Shown at most once per session; resets only if the user picks "Login" and then
-    // closes the auth panel without completing sign-in.
     let _authPromptShown = false;
     let _unmonitoredAlertCaptured = false;
 
     const promptIfUnauthenticated = async () => {
         if (process.env.CI === 'true') { return; }
         if (_authPromptShown) { return; }
-        const session = getWorkspaceAuthSession(context);
-        if (session?.authenticated) { return; }
+        if (state.isPersonalWorkspace) { return; }
+
+        const curSession = getWorkspaceAuthSession(context);
+        if (curSession?.authenticated) { return; }
 
         if (!_unmonitoredAlertCaptured) {
             _unmonitoredAlertCaptured = true;
             const info = getSessionInfo();
-            const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+            const wPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
             await storageManager.recordUnmonitoredWorkAlert({
                 ideUser: info.user,
                 workspaceName: info.project,
-                workspacePath,
+                workspacePath: wPath,
                 reason: 'Student activity detected while not signed in to TBD Logger monitoring.'
             });
         }
@@ -590,22 +640,27 @@ export async function activate(context: vscode.ExtensionContext) {
         );
 
         if (choice === 'Login') {
-            _authPromptShown = false; // allow re-prompt if they cancel the login panel
+            _authPromptShown = false;
             await openAuthView(context, storageManager);
             updateAuthStatusBar(context);
+        } else if (choice === "I'm Not Working on School") {
+            state.isPersonalWorkspace = true;
+            const wPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+            if (wPath) {
+                await context.workspaceState.update(`tbd.personalWorkspace.${wPath}`, true);
+            }
+            updateAuthStatusBar(context);
         }
-        // "Keep Working Without", "I'm Not Working on School", or dismiss (undefined)
-        // all leave _authPromptShown = true so the prompt won't appear again this session.
     };
 
     // Text edits
-    const authEditGuard = vscode.workspace.onDidChangeTextDocument((e) => {
-        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         if (e.contentChanges.length === 0) { return; }
         const docPath = vscode.workspace.asRelativePath(e.document.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void promptIfUnauthenticated();
-        if (!state.isSessionActive || !state.isConsentGiven) { return; }
+
         const charsAdded = e.contentChanges.reduce((sum, change) => sum + change.text.length, 0);
         const isPaste = e.contentChanges.some((change) => change.text.length > 1);
         void logEvent(isPaste ? 'paste' : 'file_edit', {
@@ -613,35 +668,31 @@ export async function activate(context: vscode.ExtensionContext) {
             changeCount: e.contentChanges.length,
             charsAdded
         });
-    });
-    context.subscriptions.push(authEditGuard);
+    }));
 
-    const apiSaveEventListener = vscode.workspace.onDidSaveTextDocument((doc) => {
-        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+    context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         const docPath = vscode.workspace.asRelativePath(doc.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void logEvent('file_save', { file: docPath });
-    });
-    context.subscriptions.push(apiSaveEventListener);
+    }));
 
-    const apiOpenEventListener = vscode.workspace.onDidOpenTextDocument((doc) => {
-        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+    context.subscriptions.push(vscode.workspace.onDidOpenTextDocument((doc) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         const docPath = vscode.workspace.asRelativePath(doc.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void logEvent('file_open', { file: docPath });
-    });
-    context.subscriptions.push(apiOpenEventListener);
+    }));
 
-    const apiCloseEventListener = vscode.workspace.onDidCloseTextDocument((doc) => {
-        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+    context.subscriptions.push(vscode.workspace.onDidCloseTextDocument((doc) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         const docPath = vscode.workspace.asRelativePath(doc.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void logEvent('file_close', { file: docPath });
-    });
-    context.subscriptions.push(apiCloseEventListener);
+    }));
 
-    const apiActiveEditorListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
-        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         if (!editor) {
             void logEvent('active_editor_change', { file: '' });
             return;
@@ -649,31 +700,24 @@ export async function activate(context: vscode.ExtensionContext) {
         const docPath = vscode.workspace.asRelativePath(editor.document.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void logEvent('active_editor_change', { file: docPath });
-    });
-    context.subscriptions.push(apiActiveEditorListener);
+    }));
 
-    const apiWindowStateListener = vscode.window.onDidChangeWindowState((windowState) => {
-        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+    context.subscriptions.push(vscode.window.onDidChangeWindowState((windowState) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         void logEvent('window_state_change', {
             focused: windowState.focused
         });
-    });
-    context.subscriptions.push(apiWindowStateListener);
+    }));
 
-    // File creates, deletes, renames
-    const authCreateGuard = vscode.workspace.onDidCreateFiles(() => void promptIfUnauthenticated());
-    const authDeleteGuard = vscode.workspace.onDidDeleteFiles(() => void promptIfUnauthenticated());
-    const authRenameGuard = vscode.workspace.onDidRenameFiles(() => void promptIfUnauthenticated());
-    context.subscriptions.push(authCreateGuard, authDeleteGuard, authRenameGuard);
+    context.subscriptions.push(vscode.workspace.onDidCreateFiles(() => void promptIfUnauthenticated()));
+    context.subscriptions.push(vscode.workspace.onDidDeleteFiles(() => void promptIfUnauthenticated()));
+    context.subscriptions.push(vscode.workspace.onDidRenameFiles(() => void promptIfUnauthenticated()));
 
-    // Command to manually refresh database status
-    const checkDbStatusCommand = vscode.commands.registerCommand('tbd-logger.checkDbStatus', () => {
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.checkDbStatus', () => {
         void updateDbStatusBar();
-    });
-    context.subscriptions.push(checkDbStatusCommand);
+    }));
 
-    // Command: Test Database Connection (migrated) — now checks API health endpoint.
-    const testDbCommand = vscode.commands.registerCommand('tbd-logger.testDbConnection', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.testDbConnection', async () => {
         try {
             const result = await apiGet('/health');
             vscode.window.showInformationMessage(`✅ API ONLINE\nStatus: ${result?.status ?? 'unknown'}`);
@@ -683,10 +727,9 @@ export async function activate(context: vscode.ExtensionContext) {
             );
         }
         void updateDbStatusBar();
-    });
-    context.subscriptions.push(testDbCommand);
+    }));
 
-    const testConnectionCommand = vscode.commands.registerCommand('tbd.testConnection', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand('tbd.testConnection', async () => {
         try {
             const result = await apiGet('/health');
             vscode.window.showInformationMessage(`API status: ${result.status}`);
@@ -694,103 +737,82 @@ export async function activate(context: vscode.ExtensionContext) {
             const message = error?.message || String(error);
             vscode.window.showErrorMessage(`API test failed: ${message}`);
         }
-    });
-    context.subscriptions.push(testConnectionCommand);
+    }));
 
-    // Periodic flush timer
     const flushTimer = setInterval(() => {
-        if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') {
             state.sessionBuffer = []; // Hard-wipe any errant local logs so they never hit disk
             return;
         }
-            void flushBuffer();}, CONSTANTS.FLUSH_INTERVAL_MS);
+        void flushBuffer();
+    }, CONSTANTS.FLUSH_INTERVAL_MS);
     context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
 
-    // Periodic database status update (every 10 seconds)
     const statusUpdateTimer = setInterval(() => {
         void updateDbStatusBar();
     }, 10000);
     context.subscriptions.push({ dispose: () => clearInterval(statusUpdateTimer) });
 
-    // Initial status update
     void updateDbStatusBar();
-    updateAuthStatusBar(context);
     
-let isSyncing = false;
-const forceSyncCommand = vscode.commands.registerCommand('tbd-logger.forceSync', async () => {
-    const session = getWorkspaceAuthSession(context);
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    let isSyncing = false;
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.forceSync', async () => {
+        const curSession = getWorkspaceAuthSession(context);
+        const wRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
-    // 1. Auth Check
-    if (!session?.authenticated || !session?.authUserId) {
-        vscode.window.showErrorMessage("Sync Denied: Please log in first.");
-        return;
-    }
+        if (!curSession?.authenticated || !curSession?.authUserId) {
+            vscode.window.showErrorMessage("Sync Denied: Please log in first.");
+            return;
+        }
 
-    // 2. Assignment Guard: Check if the current workspace is linked to a valid assignment
-    const assignmentLink = await (storageManager as any).validateAssignmentLink(
-        session.authUserId, 
-        workspaceRoot || ''
-    );
-
-    if (!assignmentLink) {
-        vscode.window.showErrorMessage(
-            "Sync Blocked: This workspace is not attached to an active assignment. Please join a class and link this folder first."
+        const assignmentLink = await (storageManager as any).validateAssignmentLink(
+            curSession.authUserId, 
+            wRoot || ''
         );
-        return;
-    }
 
-    // 3. Concurrency Check
-    if (isSyncing || state.isFlushing) {
-        vscode.window.showInformationMessage("Sync already in progress...");
-        return;
-    }
+        if (!assignmentLink) {
+            vscode.window.showErrorMessage(
+                "Sync Blocked: This workspace is not attached to an active assignment. Please join a class and link this folder first."
+            );
+            return;
+        }
 
-    // 4. SUNNY DAY: Valid assignment confirmed, proceed with sync
-    isSyncing = true;
-    updateSyncStatus(true);
-    
-    try {
-        await flushBuffer();
-        vscode.window.showInformationMessage(`✅ Successfully synced to: ${assignmentLink.assignmentName}`);
-    } catch (error) {
-        vscode.window.showErrorMessage("Sync failed. Check your network connection.");
-    } finally {
-        isSyncing = false;
-            vscode.window.showWarningMessage('TBD Logger could not verify consent with the service. Please retry sign-in/consent once connectivity is restored.');
-    }
-});
-    // Register the force sync command and add to subscriptions
-    context.subscriptions.push(forceSyncCommand);
+        if (isSyncing || state.isFlushing) {
+            vscode.window.showInformationMessage("Sync already in progress...");
+            return;
+        }
 
-    const openSyncViewCommand = vscode.commands.registerCommand('tbd-logger.openStudentSyncView', async () => {
+        isSyncing = true;
+        updateSyncStatus(true);
+        
+        try {
+            await flushBuffer();
+            vscode.window.showInformationMessage(`✅ Successfully synced to: ${assignmentLink.assignmentName}`);
+        } catch (error) {
+            vscode.window.showErrorMessage("Sync failed. Check your network connection.");
+        } finally {
+            isSyncing = false;
+        }
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.openStudentSyncView', async () => {
         await openStudentSyncView(context);
-    });
+    }));
 
-    context.subscriptions.push(openSyncViewCommand); //
-
-    // Admin Command to manually trigger the Data Purge (For Capstone Demo)
     context.subscriptions.push(vscode.commands.registerCommand('tbd.admin.runPurge', async () => {
         vscode.window.showInformationMessage('TBD Logger: Initiating data purge. Check console for details.');
-        // You can change '365' to '0' during your demo if you want it to delete EVERYTHING for a live demonstration!
         await storageManager.runAutomatedDataPurge(365); 
     }));
 
-    //Return the internals so the Test Suite can see them
     return { state, storageManager };
-    
-    
 }
 
 export function deactivate() {
-    // 1. Mark clean shutdown for the tracker
     SessionInterruptionTracker.markCleanShutdown();
 
-    // Prevent final telemetry packaging if user is an educator
-    if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') {
+    if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin' || state.isPersonalWorkspace) {
         state.sessionBuffer = []; // Wipe completely
     } else {
-        // 2. Log final focus duration
         const now = Date.now();
         if (state.currentFocusedFile) {
             state.sessionBuffer.push({
@@ -802,11 +824,9 @@ export function deactivate() {
             });
         }
 
-        // 3. Final data flush
         void flushBuffer();
     }
 
-    // 4. Dispose global status bar references
     const globalSb = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
     if (globalSb) { globalSb.dispose(); }
 
@@ -819,6 +839,5 @@ export function deactivate() {
     const hiddenItem = (global as any).hiddenStatusBarItem as vscode.StatusBarItem | undefined;
     if (hiddenItem) { hiddenItem.dispose(); }
 
-    // 5. Close database connection
     void storageManager.dispose();
 }

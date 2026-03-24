@@ -334,7 +334,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           const selections = [];
           for (const requested of requestedStudents) {
             const studentAuthUserId = Number(requested?.studentAuthUserId);
-            if (!Number.isFinite(studentAuthUserId) || studentAuthUserId <= 0) continue;
+            if (!Number.isFinite(studentAuthUserId) || studentAuthUserId <= 0) {continue;}
 
             const sessions = await storageManager.listAssignmentStudentSessions(
               classId,

@@ -703,7 +703,7 @@ export async function activate(context: vscode.ExtensionContext) {
             state.sessionBuffer = []; // Hard-wipe any errant local logs so they never hit disk
             return;
         }
-            void flushBuffer()}, CONSTANTS.FLUSH_INTERVAL_MS);
+            void flushBuffer();}, CONSTANTS.FLUSH_INTERVAL_MS);
     context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
 
     // Periodic database status update (every 10 seconds)

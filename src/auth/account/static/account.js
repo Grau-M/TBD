@@ -455,9 +455,11 @@
     if ($("account-role")) {
       $("account-role").value = data.role || "";
     }
-    if (data.role === "Student") {
+   if (data.role === "Student") {
       const consentGroup = $("account-consent-group");
-      if (consentGroup) consentGroup.classList.remove("hidden");
+      if (consentGroup) { 
+          consentGroup.classList.remove("hidden"); 
+      }
 
       if ($("account-tracking-consent")) {
         $("account-tracking-consent").checked = !!data.trackingConsent;

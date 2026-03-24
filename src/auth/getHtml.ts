@@ -49,7 +49,10 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
     *, *::before, *::after { box-sizing: border-box; }
 
     body {
-      background: var(--bg);
+      background:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(139, 92, 246, 0.16), transparent 30%),
+        linear-gradient(180deg, color-mix(in srgb, var(--bg) 88%, #000 12%), var(--bg));
       color: var(--fg);
       min-height: 100vh;
       display: flex;
@@ -57,7 +60,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       justify-content: center;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       margin: 0;
-      padding: 24px;
+      padding: 28px 20px;
     }
 
     .auth-container {
@@ -66,16 +69,44 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
     }
 
     .auth-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 44px 40px 36px;
-      box-shadow: 0 12px 48px rgba(0,0,0,0.14);
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface) 92%, white 8%),
+        var(--surface)
+      );
+      border: 1px solid color-mix(in srgb, var(--border) 80%, white 20%);
+      border-radius: 30px;
+      padding: 46px 42px 38px;
+      box-shadow:
+        0 26px 70px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(18px) saturate(140%);
+    }
+
+    .auth-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 6px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+
+    .auth-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -20% -35% auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.12), transparent 68%);
+      pointer-events: none;
     }
 
     .auth-header {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 30px;
     }
     .auth-logo {
       font-size: 2.8rem;
@@ -83,10 +114,11 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       display: block;
     }
     .auth-title {
-      font-size: 1.75rem;
+      font-size: 1.8rem;
       font-weight: 800;
       color: var(--fg);
-      margin: 0 0 4px;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
     }
     .auth-subtitle {
       color: var(--muted);
@@ -96,35 +128,35 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
 
     .auth-tabs {
       display: flex;
-      background: var(--bg);
-      border-radius: 12px;
-      padding: 4px;
-      gap: 4px;
-      margin-bottom: 28px;
-      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg) 82%, var(--surface) 18%);
+      border-radius: 18px;
+      padding: 6px;
+      gap: 6px;
+      margin-bottom: 26px;
+      border: 1px solid color-mix(in srgb, var(--border) 70%, white 10%);
     }
     .auth-tab-btn {
       flex: 1;
-      padding: 9px;
+      padding: 10px 12px;
       border: none;
       background: transparent;
       color: var(--muted);
       font-weight: 600;
-      border-radius: 9px;
+      border-radius: 14px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
       font-size: 0.95rem;
     }
     .auth-tab-btn.active {
-      background: var(--surface);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 84%, white 16%), var(--surface));
       color: var(--accent);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.16);
     }
-    .auth-tab-btn:hover:not(.active) { color: var(--fg); }
+    .auth-tab-btn:hover:not(.active) { color: var(--fg); transform: translateY(-1px); }
 
     .hidden { display: none !important; }
 
-    .form-group { margin-bottom: 18px; }
+    .form-group { margin-bottom: 16px; }
     label {
       display: block;
       margin-bottom: 6px;
@@ -141,21 +173,150 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
     input[type="text"],
     input[type="password"],
     input[type="email"],
-    select {
+    select,
+    .custom-dropdown-trigger {
       width: 100%;
-      padding: 10px 14px;
-      border-radius: 10px;
-      background: var(--bg);
-      border: 1.5px solid var(--border);
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--bg) 86%, white 14%);
+      border: 1px solid color-mix(in srgb, var(--border) 78%, white 22%);
       color: var(--fg);
       font-size: 0.95rem;
-      min-height: 44px;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      min-height: 48px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    }
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding-right: 44px;
+      cursor: pointer;
+    }
+    .custom-dropdown-trigger {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+      line-height: 1.2;
+      padding-right: 16px;
+      user-select: none;
     }
     input:focus, select:focus {
       outline: none;
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+      background: color-mix(in srgb, var(--bg) 78%, white 22%);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16);
+      transform: translateY(-1px);
+    }
+    .custom-dropdown-trigger:focus,
+    .custom-dropdown-trigger:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--bg) 78%, white 22%);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.16);
+      transform: translateY(-1px);
+    }
+
+    .select-wrapper {
+      position: relative;
+    }
+
+    .custom-dropdown {
+      position: relative;
+    }
+
+    .custom-dropdown-trigger {
+      width: 100%;
+      min-height: 48px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--bg) 86%, white 14%);
+      border: 1px solid color-mix(in srgb, var(--border) 78%, white 22%);
+      color: var(--fg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+      font-size: 0.95rem;
+    }
+
+    .custom-dropdown-trigger:hover {
+      border-color: color-mix(in srgb, var(--accent) 65%, var(--border) 35%);
+    }
+
+    .custom-dropdown-trigger.open {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+    }
+
+    #register-role-label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .custom-dropdown-chevron {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+
+    .custom-dropdown-trigger.open .custom-dropdown-chevron {
+      transform: rotate(180deg);
+    }
+
+    .custom-dropdown-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 10px);
+      z-index: 20;
+      padding: 10px;
+      border-radius: 18px;
+      background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface) 92%, white 8%),
+        var(--surface)
+      );
+      border: 1px solid color-mix(in srgb, var(--border) 75%, white 15%);
+      box-shadow: 0 22px 42px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(18px) saturate(140%);
+    }
+
+    .custom-dropdown-option {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--fg);
+      text-align: left;
+      padding: 12px 13px;
+      border-radius: 13px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: background 0.18s ease, transform 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .custom-dropdown-option:hover,
+    .custom-dropdown-option[aria-selected="true"] {
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent-hover) 70%, white 30%));
+      color: white;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    .custom-dropdown-option + .custom-dropdown-option {
+      margin-top: 4px;
     }
 
     .password-wrapper { position: relative; }
@@ -165,7 +326,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       right: 12px;
       top: 50%;
       transform: translateY(-50%);
-      background: none;
+      background: transparent;
       border: none;
       cursor: pointer;
       font-size: 1rem;
@@ -179,7 +340,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       background: var(--error-bg);
       color: var(--error);
       border: 1px solid rgba(220,38,38,0.2);
-      border-radius: 8px;
+      border-radius: 14px;
       padding: 10px 14px;
       font-size: 0.88rem;
       margin-bottom: 14px;
@@ -189,19 +350,20 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
 
     .auth-submit-btn {
       width: 100%;
-      padding: 13px;
+      padding: 14px 16px;
       font-size: 1rem;
       font-weight: 700;
-      border-radius: 10px;
-      margin-top: 4px;
+      border-radius: 16px;
+      margin-top: 6px;
       border: none;
-      background: var(--accent);
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
       color: white;
       cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
+      transition: opacity 0.2s, transform 0.15s ease, box-shadow 0.2s ease;
       letter-spacing: 0.01em;
+      box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
     }
-    .auth-submit-btn:hover { opacity: 0.9; }
+    .auth-submit-btn:hover { opacity: 0.96; transform: translateY(-1px); }
     .auth-submit-btn:active { transform: scale(0.98); }
     .auth-submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
@@ -212,10 +374,10 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
     }
     .auth-oauth-btn {
       width: 100%;
-      min-height: 42px;
-      border-radius: 10px;
-      border: 1.5px solid var(--border);
-      background: var(--surface);
+      min-height: 44px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg) 12%);
       color: var(--fg);
       font-size: 0.94rem;
       font-weight: 600;
@@ -232,7 +394,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
     .auth-divider {
       position: relative;
       text-align: center;
-      margin: 14px 0 16px;
+      margin: 16px 0 18px;
       color: var(--muted);
       font-size: 0.85rem;
     }
@@ -253,7 +415,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
 
     .auth-switch-hint {
       text-align: center;
-      margin-top: 18px;
+      margin-top: 16px;
       font-size: 0.88rem;
       color: var(--muted);
     }
@@ -289,6 +451,84 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       margin: 0;
       line-height: 1.5;
     }
+
+    .custom-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .custom-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.58);
+      backdrop-filter: blur(8px);
+    }
+    .custom-modal-card {
+      position: relative;
+      z-index: 1;
+      width: min(100%, 460px);
+      border-radius: 24px;
+      padding: 24px;
+      background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--surface) 96%, white 4%),
+        var(--surface)
+      );
+      border: 1px solid color-mix(in srgb, var(--border) 82%, white 18%);
+      box-shadow: 0 24px 72px rgba(0, 0, 0, 0.36);
+    }
+    .custom-modal-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 14px;
+      background: rgba(245, 158, 11, 0.14);
+      color: #f59e0b;
+      font-size: 1.2rem;
+      font-weight: 800;
+    }
+    .custom-modal-copy h3 {
+      margin: 0 0 8px;
+      font-size: 1.1rem;
+      color: var(--fg);
+    }
+    .custom-modal-copy p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 0.94rem;
+    }
+    .custom-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 22px;
+    }
+    .custom-modal-btn {
+      min-height: 42px;
+      padding: 0 16px;
+      border-radius: 14px;
+      border: 1px solid transparent;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .custom-modal-btn.secondary {
+      background: color-mix(in srgb, var(--bg) 82%, var(--surface) 18%);
+      color: var(--fg);
+      border-color: color-mix(in srgb, var(--border) 72%, white 28%);
+    }
+    .custom-modal-btn.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+      color: #fff;
+      box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
+    }
+    .custom-modal-btn:hover { transform: translateY(-1px); }
   </style>
 </head>
 <body>

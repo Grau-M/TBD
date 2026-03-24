@@ -128,14 +128,19 @@ export async function openAccountView(
                             return;
                         }
 
+                        const titleCaseDisplayName = newDisplayName
+                            .toLowerCase()
+                            .replace(/\b([a-z])/g, (_match, letter: string) => letter.toUpperCase())
+                            .replace(/\s+/g, ' ');
+
                         await setThemePreference(context, selectedTheme);
 
                         const existingDisplayName = String(currentSession.displayName || '').trim();
                         const existingTrackingConsent = Boolean(currentSession.trackingConsent === true);
                         const changes: { displayName?: string; trackingConsent?: boolean } = {};
 
-                        if (newDisplayName && newDisplayName !== existingDisplayName) {
-                            changes.displayName = newDisplayName;
+                        if (titleCaseDisplayName && titleCaseDisplayName !== existingDisplayName) {
+                            changes.displayName = titleCaseDisplayName;
                         }
 
                         if (trackingConsent !== existingTrackingConsent) {
@@ -148,7 +153,7 @@ export async function openAccountView(
                             // Verify persisted data from API before confirming success in UI.
                             const refreshedUser = await storageManager.findAuthUserByEmail(currentSession.email);
                             const persistedDisplayName = String(refreshedUser?.displayName || existingDisplayName).trim();
-                            if (changes.displayName && (!persistedDisplayName || persistedDisplayName !== newDisplayName)) {
+                            if (changes.displayName && (!persistedDisplayName || persistedDisplayName !== titleCaseDisplayName)) {
                                 accountPanel?.webview.postMessage({
                                     command: 'accountError',
                                     message: 'Unable to confirm the update in the database. Please try again.'

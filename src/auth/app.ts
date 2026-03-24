@@ -27,8 +27,7 @@ function buildLocalSession(params: {
 async function pickRoleForNewUser(): Promise<UserRole | undefined> {
     const selected = await vscode.window.showQuickPick([
         { label: 'Student', description: 'Link workspace to class assignments' },
-        { label: 'Teacher', description: 'Access teacher dashboard and class management' },
-        { label: 'Admin', description: 'Full system management access' }
+        { label: 'Teacher', description: 'Access teacher dashboard and class management' }
     ], {
         title: 'Select your role for this account',
         placeHolder: 'Choose your role (first-time setup)'

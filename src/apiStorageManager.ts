@@ -271,7 +271,7 @@ export class ApiStorageManager {
         };
 
         if (typeof changes.displayName === 'string') {
-            const displayName = changes.displayName.trim();
+            const displayName = this.titleCaseName(changes.displayName);
             if (displayName) {
                 payload.displayName = displayName;
             }

@@ -24,7 +24,8 @@ export function startUiTimer(statusBarItem: vscode.StatusBarItem): vscode.Dispos
             return; // Go back to sleep! Wait until the API verifies the assignment.
         }
 
-        statusBarItem.text = `$(record-keys) Logging Active | ${state.activeAssignment || 'Linked Assignment'}`;
+        statusBarItem.text = `$(record-keys) Logging Active
+        `;
         statusBarItem.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment || 'Linked Assignment'}`;
         statusBarItem.color = new vscode.ThemeColor('testing.iconPassed');
     }, 1000);

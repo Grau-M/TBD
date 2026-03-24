@@ -210,20 +210,10 @@ async function showStartupWorkspaceDebugPopup(
             : 'This students current workspace is not matched to any linked assignment.'
     ].join('\n');
 
-    const choice = await vscode.window.showInformationMessage(
-        message,
-        { modal: true },
-        'Open Sync View'
-    );
-
     if (matchedAssignment) {
         state.activeCourse = state.activeCourse || matchedAssignment.className;
         state.activeAssignment = state.activeAssignment || matchedAssignment.assignmentName;
         state.isSessionActive = true;
-    }
-
-    if (choice === 'Open Sync View') {
-        await vscode.commands.executeCommand('tbd-logger.openStudentSyncView');
     }
 }
 

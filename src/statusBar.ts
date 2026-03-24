@@ -114,7 +114,7 @@ export function updateTrackingUI(role?: string) {
         return; 
     }
 
-    trackingItem.text = `$(record-keys) Logging Active | ${state.activeAssignment || 'Linked Assignment'}`;
+    trackingItem.text = `$(record-keys) Logging Active`;
     trackingItem.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment || 'Linked Assignment'}`;
     trackingItem.color = new vscode.ThemeColor('testing.iconPassed');
     trackingItem.backgroundColor = undefined;

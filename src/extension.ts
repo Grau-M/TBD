@@ -183,17 +183,11 @@ export async function activate(context: vscode.ExtensionContext) {
         const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
         const workspaceName = vscode.workspace.name || 'Unknown Workspace';
         
-        const linkedAssignment = session?.authUserId
-            ? await (storageManager as any).validateAssignmentLink(session.authUserId, workspacePath)
-            : null;
-            
-        const classId = Number(linkedAssignment?.classId ?? session?.workspaceLinkedClassId ?? 0);
-        const assignmentId = Number(linkedAssignment?.assignmentId ?? session?.workspaceLinkedAssignmentId ?? 0);
+        const classId = Number(session?.workspaceLinkedClassId ?? 0);
+        const assignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
         const userId = Number(session?.authUserId ?? 0);
 
-        if (!userId || !classId || !assignmentId) {
-            return undefined;
-        }
+        if (!userId || !classId || !assignmentId) { return undefined; }
 
         const payload = { userId, classId, assignmentId, workspaceName, workspacePath };
 
@@ -207,15 +201,14 @@ export async function activate(context: vscode.ExtensionContext) {
                 );
             }
 
-            // 👉 THE FIX: Safely extract the ID even if the backend returns an array/list!
-            let projObj = Array.isArray(project) ? project[0] : (project?.projects?.[0] || project?.data?.[0] || project);
+            let projList = Array.isArray(project) ? project : (project?.projects || project?.data || [project]);
+            let projObj = Array.isArray(projList) ? projList[0] : projList;
 
             const projectId = Number(projObj?.id ?? projObj?.Id ?? projObj?.projectId ?? projObj?.ProjectId);
             
             if (!Number.isFinite(projectId) || projectId <= 0) {
-                throw new Error('Project API did not return a valid id.');
+                throw new Error(`Project API did not return a valid id. Raw data: ${JSON.stringify(projObj)}`);
             }
-
             return projectId;
         } catch (error) {
             console.warn('[TBD Logger] Unable to ensure API project.', error);
@@ -291,22 +284,29 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 //  UPDATED CONSENT GATE
     const CURRENT_POLICY_VERSION = 'v1.1'; 
-    const currentAuth = getWorkspaceAuthSession(context);
+    const currentAuth = getWorkspaceAuthSession(context) as any;
 
     // 1. Only start an API session if the user is explicitly a Student
     if (currentAuth?.authenticated && currentAuth.role === 'Student') {
-        const hasLinkedWorkspace = Number(currentAuth.workspaceLinkedClassId ?? 0) > 0
+        
+        // 👉 ROCK SOLID PATH DETECTION: Compare local memory, ignore capitalization!
+        const currentWorkspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+        const savedPath = ((currentAuth as any).workspaceRootPath || '').toLowerCase();        const activePath = currentWorkspacePath.toLowerCase();
+        
+        const isWorkspaceLinked = (savedPath === activePath) 
+            && Number(currentAuth.workspaceLinkedClassId ?? 0) > 0 
             && Number(currentAuth.workspaceLinkedAssignmentId ?? 0) > 0;
 
-        if (hasLinkedWorkspace) {
+        if (isWorkspaceLinked) {
             const projectId = await ensureProject();
             if (projectId) {
                 const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
                 const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
+                
                 if (startedSessionId) {
                     await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
                     
-                    // 👉 THE FIX: Wake up the listeners by granting consent on resume!
+                    // 👉 WAKE UP THE RECORDING
                     state.isSessionActive = true;
                     state.isConsentGiven = true; 
                     state.focusAwayStartTime = null; 
@@ -316,10 +316,12 @@ export async function activate(context: vscode.ExtensionContext) {
                     
                     void logEvent('session_start', {
                         workspaceName: vscode.workspace.name || 'Unknown Workspace',
-                        workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
+                        workspacePath: currentWorkspacePath
                     });
                 }
             }
+        } else {
+            console.log(`[TBD Logger] Path Guard Blocked: Expected ${savedPath}, Got ${activePath}`);
         }
     }
     

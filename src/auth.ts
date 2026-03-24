@@ -33,6 +33,7 @@ export interface WorkspaceAuthSession {
     workspaceLinkedClassId?: number;
     workspaceLinkedAssignmentId?: number;
     trackingConsent?: boolean;
+    workspaceRootPath?: string;
 }
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
@@ -162,7 +163,7 @@ async function runSignInFlow(): Promise<AuthIdentity | undefined> {
 async function promptStudentAssignmentLink(
     storageManager: any,
     authUserId: number
-): Promise<{ classId: number; assignmentId: number } | undefined> {
+): Promise<{ classId: number; assignmentId: number; workspaceRootPath: string } | undefined> {
     const joinCode = await vscode.window.showInputBox({
         title: 'Join Class',
         prompt: 'Enter your class join code provided by your teacher',
@@ -222,7 +223,8 @@ async function promptStudentAssignmentLink(
 
     return {
         classId: linkedClass.id,
-        assignmentId: selected.assignment.id
+        assignmentId: selected.assignment.id,
+        workspaceRootPath: metadata.workspaceRootPath // 👉 NEW
     };
 }
 
@@ -287,11 +289,14 @@ export async function initializeWorkspaceAccess(
     let workspaceLinkedActivityId: number | undefined;
     let workspaceLinkedClassId: number | undefined;
     let workspaceLinkedAssignmentId: number | undefined;
+    let workspaceRootPath: string | undefined; // 👉 NEW
+
     if (resolvedRole === 'Student') {
         const linked = await promptStudentAssignmentLink(storageManager, upserted.authUserId);
         workspaceLinkedClassId = linked?.classId;
         workspaceLinkedAssignmentId = linked?.assignmentId;
         workspaceLinkedActivityId = linked?.assignmentId;
+        workspaceRootPath = linked?.workspaceRootPath; // 👉 FIX: Successfully capture it here
     }
 
     const session: WorkspaceAuthSession = {
@@ -303,18 +308,18 @@ export async function initializeWorkspaceAccess(
         email: identity.email,
         workspaceLinkedActivityId,
         workspaceLinkedClassId,
-        workspaceLinkedAssignmentId
+        workspaceLinkedAssignmentId,
+        workspaceRootPath // 👉 FIX: Inject into the session memory
     };
 
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
-    
-await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
     
     // 👉 NEW: Force the session to start and the timer to reset!
     state.currentUserRole = session.role as 'Student' | 'Teacher' | 'Admin' | 'None';
     
     if (session.role === 'Student') {
-        state.isSessionActive = true;          // Open the gate for the timer
+        state.isSessionActive = true;  
+        state.isConsentGiven = true;        // Open the gate for the timer
         state.focusAwayStartTime = null;       // Clear the "Away" state caused by the dropdown menu
         state.sessionStartTime = Date.now();   // Reset the clock to 00:00:00
     }

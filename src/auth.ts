@@ -309,9 +309,18 @@ export async function initializeWorkspaceAccess(
 
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
     
-    // 👉 NEW: Update the global state and force the UI to refresh upon successful login
+await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+    
+    // 👉 NEW: Force the session to start and the timer to reset!
     state.currentUserRole = session.role as 'Student' | 'Teacher' | 'Admin' | 'None';
-    updateTrackingUI();
+    
+    if (session.role === 'Student') {
+        state.isSessionActive = true;          // Open the gate for the timer
+        state.focusAwayStartTime = null;       // Clear the "Away" state caused by the dropdown menu
+        state.sessionStartTime = Date.now();   // Reset the clock to 00:00:00
+    }
+    
+    updateTrackingUI(); // Instantly paint the status bar
     
     vscode.window.showInformationMessage(`Signed in as ${session.displayName} (${session.role}).`);
     return session;

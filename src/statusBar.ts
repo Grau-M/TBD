@@ -78,8 +78,19 @@ export function updateTrackingUI(role?: string) {
         return; 
     }
 
+    // 3. Student Logic 
     trackingItem.backgroundColor = undefined; 
     
+    // 👉 NEW: If they haven't finished selecting an assignment, hold the UI
+    if (!state.isSessionActive) {
+        trackingItem.text = "$(gear) TBD: Setup Pending";
+        trackingItem.tooltip = "Please finish linking your workspace.";
+        trackingItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+        trackingItem.show();
+        return; 
+    }
+
+    // Only show Away/Recording if the session is actively running
     if (state.focusAwayStartTime !== null) {
         trackingItem.text = "$(watch) TBD: Away";
         trackingItem.tooltip = "You are currently marked as away.";

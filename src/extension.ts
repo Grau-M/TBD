@@ -182,9 +182,11 @@ export async function activate(context: vscode.ExtensionContext) {
     const ensureProject = async (): Promise<number | undefined> => {
         const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
         const workspaceName = vscode.workspace.name || 'Unknown Workspace';
+        
         const linkedAssignment = session?.authUserId
             ? await (storageManager as any).validateAssignmentLink(session.authUserId, workspacePath)
             : null;
+            
         const classId = Number(linkedAssignment?.classId ?? session?.workspaceLinkedClassId ?? 0);
         const assignmentId = Number(linkedAssignment?.assignmentId ?? session?.workspaceLinkedAssignmentId ?? 0);
         const userId = Number(session?.authUserId ?? 0);
@@ -193,18 +195,23 @@ export async function activate(context: vscode.ExtensionContext) {
             return undefined;
         }
 
-        const payload = {
-            userId,
-            classId,
-            assignmentId,
-            workspaceName,
-            workspacePath
-        };
+        const payload = { userId, classId, assignmentId, workspaceName, workspacePath };
 
         try {
-            const project = await withApiTokenRetry(() => apiPost('/api/projects', payload));
+            let project;
+            try {
+                project = await withApiTokenRetry(() => apiPost('/api/projects', payload));
+            } catch (apiError: any) {
+                project = await withApiTokenRetry(() => 
+                    apiGet(`/api/projects?workspacePath=${encodeURIComponent(workspacePath)}&userId=${userId}`)
+                );
+            }
 
-            const projectId = Number(project?.id ?? project?.Id);
+            // 👉 THE FIX: Safely extract the ID even if the backend returns an array/list!
+            let projObj = Array.isArray(project) ? project[0] : (project?.projects?.[0] || project?.data?.[0] || project);
+
+            const projectId = Number(projObj?.id ?? projObj?.Id ?? projObj?.projectId ?? projObj?.ProjectId);
+            
             if (!Number.isFinite(projectId) || projectId <= 0) {
                 throw new Error('Project API did not return a valid id.');
             }
@@ -298,8 +305,14 @@ export async function activate(context: vscode.ExtensionContext) {
                 const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
                 if (startedSessionId) {
                     await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
-
+                    
+                    // 👉 THE FIX: Wake up the listeners by granting consent on resume!
                     state.isSessionActive = true;
+                    state.isConsentGiven = true; 
+                    state.focusAwayStartTime = null; 
+                    state.sessionStartTime = Date.now();
+                    
+                    updateTrackingUI();
                     
                     void logEvent('session_start', {
                         workspaceName: vscode.workspace.name || 'Unknown Workspace',

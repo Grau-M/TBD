@@ -328,7 +328,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // 2. Consent Check Gate
     if (currentAuth?.authenticated) {
         // ONLY prompt for consent if they are a student
-        if (currentAuth.role === 'Student') {
+        if (currentAuth.role === 'Student' && state.isSessionActive) {
             try {
                 const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
 
@@ -605,7 +605,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const docPath = vscode.workspace.asRelativePath(e.document.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void promptIfUnauthenticated();
-
+        if (!state.isSessionActive || !state.isConsentGiven) { return; }
         const charsAdded = e.contentChanges.reduce((sum, change) => sum + change.text.length, 0);
         const isPaste = e.contentChanges.some((change) => change.text.length > 1);
         void logEvent(isPaste ? 'paste' : 'file_edit', {

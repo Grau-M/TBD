@@ -21,7 +21,8 @@ export function createFocusListener(): vscode.Disposable {
         return; 
     }
         state.lastEventTime = Date.now();
-        if (!state.isConsentGiven) {return; }
+        
+        if (!state.isConsentGiven || !state.isSessionActive) { return; }
         if (!editor) {
             handleFocusLost();
         } else {

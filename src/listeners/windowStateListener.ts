@@ -16,7 +16,7 @@ export function createWindowStateListener(): vscode.Disposable {
     if (state.currentUserRole !== 'Student') {
         return; 
     }
-        if (!state.isConsentGiven) {return; }
+        if (!state.isConsentGiven || !state.isSessionActive) { return; }
         if (windowState.focused) {
             if (vscode.window.activeTextEditor) {handleFocusRegained();}
             

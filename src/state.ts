@@ -21,6 +21,9 @@ export const state = {
     externalCopiedText: '',
     isConsentGiven: false,
     currentUserRole: 'None' as 'Student' | 'Teacher' | 'Admin' | 'None', // track the current user's role 
+    activeCourse: null as string | null,
+    activeAssignment: null as string | null,
+    studentName: null as string | null,
 };
 
 export const CONSTANTS = {

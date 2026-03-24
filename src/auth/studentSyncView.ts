@@ -1,50 +1,284 @@
 import * as vscode from 'vscode';
-import { getWorkspaceAuthSession } from '../auth';
+import { WorkspaceAuthSession } from '../auth';
 import { storageManager } from '../state';
+import { apiGet } from '../api';
+
+interface ClassQuickPickItem extends vscode.QuickPickItem {
+    classId: number;
+    teacherAuthUserId: number;
+}
+
+interface AssignmentQuickPickItem extends vscode.QuickPickItem {
+    assignmentId: number;
+}
 
 export async function openStudentSyncView(context: vscode.ExtensionContext) {
-    const session = getWorkspaceAuthSession(context);
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+    const session = context.workspaceState.get<WorkspaceAuthSession>('tbd.auth.workspaceSession.v1');
 
-    // Fetch assignment data to confirm correct mapping
-    const assignmentInfo = session?.authUserId 
-        ? await (storageManager as any).validateAssignmentLink(session.authUserId, workspaceRoot)
-        : null;
+    if (!session?.authenticated) {
+        vscode.window.showErrorMessage("Access Denied: You must be logged in to view the Sync Dashboard.");
+        return;
+    }
 
     const panel = vscode.window.createWebviewPanel(
-        'studentSyncView',
-        'TBD: Student Sync Dashboard',
+        'syncDashboardView',
+        'TBD: Sync Dashboard',
         vscode.ViewColumn.One,
         { enableScripts: true }
     );
 
-    // Pass the fetched assignment information to the HTML
-    panel.webview.html = getStudentSyncHtml(session, assignmentInfo);
+    let apiStatus = 'Offline';
+    try {
+        const health = await apiGet('/health');
+        apiStatus = health?.status ? 'Online' : 'Offline';
+    } catch (e) {
+        apiStatus = 'Offline';
+    }
+
+    const currentWorkspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceRoot = currentWorkspaceFolder?.uri.fsPath || '';
+
+    let assignmentInfo: any = null;
+
+    // --- ROBUST DATABASE-FIRST WORKSPACE CHECK ---
+    // Instead of relying purely on local memory, we ask the database if this exact folder is linked.
+    if (session.role === 'Student' && workspaceRoot) {
+        try {
+            const classes = await (storageManager as any).listStudentClasses(session.authUserId);
+            if (classes && classes.length > 0) {
+                for (const c of classes) {
+                    const assignments = await (storageManager as any).listStudentAssignmentsForClass(session.authUserId, c.id);
+                    if (assignments) {
+                        // Find an assignment where the saved path matches the current workspace path
+                        const linked = assignments.find((a: any) => 
+                            a.workspaceRootPath && 
+                            vscode.Uri.file(a.workspaceRootPath).fsPath === vscode.Uri.file(workspaceRoot).fsPath
+                        );
+                        
+                        if (linked) {
+                            assignmentInfo = {
+                                classId: c.id,
+                                courseName: c.courseName || c.courseCode || `Class ID: ${c.id}`,
+                                assignmentId: linked.assignmentId,
+                                assignmentName: linked.assignmentName || linked.name || `Assignment ID: ${linked.assignmentId}`
+                            };
+                            
+                            // Heal the local session state so other parts of the extension know it's linked
+                            session.workspaceLinkedClassId = c.id;
+                            session.workspaceLinkedAssignmentId = linked.assignmentId;
+                            await context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("[TBD Logger] Failed to fetch assignments from DB for sync view", e);
+        }
+
+        // Fallback to local memory if DB check failed (e.g., offline)
+        if (!assignmentInfo) {
+            assignmentInfo = await (storageManager as any).validateAssignmentLink(session.authUserId, workspaceRoot);
+        }
+    }
+
+    const render = () => {
+        panel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus);
+    };
+
+    render();
 
     panel.webview.onDidReceiveMessage(async (message) => {
         if (message.command === 'forceSync') {
             try {
-                // Trigger the unified command in extension.ts
                 await vscode.commands.executeCommand('tbd-logger.forceSync');
                 panel.webview.postMessage({ command: 'syncComplete' });
             } catch (err) {
                 vscode.window.showErrorMessage("Sync Failed.");
                 panel.webview.postMessage({ command: 'syncError' });
             }
+        } 
+        
+        else if (message.command === 'triggerManualSync') {
+            if (!currentWorkspaceFolder) {
+                const choice = await vscode.window.showWarningMessage(
+                    "You must have a workspace folder open to link an assignment.",
+                    "Open Folder"
+                );
+                if (choice === "Open Folder") {
+                    vscode.commands.executeCommand('vscode.openFolder');
+                }
+                panel.webview.postMessage({ command: 'syncReset' });
+                return;
+            }
+
+            try {
+                const classes = await (storageManager as any).listStudentClasses(session.authUserId);
+                if (!classes || classes.length === 0) {
+                    vscode.window.showInformationMessage("You are not currently enrolled in any active classes.");
+                    panel.webview.postMessage({ command: 'syncReset' });
+                    return;
+                }
+
+                const classItems: ClassQuickPickItem[] = classes.map((c: any) => ({
+                    label: c.courseName || `Class ${c.id}`,
+                    description: c.courseCode,
+                    classId: c.id,
+                    teacherAuthUserId: c.teacherAuthUserId || 0
+                }));
+                
+                const selectedClass = await vscode.window.showQuickPick<ClassQuickPickItem>(classItems, {
+                    placeHolder: 'Select the Class for this assignment',
+                    ignoreFocusOut: true
+                });
+
+                if (!selectedClass) {
+                    panel.webview.postMessage({ command: 'syncReset' });
+                    return;
+                }
+
+                const assignments = await (storageManager as any).listStudentAssignmentsForClass(session.authUserId, selectedClass.classId);
+                const availableAssignments = assignments.filter((a: any) => !a.workspaceRootPath);
+
+                if (availableAssignments.length === 0) {
+                    vscode.window.showInformationMessage("All assignments in this class are already linked to other workspaces.");
+                    panel.webview.postMessage({ command: 'syncReset' });
+                    return;
+                }
+
+                const assignmentItems: AssignmentQuickPickItem[] = availableAssignments.map((a: any) => ({
+                    label: a.assignmentName || `Assignment ${a.assignmentId}`,
+                    description: a.dueDate ? `Due: ${a.dueDate}` : '',
+                    assignmentId: a.assignmentId
+                }));
+
+                const selectedAssignment = await vscode.window.showQuickPick<AssignmentQuickPickItem>(assignmentItems, {
+                    placeHolder: 'Select the Assignment to link to this workspace',
+                    ignoreFocusOut: true
+                });
+
+                if (!selectedAssignment) {
+                    panel.webview.postMessage({ command: 'syncReset' });
+                    return;
+                }
+
+                const workspaceName = currentWorkspaceFolder.name;
+                await vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: "Linking workspace to assignment...",
+                    cancellable: false
+                }, async () => {
+                    await (storageManager as any).linkStudentWorkspaceToAssignment({
+                        studentAuthUserId: session.authUserId,
+                        teacherAuthUserId: selectedClass.teacherAuthUserId,
+                        classId: selectedClass.classId,
+                        assignmentId: selectedAssignment.assignmentId,
+                        workspaceName: workspaceName,
+                        workspaceRootPath: workspaceRoot,
+                        workspaceFoldersJson: JSON.stringify([{ name: workspaceName, uri: currentWorkspaceFolder.uri.toString() }])
+                    });
+                });
+
+                // UPDATE LOCAL SESSION STATE SO THE EXTENSION REMEMBERS THE LINK
+                session.workspaceLinkedClassId = selectedClass.classId;
+                session.workspaceLinkedAssignmentId = selectedAssignment.assignmentId;
+                await context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
+
+                vscode.window.showInformationMessage(`Successfully linked workspace to ${selectedAssignment.label}.`);
+                
+                // Inject the names directly into the UI state so they display correctly right away
+                assignmentInfo = {
+                    classId: selectedClass.classId,
+                    courseName: selectedClass.label,
+                    assignmentId: selectedAssignment.assignmentId,
+                    assignmentName: selectedAssignment.label
+                };
+
+                render();
+
+            } catch (error: any) {
+                if (String(error).includes('500') || String(error).includes('Unique')) {
+                    vscode.window.showErrorMessage(`Failed to link assignment. This workspace may already be linked in the database.`);
+                } else {
+                    vscode.window.showErrorMessage(`Failed to link assignment: ${error.message || error}`);
+                }
+                panel.webview.postMessage({ command: 'syncReset' });
+            }
         }
     });
 }
 
-function getStudentSyncHtml(session: any, assignment: any) {
-    // 1. Check our conditions
-    const hasCourse = !!assignment?.courseName;
-    const hasAssignment = !!assignment?.assignmentName;
-    const canSync = hasCourse && hasAssignment;
+function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
+    const isOnline = apiStatus === 'Online';
+    const statusColor = isOnline ? 'var(--success)' : 'var(--error)';
+    const syncStatusText = isOnline ? 'Sync Online' : 'Sync Offline';
 
-    // 2. Set up our dynamic UI states
-    const statusText = canSync ? "✅ Correct Assignment Linked" : "⚠️ Sync Unavailable";
-    const statusColor = canSync ? "var(--success)" : "var(--error)";
-    const errorMessage = "Student isn't registered in a course or workspace isn't connected to an assignment.";
+    let mainContent = '';
+
+    if (session.role === 'Teacher' || session.role === 'Admin') {
+        mainContent = `
+            <div class="header">
+                <span class="logo">🎛️</span>
+                <h1 class="title">System Health Dashboard</h1>
+                <div class="status-tag" style="background: ${statusColor}">API: ${apiStatus}</div>
+            </div>
+            <div class="info-grid">
+                <div class="field">
+                    <div class="label">Backend Server Operational Status</div>
+                    <div class="value" style="color: ${statusColor}">${apiStatus}</div>
+                </div>
+                <div class="field">
+                    <div class="label">API Calls & Routing Health</div>
+                    <div class="value">${isOnline ? 'Active & Responding' : 'Unreachable'}</div>
+                </div>
+                <div class="field">
+                    <div class="label">Logged In As</div>
+                    <div class="value">${session.displayName} (${session.role})</div>
+                </div>
+            </div>
+        `;
+    } else {
+        const isLinked = !!assignment?.classId && !!assignment?.assignmentId;
+
+        mainContent = `
+            <div class="header">
+                <span class="logo">🛡️</span>
+                <h1 class="title">Sync Dashboard</h1>
+                <div class="status-tag" style="background: ${statusColor}">${syncStatusText}</div>
+            </div>
+        `;
+
+        if (isLinked) {
+            mainContent += `
+                <div class="info-grid">
+                    <div class="field">
+                        <div class="label">Course</div>
+                        <div class="value">${assignment.courseName || `Class ID: ${assignment.classId}`}</div>
+                    </div>
+                    <div class="field">
+                        <div class="label">Assignment</div>
+                        <div class="value">${assignment.assignmentName || 'Active Assignment'}</div>
+                    </div>
+                    <div class="field">
+                        <div class="label">Student Name</div>
+                        <div class="value">${session.displayName || 'N/A'}</div>
+                    </div>
+                </div>
+                <button id="forceSyncBtn" class="btn-sync">
+                    🔄 Manual Sync
+                </button>
+            `;
+        } else {
+            mainContent += `
+                <div class="error-banner" style="background: rgba(245, 158, 11, 0.1); color: #b45309; border-color: rgba(245, 158, 11, 0.2);">
+                    ⚠️ Please connect to an assignment.
+                </div>
+                <button id="manualSyncBtn" class="btn-sync">
+                    🔗 Connect Workspace to Assignment
+                </button>
+            `;
+        }
+    }
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -80,18 +314,13 @@ function getStudentSyncHtml(session: any, assignment: any) {
         .logo { font-size: 3rem; margin-bottom: 12px; display: block; }
         .title { font-size: 1.5rem; font-weight: 800; margin: 0; }
         
-        /* New Error Banner Styles */
         .error-banner {
-            background: rgba(220, 38, 38, 0.1); 
-            color: var(--error); 
             padding: 12px 16px; 
-            border: 1px solid var(--error); 
             border-radius: 8px; 
             margin-bottom: 24px; 
-            font-size: 0.9rem; 
+            font-size: 0.95rem; 
             font-weight: 600; 
             text-align: center;
-            line-height: 1.4;
         }
 
         .info-grid { display: grid; gap: 16px; margin-bottom: 32px; }
@@ -116,58 +345,47 @@ function getStudentSyncHtml(session: any, assignment: any) {
 </head>
 <body>
     <div class="card">
-        <div class="header">
-            <span class="logo" role="img" aria-label="Shield Logo">🛡️</span>
-            <h1 class="title">Sync Dashboard</h1>
-            <div class="status-tag" style="background: ${statusColor}">${statusText}</div>
-        </div>
-
-        ${!canSync ? `<div class="error-banner">❌ ${errorMessage}</div>` : ''}
-
-        <div class="info-grid">
-            <div class="field">
-                <div class="label">Course</div>
-                <div class="value">${assignment?.courseName || 'Unregistered'}</div>
-            </div>
-            <div class="field">
-                <div class="label">Target Assignment</div>
-                <div class="value">${assignment?.assignmentName || 'Unknown Workspace'}</div>
-            </div>
-            <div class="field">
-                <div class="label">Student</div>
-                <div class="value">${session?.displayName || 'N/A'}</div>
-            </div>
-        </div>
-
-        <button id="syncBtn" class="btn-sync" ${!canSync ? 'disabled' : ''}>
-            ${canSync ? '🔄 Force Sync to Assignment' : 'Sync Disabled'}
-        </button>
+        ${mainContent}
     </div>
 
     <script>
         const vscode = acquireVsCodeApi();
-        const syncBtn = document.getElementById('syncBtn');
+        
+        const forceBtn = document.getElementById('forceSyncBtn');
+        if (forceBtn) {
+            forceBtn.addEventListener('click', () => {
+                forceBtn.disabled = true;
+                forceBtn.innerText = '⌛ Syncing...';
+                vscode.postMessage({ command: 'forceSync' });
+            });
+        }
 
-        syncBtn.addEventListener('click', () => {
-            syncBtn.disabled = true;
-            syncBtn.innerText = '⌛ Syncing...';
-            vscode.postMessage({ command: 'forceSync' });
-        });
+        const manualBtn = document.getElementById('manualSyncBtn');
+        if (manualBtn) {
+            manualBtn.addEventListener('click', () => {
+                manualBtn.disabled = true;
+                manualBtn.innerText = '⌛ Opening Selector...';
+                vscode.postMessage({ command: 'triggerManualSync' });
+            });
+        }
 
         window.addEventListener('message', event => {
             const message = event.data;
-            if (message.command === 'syncComplete') {
-                syncBtn.disabled = false;
-                syncBtn.innerText = '✅ Sync Successful';
-                syncBtn.style.background = 'var(--success)';
+            if (message.command === 'syncComplete' && forceBtn) {
+                forceBtn.disabled = false;
+                forceBtn.innerText = '✅ Sync Successful';
+                forceBtn.style.background = 'var(--success)';
                 setTimeout(() => { 
-                    syncBtn.innerText = '🔄 Force Sync to Assignment';
-                    syncBtn.style.background = 'var(--accent)';
+                    forceBtn.innerText = '🔄 Manual Sync';
+                    forceBtn.style.background = 'var(--accent)';
                 }, 3000);
-            } else if (message.command === 'syncError') {
-                syncBtn.disabled = false;
-                syncBtn.innerText = '❌ Sync Failed'; 
-                syncBtn.style.background = 'var(--error)';
+            } else if (message.command === 'syncError' && forceBtn) {
+                forceBtn.disabled = false;
+                forceBtn.innerText = '❌ Sync Failed'; 
+                forceBtn.style.background = 'var(--error)';
+            } else if (message.command === 'syncReset' && manualBtn) {
+                manualBtn.disabled = false;
+                manualBtn.innerText = '🔗 Connect Workspace to Assignment';
             }
         });
     </script>

@@ -19,6 +19,10 @@ import { StandardEvent } from '../types';
 // heuristics for detecting potential AI-assisted edits.
 export function createEditListener(): vscode.Disposable {
     return vscode.workspace.onDidChangeTextDocument((event) => {
+        // 👉 The Student-Only Gate: Cut the microphone
+    if (state.currentUserRole !== 'Student') {
+        return; 
+    }
         // 1. IGNORE CHECKS
         if (event.contentChanges.length === 0) { return; }
         if (!state.isConsentGiven) {return; }

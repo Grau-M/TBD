@@ -165,6 +165,11 @@ export interface ExtensionApi {
 export async function activate(context: vscode.ExtensionContext) {
     installRuntimeWarningFilter();
     console.log('TBD Logger: activate');
+
+    const statusBarItem = createStatusBar(context);
+    const uiTimerDisposable = startUiTimer(statusBarItem);
+    context.subscriptions.push(uiTimerDisposable);
+
     // 1. Get the current session (if one exists on startup)
     const session = getWorkspaceAuthSession(context);
 
@@ -177,33 +182,33 @@ export async function activate(context: vscode.ExtensionContext) {
     const ensureProject = async (): Promise<number | undefined> => {
         const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
         const workspaceName = vscode.workspace.name || 'Unknown Workspace';
-        const linkedAssignment = session?.authUserId
-            ? await (storageManager as any).validateAssignmentLink(session.authUserId, workspacePath)
-            : null;
-        const classId = Number(linkedAssignment?.classId ?? session?.workspaceLinkedClassId ?? 0);
-        const assignmentId = Number(linkedAssignment?.assignmentId ?? session?.workspaceLinkedAssignmentId ?? 0);
+        
+        const classId = Number(session?.workspaceLinkedClassId ?? 0);
+        const assignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
         const userId = Number(session?.authUserId ?? 0);
 
-        if (!userId || !classId || !assignmentId) {
-            return undefined;
-        }
+        if (!userId || !classId || !assignmentId) { return undefined; }
 
-        const payload = {
-            userId,
-            classId,
-            assignmentId,
-            workspaceName,
-            workspacePath
-        };
+        const payload = { userId, classId, assignmentId, workspaceName, workspacePath };
 
         try {
-            const project = await withApiTokenRetry(() => apiPost('/api/projects', payload));
-
-            const projectId = Number(project?.id ?? project?.Id);
-            if (!Number.isFinite(projectId) || projectId <= 0) {
-                throw new Error('Project API did not return a valid id.');
+            let project;
+            try {
+                project = await withApiTokenRetry(() => apiPost('/api/projects', payload));
+            } catch (apiError: any) {
+                project = await withApiTokenRetry(() => 
+                    apiGet(`/api/projects?workspacePath=${encodeURIComponent(workspacePath)}&userId=${userId}`)
+                );
             }
 
+            let projList = Array.isArray(project) ? project : (project?.projects || project?.data || [project]);
+            let projObj = Array.isArray(projList) ? projList[0] : projList;
+
+            const projectId = Number(projObj?.id ?? projObj?.Id ?? projObj?.projectId ?? projObj?.ProjectId);
+            
+            if (!Number.isFinite(projectId) || projectId <= 0) {
+                throw new Error(`Project API did not return a valid id. Raw data: ${JSON.stringify(projObj)}`);
+            }
             return projectId;
         } catch (error) {
             console.warn('[TBD Logger] Unable to ensure API project.', error);
@@ -279,33 +284,51 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 //  UPDATED CONSENT GATE
     const CURRENT_POLICY_VERSION = 'v1.1'; 
-    const currentAuth = getWorkspaceAuthSession(context);
+    const currentAuth = getWorkspaceAuthSession(context) as any;
 
     // 1. Only start an API session if the user is explicitly a Student
     if (currentAuth?.authenticated && currentAuth.role === 'Student') {
-        const hasLinkedWorkspace = Number(currentAuth.workspaceLinkedClassId ?? 0) > 0
+        
+        // 👉 ROCK SOLID PATH DETECTION: Compare local memory, ignore capitalization!
+        const currentWorkspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+        const savedPath = ((currentAuth as any).workspaceRootPath || '').toLowerCase();        const activePath = currentWorkspacePath.toLowerCase();
+        
+        const isWorkspaceLinked = (savedPath === activePath) 
+            && Number(currentAuth.workspaceLinkedClassId ?? 0) > 0 
             && Number(currentAuth.workspaceLinkedAssignmentId ?? 0) > 0;
 
-        if (hasLinkedWorkspace) {
+        if (isWorkspaceLinked) {
             const projectId = await ensureProject();
             if (projectId) {
                 const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
                 const startedSessionId = await startSession(currentAuth.authUserId, projectId, nextSessionNumber);
+                
                 if (startedSessionId) {
                     await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
+                    
+                    // 👉 WAKE UP THE RECORDING
+                    state.isSessionActive = true;
+                    state.isConsentGiven = true; 
+                    state.focusAwayStartTime = null; 
+                    state.sessionStartTime = Date.now();
+                    
+                    updateTrackingUI();
+                    
                     void logEvent('session_start', {
                         workspaceName: vscode.workspace.name || 'Unknown Workspace',
-                        workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
+                        workspacePath: currentWorkspacePath
                     });
                 }
             }
+        } else {
+            console.log(`[TBD Logger] Path Guard Blocked: Expected ${savedPath}, Got ${activePath}`);
         }
     }
     
     // 2. Consent Check Gate
     if (currentAuth?.authenticated) {
         // ONLY prompt for consent if they are a student
-        if (currentAuth.role === 'Student') {
+        if (currentAuth.role === 'Student' && state.isSessionActive) {
             try {
                 const hasConsented = await storageManager.checkUserConsent(CURRENT_POLICY_VERSION);
 
@@ -518,9 +541,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Create status bar and start UI timer (REC/AWAY timer is display-only).
     // Teacher dashboard lock is role-gated and managed dynamically after auth state is known.
-    const statusBarItem = createStatusBar(context);
-    const uiTimerDisposable = startUiTimer(statusBarItem);
-    context.subscriptions.push(uiTimerDisposable);
     updateAuthStatusBar(context);
 
     // Register listeners
@@ -585,7 +605,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const docPath = vscode.workspace.asRelativePath(e.document.uri, false);
         if (isIgnoredPath(docPath)) { return; }
         void promptIfUnauthenticated();
-
+        if (!state.isSessionActive || !state.isConsentGiven) { return; }
         const charsAdded = e.contentChanges.reduce((sum, change) => sum + change.text.length, 0);
         const isPaste = e.contentChanges.some((change) => change.text.length > 1);
         void logEvent(isPaste ? 'paste' : 'file_edit', {
@@ -683,7 +703,7 @@ export async function activate(context: vscode.ExtensionContext) {
             state.sessionBuffer = []; // Hard-wipe any errant local logs so they never hit disk
             return;
         }
-            void flushBuffer()}, CONSTANTS.FLUSH_INTERVAL_MS);
+            void flushBuffer();}, CONSTANTS.FLUSH_INTERVAL_MS);
     context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
 
     // Periodic database status update (every 10 seconds)

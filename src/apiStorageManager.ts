@@ -455,6 +455,30 @@ export class ApiStorageManager {
             return null;
         }
 
+        // 👉 NEW FEATURE: Ask the backend if this file path is already registered!
+        try {
+            const result = await this.apiPostFirst([
+                '/api/workspace/validate',
+                '/api/student-assignment/validate-workspace',
+                '/api/classes/validate-workspace-link'
+            ], {
+                studentAuthUserId: _authUserId,
+                workspaceRootPath: workspaceRoot
+            });
+
+            if (result && (result.classId || result.ClassId)) {
+                return {
+                    classId: Number(result.classId || result.ClassId),
+                    assignmentId: Number(result.assignmentId || result.AssignmentId),
+                    assignmentName: String(result.assignmentName || result.AssignmentName || 'Linked Assignment'),
+                    workspaceRootPath: workspaceRoot
+                };
+            }
+        } catch (err) {
+            console.log("[TBD Logger] Backend validation route unavailable. Falling back to local cache.");
+        }
+
+        // 👉 FALLBACK: Check local memory if the API doesn't respond
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const classId = Number(session?.workspaceLinkedClassId ?? 0);
         const assignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);

@@ -1484,13 +1484,13 @@
         if (searchInput) {
           searchInput.value = "";
           searchInput.focus();
+          renderSearchDropdown(filterLogs(""));
         }
         if (dropdown) {
           dropdown.classList.remove("show");
         }
       });
     }
-
     document.addEventListener("click", (e) => {
       if (
         searchInput &&
@@ -1731,7 +1731,7 @@
               pasteLength:
                 msg.settings.pasteLengthThreshold || defaults.pasteLength,
               flagAiEvents:
-                typeof msg.settings.flagAiEvents === "boolean"
+                msg.settings.flagAiEvents !== undefined
                   ? msg.settings.flagAiEvents
                   : defaults.flagAiEvents,
             };
@@ -2950,13 +2950,16 @@
       clearAssignmentComparisonSelection();
 
       // Hide previous views
-      if (classDetailView) classDetailView.style.display = "none";
-      if ($("class-assignments-list"))
+    // Hide previous views
+      if (classDetailView) { classDetailView.style.display = "none"; }
+      if ($("class-assignments-list")) {
         $("class-assignments-list").style.display = "none";
-      if ($("class-assignments-empty"))
+      }
+      if ($("class-assignments-empty")) {
         $("class-assignments-empty").style.display = "none";
-      if (studentView) studentView.style.display = "none";
-      if (logView) logView.style.display = "none";
+      }
+      if (studentView) { studentView.style.display = "none"; }
+      if (logView) { logView.style.display = "none"; }
 
       view.style.display = "block";
       list.innerHTML = "";
@@ -2965,10 +2968,12 @@
       meta.textContent = `Students who started: ${students.length || 0}`;
 
       // Reset search and sort when opening a new assignment
-      if ($("assignment-student-search"))
+      if ($("assignment-student-search")) {
         $("assignment-student-search").value = "";
-      if ($("assignment-student-sort"))
+      }
+      if ($("assignment-student-sort")) {
         $("assignment-student-sort").value = "nameAsc";
+      }
 
       renderAssignmentStudentCards();
     } // <--- THIS CLOSING BRACE IS SUPER IMPORTANT!

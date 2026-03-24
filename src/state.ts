@@ -24,6 +24,7 @@ export const state = {
     activeCourse: null as string | null,
     activeAssignment: null as string | null,
     studentName: null as string | null,
+    isSessionActive: false,
 };
 
 export const CONSTANTS = {

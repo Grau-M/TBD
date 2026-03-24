@@ -9,6 +9,10 @@ interface ClassActivityRecord {
     teacherDisplayName: string;
 }
 
+// 👉 NEW IMPORTS
+import { state } from './state';
+import { updateTrackingUI } from './statusBar';
+
 export type AuthProvider = 'microsoft' | 'google' | 'email';
 
 interface AuthIdentity {
@@ -29,6 +33,7 @@ export interface WorkspaceAuthSession {
     workspaceLinkedClassId?: number;
     workspaceLinkedAssignmentId?: number;
     trackingConsent?: boolean;
+    workspaceRootPath?: string;
 }
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
@@ -158,7 +163,7 @@ async function runSignInFlow(): Promise<AuthIdentity | undefined> {
 async function promptStudentAssignmentLink(
     storageManager: any,
     authUserId: number
-): Promise<{ classId: number; assignmentId: number } | undefined> {
+): Promise<{ classId: number; assignmentId: number; workspaceRootPath: string } | undefined> {
     const joinCode = await vscode.window.showInputBox({
         title: 'Join Class',
         prompt: 'Enter your class join code provided by your teacher',
@@ -218,7 +223,8 @@ async function promptStudentAssignmentLink(
 
     return {
         classId: linkedClass.id,
-        assignmentId: selected.assignment.id
+        assignmentId: selected.assignment.id,
+        workspaceRootPath: metadata.workspaceRootPath // 👉 NEW
     };
 }
 
@@ -229,6 +235,11 @@ export async function initializeWorkspaceAccess(
 ): Promise<WorkspaceAuthSession | undefined> {
     const existing = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
     if (!forcePrompt && existing?.authenticated) {
+        
+        // 👉 NEW: If they were already logged in on startup, sync the state and UI
+        state.currentUserRole = existing.role as 'Student' | 'Teacher' | 'Admin' | 'None';
+        updateTrackingUI();
+        
         return existing;
     }
 
@@ -242,6 +253,11 @@ export async function initializeWorkspaceAccess(
             email: 'test@local'
         };
         await context.workspaceState.update(WORKSPACE_AUTH_KEY, synthetic);
+        
+        // 👉 NEW: Sync test state
+        state.currentUserRole = 'Admin';
+        updateTrackingUI();
+
         return synthetic;
     }
 
@@ -273,11 +289,14 @@ export async function initializeWorkspaceAccess(
     let workspaceLinkedActivityId: number | undefined;
     let workspaceLinkedClassId: number | undefined;
     let workspaceLinkedAssignmentId: number | undefined;
+    let workspaceRootPath: string | undefined; // 👉 NEW
+
     if (resolvedRole === 'Student') {
         const linked = await promptStudentAssignmentLink(storageManager, upserted.authUserId);
         workspaceLinkedClassId = linked?.classId;
         workspaceLinkedAssignmentId = linked?.assignmentId;
         workspaceLinkedActivityId = linked?.assignmentId;
+        workspaceRootPath = linked?.workspaceRootPath; // 👉 FIX: Successfully capture it here
     }
 
     const session: WorkspaceAuthSession = {
@@ -289,10 +308,24 @@ export async function initializeWorkspaceAccess(
         email: identity.email,
         workspaceLinkedActivityId,
         workspaceLinkedClassId,
-        workspaceLinkedAssignmentId
+        workspaceLinkedAssignmentId,
+        workspaceRootPath // 👉 FIX: Inject into the session memory
     };
 
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+    
+    // 👉 NEW: Force the session to start and the timer to reset!
+    state.currentUserRole = session.role as 'Student' | 'Teacher' | 'Admin' | 'None';
+    
+    if (session.role === 'Student') {
+        state.isSessionActive = true;  
+        state.isConsentGiven = true;        // Open the gate for the timer
+        state.focusAwayStartTime = null;       // Clear the "Away" state caused by the dropdown menu
+        state.sessionStartTime = Date.now();   // Reset the clock to 00:00:00
+    }
+    
+    updateTrackingUI(); // Instantly paint the status bar
+    
     vscode.window.showInformationMessage(`Signed in as ${session.displayName} (${session.role}).`);
     return session;
 }
@@ -303,6 +336,10 @@ export function getWorkspaceAuthSession(context: vscode.ExtensionContext): Works
 
 export async function clearWorkspaceAuthSession(context: vscode.ExtensionContext): Promise<void> {
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, undefined);
+    
+    // 👉 NEW: Clear the global state and update the UI upon logout
+    state.currentUserRole = 'None';
+    updateTrackingUI();
 }
 
 export async function requireRoleAccess(

@@ -757,12 +757,19 @@ export class ApiStorageManager {
     async listAssignmentStudentWork(classId: number, assignmentId: number, teacherAuthUserId: number): Promise<any[]> {
         const result = await this.apiGetFirst([
             `/api/classes/${classId}/assignments/${assignmentId}/students-work?teacherAuthUserId=${teacherAuthUserId}`,
-            `/api/classes/${classId}/assignments/${assignmentId}/students?teacherAuthUserId=${teacherAuthUserId}`
+            `/api/classes/${classId}/assignments/${assignmentId}/students?teacherAuthUserId=${teacherAuthUserId}`,
+            `/api/class-assignments/${assignmentId}/students`,
+            `/api/assignments/${assignmentId}/work`
         ]);
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.students) ? result.students : (Array.isArray(result?.data) ? result.data : []));
-        return rows;
+        return rows.map((row: any) => ({
+            authUserId: Number(row.UserId || row.userId || row.authUserId || 0),
+            studentName: String(row.StudentName || row.studentName || row.displayName || 'Unknown Student'),
+            totalEvents: Number(row.TotalEvents || row.totalEvents || row.eventCount || 0),
+            lastActive: String(row.LastActive || row.lastActive || '')
+        }));
     }
 
     async listAssignmentStudentSessions(

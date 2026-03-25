@@ -28,6 +28,8 @@ export class SessionInterruptionTracker {
     private context!: vscode.ExtensionContext;
     private inactivityThresholdMs: number;
     private checkEveryMs: number;
+    private newSessionThresholdMs: number;
+    private onRequireNewSession?: () => Promise<void>;
 
     private lastActivityMs: number = Date.now();
     private paused: boolean = false;
@@ -36,9 +38,16 @@ export class SessionInterruptionTracker {
     // tiny state file (not encrypted) so we can detect abnormal ends reliably
     private readonly STATE_FILENAME = 'integrity_state.json';
 
-    private constructor(inactivityThresholdMs: number, checkEveryMs: number) {
+    private constructor(
+        inactivityThresholdMs: number, 
+        checkEveryMs: number,
+        newSessionThresholdMs: number = 60 * 60 * 1000,
+        onRequireNewSession?: () => Promise<void>
+    ) {
         this.inactivityThresholdMs = inactivityThresholdMs;
         this.checkEveryMs = checkEveryMs;
+        this.newSessionThresholdMs = newSessionThresholdMs;
+        this.onRequireNewSession = onRequireNewSession;
     }
 
     /**
@@ -47,7 +56,12 @@ export class SessionInterruptionTracker {
      */
     static async install(
         context: vscode.ExtensionContext,
-        opts?: { inactivityThresholdMs?: number; checkEveryMs?: number }
+        opts?: { 
+            inactivityThresholdMs?: number; 
+            checkEveryMs?: number;
+            newSessionThresholdMs?: number;
+            onRequireNewSession?: () => Promise<void>;
+        }
     ): Promise<void> {
         // Function: install
         // Purpose: Create and initialize a SessionInterruptionTracker
@@ -58,8 +72,9 @@ export class SessionInterruptionTracker {
 
         const inactivity = opts?.inactivityThresholdMs ?? 5 * 60 * 1000; // default 5 min
         const checkEvery = opts?.checkEveryMs ?? 10_000;                 // default 10 sec
+        const newSessionThresh = opts?.newSessionThresholdMs ?? 60 * 60 * 1000; // default 60 min
 
-        const tracker = new SessionInterruptionTracker(inactivity, checkEvery);
+        const tracker = new SessionInterruptionTracker(inactivity, checkEvery, newSessionThresh, opts?.onRequireNewSession);
         tracker.context = context;
 
         // 1) On startup: detect abnormal end from previous run
@@ -129,13 +144,26 @@ export class SessionInterruptionTracker {
         // detected. If the tracker was paused, emit a resume marker and
         // flush the buffer.
         const now = Date.now();
+        const inactiveFor = now - this.lastActivityMs;
         this.lastActivityMs = now;
 
-        // If we were paused, first activity becomes "resume"
+        // If we were paused, first activity becomes "resume" or triggers a new session
         if (this.paused) {
             this.paused = false;
-            this.logMarker(`Session Resumed (${source})`, 'Session resumed after inactivity');
-            void flushBuffer();
+            
+            if (inactiveFor >= this.newSessionThresholdMs) {
+                this.logMarker(
+                    `Session Ended (Prolonged Inactivity of ${this.formatDuration(inactiveFor)})`,
+                    'The User returned after a long gap, forcing a new session.'
+                );
+                void flushBuffer();
+                if (this.onRequireNewSession) {
+                    void this.onRequireNewSession();
+                }
+            } else {
+                this.logMarker(`Session Resumed (${source})`, 'Session resumed after inactivity');
+                void flushBuffer();
+            }
         }
 
         // best-effort update
@@ -170,6 +198,7 @@ export class SessionInterruptionTracker {
         // Purpose: Register lightweight workspace/window listeners that
         // call `recordActivitySignal` on edit, save, editor focus, and
         // window focus events to track the user's activity.
+        
         // Typing/editing anywhere
         this.context.subscriptions.push(
             vscode.workspace.onDidChangeTextDocument(() => {

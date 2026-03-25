@@ -52,8 +52,10 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     try {
         const health = await apiGet('/health');
         apiStatus = health?.status ? 'Online' : 'Offline';
+        state.isApiOnline = apiStatus === 'Online';
     } catch (e) {
         apiStatus = 'Offline';
+        state.isApiOnline = false;
     }
 
     const currentWorkspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -217,6 +219,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 
                 state.activeCourse = selectedClass.label;
                 state.activeAssignment = selectedAssignment.label;
+                state.isApiOnline = apiStatus === 'Online';
                 updateApiKeyStatus(apiStatus === 'Online');
 
                 vscode.window.showInformationMessage(`Successfully linked workspace to ${selectedAssignment.label}.`);
@@ -231,6 +234,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 
                 state.activeCourse = selectedClass.label;
                 state.activeAssignment = selectedAssignment.label;
+                state.isApiOnline = apiStatus === 'Online';
                 updateApiKeyStatus(apiStatus === 'Online');
 
                 render();

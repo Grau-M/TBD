@@ -25,6 +25,7 @@ import { updateTrackingUI } from './statusBar';
 import * as path from 'path';
 import { openStudentSyncView } from './auth/studentSyncView';
 import { installNotificationToastTimeouts } from './notificationToasts';
+import { closeAllWebviews } from './webviewRegistry';
 
 const originalEmitWarning = process.emitWarning.bind(process);
 let runtimeWarningFilterInstalled = false;
@@ -59,15 +60,55 @@ function isTrackingConsentGranted(value: unknown): boolean {
     return value === true || value === 'true' || value === 1 || value === '1';
 }
 
+function updateStudentLoggingStatus(statusBarItem: vscode.StatusBarItem | undefined): void {
+    if (!statusBarItem) {
+        return;
+    }
+
+    if (state.currentUserRole !== 'Student' || state.isPersonalWorkspace || !state.isConsentGiven) {
+        return;
+    }
+
+    const isOffline = state.isApiOnline === false;
+    statusBarItem.text = isOffline ? '$(record-keys) Logging Offline Data' : '$(record-keys) Logging Data';
+    statusBarItem.tooltip = isOffline
+        ? 'Logging data locally while the API is offline.'
+        : 'Logging data for the current student workspace.';
+    statusBarItem.color = isOffline
+        ? new vscode.ThemeColor('descriptionForeground')
+        : new vscode.ThemeColor('testing.iconPassed');
+    statusBarItem.backgroundColor = undefined;
+    statusBarItem.command = undefined;
+}
+
+// Function to update database status bar item
 async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void> {
     const statusItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
     if (!statusItem) { return; }
 
     const session = getWorkspaceAuthSession(context);
-    const isTeacherView = !!session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin');
-    const formatTeacherApiTooltip = (apiStatus: string, backendStatus: string, routingStatus: string): string => {
-        return `API: ${apiStatus} | Backend: ${backendStatus} | Routing: ${routingStatus}`;
-    };
+    if (!session?.authenticated) {
+        statusItem.hide();
+        return;
+    }
+
+    if (session.role === 'Teacher' || session.role === 'Admin') {
+        statusItem.hide();
+        return;
+    }
+
+    if (session.role === 'Student') {
+        const globalSb = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
+        try {
+            await apiGet('/health');
+            state.isApiOnline = true;
+        } catch {
+            state.isApiOnline = false;
+        }
+        updateStudentLoggingStatus(globalSb);
+        statusItem.hide();
+        return;
+    }
     
     if (state.isPersonalWorkspace) {
         statusItem.hide();
@@ -77,34 +118,39 @@ async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void
     statusItem.show();
     statusItem.command = 'tbd-logger.openStudentSyncView';
 
+    const setTeacherApiIndicator = (isOnline: boolean, tooltip: string) => {
+        statusItem.text = '$(cloud-upload)';
+        statusItem.color = new vscode.ThemeColor(isOnline ? 'charts.green' : 'charts.orange');
+        statusItem.tooltip = tooltip;
+    };
+
     try {
         const health = await apiGet('/health');
+        state.isApiOnline = true;
         const apiStatus = String(health?.status ?? 'ok');
         const syncState = apiStatus.toLowerCase() === 'ok' ? 'online' : 'offline';
         const linkedTo = `${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
 
         try {
             await apiGet('/api/sessions');
-            statusItem.text = isTeacherView ? '$(cloud-upload) API Connected' : '$(refresh)';
-            statusItem.tooltip = isTeacherView
-                ? formatTeacherApiTooltip('Online', 'Online', 'Active & Responding')
-                : `Sync: ${syncState} | Linked to: ${linkedTo}`;
+            statusItem.text = '$(refresh)';
+            statusItem.color = undefined;
+            statusItem.tooltip = `Sync: ${syncState} | Linked to: ${linkedTo}`;
             return;
         } catch (authErr) {
             if (authErr instanceof ApiHttpError && (authErr.status === 401 || authErr.status === 403)) {
-                statusItem.text = isTeacherView ? '$(cloud-offline) API Auth Error' : '$(refresh)';
-                statusItem.tooltip = isTeacherView
-                    ? formatTeacherApiTooltip('Online', 'Online', 'Authentication Error')
-                    : `Sync: offline | Linked to: ${linkedTo}`;
+                statusItem.text = '$(refresh)';
+                statusItem.color = undefined;
+                statusItem.tooltip = `Sync: offline | Linked to: ${linkedTo}`;
                 return;
             }
             throw authErr;
         }
     } catch (err) {
-        statusItem.text = isTeacherView ? '$(database) API Offline' : '$(refresh)';
-        statusItem.tooltip = isTeacherView
-            ? formatTeacherApiTooltip('Offline', 'Offline', 'Not Responding')
-            : `Sync: offline | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
+        state.isApiOnline = false;
+        statusItem.text = '$(refresh)';
+        statusItem.color = undefined;
+        statusItem.tooltip = `Sync: offline | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
     }
 }
 
@@ -343,6 +389,7 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
         authItem.color = new vscode.ThemeColor('terminal.ansiBrightBlue');
         
         globalSb.hide();
+        dbItem?.hide();
         const apiStatusItem = (global as any).apiStatusBarItem as vscode.StatusBarItem | undefined;
         apiStatusItem?.hide();
         syncTeacherDashboardLock(context);
@@ -383,25 +430,10 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
 
     const apiStatusItem = (global as any).apiStatusBarItem as vscode.StatusBarItem | undefined;
     apiStatusItem?.show();
-    dbItem?.show();
-    if (dbItem) {
-        dbItem.command = 'tbd-logger.openStudentSyncView';
-        dbItem.text = '$(sync)';
-    }
+    dbItem?.hide();
     
-    if (state.activeAssignment) {
-        globalSb.text = `$(record) Recording: ${state.activeAssignment}`;
-        globalSb.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment}`;
-        globalSb.color = new vscode.ThemeColor('testing.iconPassed');
-        globalSb.backgroundColor = undefined;
-        globalSb.command = undefined;
-    } else {
-        globalSb.text = `$(warning) Finish Linking Workspace`;
-        globalSb.tooltip = `Click to connect this workspace to an assignment.`;
-        globalSb.color = new vscode.ThemeColor('list.warningForeground');
-        globalSb.backgroundColor = undefined;
-        globalSb.command = 'tbd-logger.openStudentSyncView';
-    }
+    // 3. WORKSPACE LINKED STATUS
+    updateStudentLoggingStatus(globalSb);
 
     syncTeacherDashboardLock(context);
     void updateDbStatusBar(context);
@@ -725,10 +757,42 @@ export async function activate(context: vscode.ExtensionContext) {
     const wRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
     await showStartupWorkspaceDebugPopup(startupDebugSession, wRoot, startupAssignmentInfo, startupDebugAssignments);
 
-    let latestSessionForConsent = getWorkspaceAuthSession(context);
-    if (latestSessionForConsent?.authenticated) {
-        if (latestSessionForConsent.role === 'Student' && !state.isPersonalWorkspace) {
-            const hasConsented = isTrackingConsentGranted(latestSessionForConsent.trackingConsent);
+    const session = startupDebugSession;
+    updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');
+    await updateDbStatusBar(context);
+    updateAuthStatusBar(context);
+
+    // 3. Update the tracking UI based on role and validation results
+    updateTrackingUI(session?.role);
+    updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');
+    updateAuthStatusBar(context);
+
+    const CURRENT_POLICY_VERSION = 'v1.1'; 
+
+    if (session?.authenticated && session.role === 'Student' && !state.isPersonalWorkspace) {
+        const hasLinkedWorkspace = Number(session.workspaceLinkedClassId ?? 0) > 0 
+            && Number(session.workspaceLinkedAssignmentId ?? 0) > 0;
+
+        if (hasLinkedWorkspace) {
+            const projectId = await ensureProject();
+            if (projectId) {
+                const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
+                const startedSessionId = await startSession(session.authUserId, projectId, nextSessionNumber);
+                if (startedSessionId) {
+                    await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
+                    void logEvent('session_start', {
+                        workspaceName: vscode.workspace.name || 'Unknown Workspace',
+                        workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
+                    });
+                }
+            }
+        }
+    }
+    
+    // Consent Check Gate
+    if (session?.authenticated) {
+        if (session.role === 'Student' && !state.isPersonalWorkspace) {
+            const hasConsented = isTrackingConsentGranted(session.trackingConsent);
             state.isConsentGiven = hasConsented;
 
             if (!hasConsented) {
@@ -901,6 +965,7 @@ export async function activate(context: vscode.ExtensionContext) {
         });
 
         if (answer) {
+            await closeAllWebviews();
             await clearWorkspaceAuthSession(context);
             updateAuthStatusBar(context);
             vscode.window.showInformationMessage('You have been logged out.');

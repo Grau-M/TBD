@@ -60,12 +60,28 @@ export function updateSyncStatus(isSyncing: boolean) {
     }
 }
 
-export function updateApiKeyStatus(isValidOrPresent: boolean) {
+export function updateApiKeyStatus(_isValidOrPresent: boolean) {
     const apiStatusItem = (global as any).apiStatusBarItem as vscode.StatusBarItem | undefined;
     if (!apiStatusItem) { return; }
 
     apiStatusItem.text = '$(cloud-upload)';
-    apiStatusItem.tooltip = `Sync: ${isValidOrPresent ? 'online' : 'offline'} | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
+    const hasWorkspaceLink = Boolean(state.activeCourse || state.activeAssignment || state.isSessionActive);
+    const isOnline = state.isApiOnline === true;
+    const isOffline = state.isApiOnline === false;
+
+    if (isOnline) {
+        apiStatusItem.color = hasWorkspaceLink
+            ? new vscode.ThemeColor('charts.green')
+            : new vscode.ThemeColor('charts.purple');
+    } else if (isOffline && hasWorkspaceLink) {
+        apiStatusItem.color = undefined;
+    } else if (isOffline) {
+        apiStatusItem.color = new vscode.ThemeColor('charts.orange');
+    } else {
+        apiStatusItem.color = undefined;
+    }
+
+    apiStatusItem.tooltip = `Sync: ${isOnline ? 'online' : isOffline ? 'offline' : 'unknown'} | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
     apiStatusItem.command = 'tbd-logger.openStudentSyncView';
     apiStatusItem.show();
 }
@@ -78,10 +94,8 @@ export function updateTrackingUI(role?: string) {
     const currentRole = role || state.currentUserRole;
 
     if (currentRole === 'None' || !currentRole) {
-        trackingItem.text = "$(person) TBD: Not Logged In";
-        trackingItem.tooltip = "Please log in to use TBD Logger.";
-        trackingItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground'); 
-        trackingItem.show();
+        trackingItem.hide();
+        dbItem?.hide();
         return; 
     }
 
@@ -99,10 +113,7 @@ export function updateTrackingUI(role?: string) {
     trackingItem.color = undefined;
 
     if (dbItem) {
-        dbItem.show();
-        dbItem.command = 'tbd-logger.openStudentSyncView';
-        dbItem.text = '$(sync)';
-        dbItem.tooltip = 'Sync status. Click to open the sync dashboard.';
+        dbItem.hide();
     }
     
     // 👉 NEW: If they haven't finished selecting an assignment, hold the UI
@@ -114,8 +125,8 @@ export function updateTrackingUI(role?: string) {
         return; 
     }
 
-    trackingItem.text = `$(record-keys) Logging Active`;
-    trackingItem.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment || 'Linked Assignment'}`;
+    trackingItem.text = `$(record-keys) Logging Data`;
+    trackingItem.tooltip = 'Logging data for the current student workspace.';
     trackingItem.color = new vscode.ThemeColor('testing.iconPassed');
     trackingItem.backgroundColor = undefined;
     trackingItem.show();

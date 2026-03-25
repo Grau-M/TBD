@@ -12,6 +12,7 @@ interface ClassActivityRecord {
 // 👉 NEW IMPORTS
 import { state } from './state';
 import { updateTrackingUI } from './statusBar';
+import { closeAllWebviews } from './webviewRegistry';
 
 export type AuthProvider = 'microsoft' | 'google' | 'email';
 
@@ -346,6 +347,7 @@ export function getWorkspaceAuthSession(context: vscode.ExtensionContext): Works
 }
 
 export async function clearWorkspaceAuthSession(context: vscode.ExtensionContext): Promise<void> {
+    await closeAllWebviews();
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, undefined);
     
     // 👉 NEW: Clear the global state and update the UI upon logout

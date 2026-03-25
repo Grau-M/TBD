@@ -3,10 +3,12 @@ import * as path from 'path';
 import { WorkspaceAuthSession } from '../../auth';
 import { getAccountHtml } from './getHtml';
 import { getThemePreference, normalizeThemePreference, setThemePreference } from '../../themePreference';
+import { registerWebviewPanel } from '../../webviewRegistry';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let accountPanel: vscode.WebviewPanel | undefined;
+let openingAccountPanel = false;
 
 async function promptStudentClassJoin(storageManager: any, authUserId: number): Promise<boolean> {
     const joinCode = await vscode.window.showInputBox({
@@ -44,9 +46,22 @@ export async function openAccountView(
     storageManager: any,
     details: { ideUser: string; workspaceName: string }
 ): Promise<WorkspaceAuthSession | undefined> {
+    const currentPanel = accountPanel;
+    if (currentPanel) {
+        currentPanel.reveal(vscode.ViewColumn.One);
+        return undefined;
+    }
+
+    if (openingAccountPanel) {
+        return undefined;
+    }
+
+    openingAccountPanel = true;
+
     const storedSession = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
     if (!storedSession?.authenticated) {
         vscode.window.showErrorMessage('You must be logged in to view account information.');
+        openingAccountPanel = false;
         return undefined;
     }
 
@@ -57,6 +72,7 @@ export async function openAccountView(
         const dbUser = await storageManager.findAuthUserByEmail(storedSession.email);
         if (!dbUser) {
             vscode.window.showErrorMessage('Unable to load account information from the database.');
+            openingAccountPanel = false;
             return undefined;
         }
 
@@ -70,11 +86,14 @@ export async function openAccountView(
         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
     } catch (error: any) {
         vscode.window.showErrorMessage(`Unable to load account information from API: ${String(error?.message || error)}`);
+        openingAccountPanel = false;
         return undefined;
     }
 
-    if (accountPanel) {
-        accountPanel.reveal(vscode.ViewColumn.One);
+    const reopenedPanel = accountPanel;
+    if (reopenedPanel) {
+        reopenedPanel.reveal(vscode.ViewColumn.One);
+        openingAccountPanel = false;
         return undefined;
     }
 
@@ -90,6 +109,8 @@ export async function openAccountView(
             }
         );
 
+        registerWebviewPanel(accountPanel);
+
         accountPanel.webview.html = getAccountHtml(accountPanel.webview, context, {
             displayName: session.displayName,
             role: session.role,
@@ -104,8 +125,11 @@ export async function openAccountView(
 
         accountPanel.onDidDispose(() => {
             accountPanel = undefined;
+            openingAccountPanel = false;
             resolve(undefined);
         }, null, context.subscriptions);
+
+        openingAccountPanel = false;
 
         accountPanel.webview.onDidReceiveMessage(async (message) => {
             try {

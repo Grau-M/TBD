@@ -26,6 +26,7 @@ export const state = {
     studentName: null as string | null,
     isSessionActive: false,
     isPersonalWorkspace: false,
+    isApiOnline: null as boolean | null,
 };
 
 export const CONSTANTS = {

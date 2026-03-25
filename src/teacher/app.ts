@@ -11,14 +11,29 @@ import {
   handleLoadLogNotes,
   handleGenerateStudentSummary
 } from './services/fileService';
+import { registerWebviewPanel } from '../webviewRegistry';
 
 const SECRET_PASSPHRASE = 'password';
 
 let panel: vscode.WebviewPanel | undefined;
+let openingPanel = false;
 
 export async function openTeacherView(context: vscode.ExtensionContext) {
+  const currentPanel = panel;
+  if (currentPanel) {
+    currentPanel.reveal(vscode.ViewColumn.One);
+    return;
+  }
+
+  if (openingPanel) {
+    return;
+  }
+
+  openingPanel = true;
+
   const allowed = await requireRoleAccess(context, ['Teacher', 'Admin'], 'Teacher Dashboard');
   if (!allowed) {
+    openingPanel = false;
     return;
   }
 
@@ -34,8 +49,10 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     // Non-blocking: dashboard can still open when alert query is unavailable.
   }
 
-  if (panel) {
-    panel.reveal(vscode.ViewColumn.One);
+  const reopenedPanel = panel;
+  if (reopenedPanel) {
+    reopenedPanel.reveal(vscode.ViewColumn.One);
+    openingPanel = false;
     return;
   }
 
@@ -46,11 +63,16 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     { enableScripts: true, localResourceRoots: [vscode.Uri.file(context.extensionPath)] }
   );
 
+  registerWebviewPanel(panel);
+
   panel.webview.html = getHtml(panel.webview, context);
 
   panel.onDidDispose(() => {
     panel = undefined;
+    openingPanel = false;
   }, null, context.subscriptions);
+
+  openingPanel = false;
 
   // Auto-Heals the connection if the cloud database was recently wiped or recreated
   const getValidTeacherId = async (): Promise<number> => {

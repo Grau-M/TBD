@@ -3470,8 +3470,34 @@
     }
 
     function renderAssignmentStudentSessions(payload) {
-      const sessions = payload.sessions || [];
+      const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
       const studentName = payload.studentName || "Student";
+      const normalizeSessionValue = (session, keys, fallback = "") => {
+        for (const key of keys) {
+          if (session?.[key] !== undefined && session?.[key] !== null && String(session?.[key]).trim() !== "") {
+            return session[key];
+          }
+        }
+        return fallback;
+      };
+      const formatSessionDate = (value) => {
+        if (!value) {
+          return "Unknown time";
+        }
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString();
+      };
+      const formatSessionEventData = (session) => {
+        const eventData = session?.EventData ?? session?.eventData ?? {};
+        if (!eventData || typeof eventData !== "object") {
+          return String(eventData || "{}");
+        }
+        try {
+          return JSON.stringify(eventData, null, 2);
+        } catch {
+          return String(eventData);
+        }
+      };
       console.log('[TBD Teacher Webview] renderAssignmentStudentSessions payload:', {
         classId: payload.classId,
         assignmentId: payload.assignmentId,
@@ -3517,13 +3543,25 @@
         const row = document.createElement("button");
         row.className = "btn btn-secondary";
         row.style.cssText =
-          "text-align:left; border:1px solid var(--border); background:var(--surface); padding:10px;";
+          "text-align:left; border:1px solid var(--border); background:var(--surface); padding:12px; white-space:normal;";
+        const sessionId = normalizeSessionValue(s, ["SessionId", "sessionId", "id", "Id"], "Unknown");
+        const assignmentLinkId = normalizeSessionValue(s, ["StudentWorkspaceAssignmentId", "studentWorkspaceAssignmentId"], "-");
+        const occurredAt = normalizeSessionValue(s, ["OccurredAt", "occurredAt", "timestamp", "Timestamp", "createdAt", "CreatedAt"], "");
+        const eventType = normalizeSessionValue(s, ["EventType", "eventType", "type", "Type"], "Unknown event");
+        const eventDataText = formatSessionEventData(s);
         row.innerHTML = `
-          <div style="font-weight:700;">${s.filename}</div>
-          <div class="meta" style="font-size:0.8rem;">${s.workspaceName || ""} • ${s.startedAt || ""} • IDE user: ${s.ideUser || ""}</div>
+          <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; width:100%;">
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:700;">Session ${sessionId}</div>
+              <div class="meta" style="font-size:0.8rem; margin-top:4px;">${formatSessionDate(occurredAt)} • ${eventType}</div>
+              <div class="meta" style="font-size:0.78rem; margin-top:4px;">StudentWorkspaceAssignmentId: ${assignmentLinkId}</div>
+            </div>
+            <div class="meta" style="font-size:0.78rem; white-space:nowrap;">Row ${sessions.indexOf(s) + 1}</div>
+          </div>
+          <pre style="margin:10px 0 0; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); white-space:pre-wrap; word-break:break-word; max-height:180px; overflow:auto; font-size:0.78rem; line-height:1.45;">${eventDataText}</pre>
         `;
         row.addEventListener("click", () => {
-          post("loadClassSessionLog", { filename: s.filename });
+          console.log('[TBD Teacher Webview] session row clicked:', s);
         });
         list.appendChild(row);
       });

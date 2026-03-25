@@ -155,7 +155,7 @@ function formatAssignmentDebugLines(items: Array<{ className: string; assignment
 async function showStartupWorkspaceDebugPopup(
     session: WorkspaceAuthSession | undefined,
     workspaceRoot: string,
-    assignmentInfo: { classId: number; courseName?: string; assignmentId: number; assignmentName: string } | null,
+    assignmentInfo: { classId: number; courseName?: string; assignmentId: number; assignmentName: string; studentWorkspaceAssignmentId?: number } | null,
     debugAssignments: Array<{ className: string; assignmentName: string; workspaceRootPath?: string }>
 ): Promise<void> {
     if (process.env.CI === 'true') {
@@ -186,6 +186,7 @@ async function showStartupWorkspaceDebugPopup(
     const consentState = session?.authenticated ? (isTrackingConsentGranted(session.trackingConsent) ? 'Granted' : 'Missing') : 'Not signed in';
     const linkedClassId = session?.workspaceLinkedClassId ?? 'None';
     const linkedAssignmentId = session?.workspaceLinkedAssignmentId ?? 'None';
+    const studentWorkspaceAssignmentId = session?.studentWorkspaceAssignmentId ?? 'None';
 
     const message = [
         `Workspace: ${workspaceName}`,
@@ -196,6 +197,7 @@ async function showStartupWorkspaceDebugPopup(
         `Session active: ${state.isSessionActive ? 'Yes' : 'No'}`,
         `Linked class ID: ${linkedClassId}`,
         `Linked assignment ID: ${linkedAssignmentId}`,
+        `Student Workspace Assignment ID: ${studentWorkspaceAssignmentId}`,
         `Resolved course: ${resolvedCourse}`,
         `Resolved assignment: ${resolvedAssignment}`,
         '',
@@ -217,10 +219,11 @@ async function showStartupWorkspaceDebugPopup(
     }
 }
 
+// FIX: Added studentWorkspaceAssignmentId to the return type so it can be passed safely to VS Code memory
 async function hydrateLinkedStudentWorkspace(
     session: WorkspaceAuthSession,
     workspaceRoot: string
-): Promise<{ classId: number; courseName: string; assignmentId: number; assignmentName: string } | null> {
+): Promise<{ classId: number; courseName: string; assignmentId: number; assignmentName: string; studentWorkspaceAssignmentId?: number } | null> {
     if (!session?.authenticated || session.role !== 'Student') {
         return null;
     }
@@ -257,11 +260,13 @@ async function hydrateLinkedStudentWorkspace(
             };
         }
 
+        // FIX: Provide the ID properly
         return {
             classId: linkedClassId,
             courseName: className,
             assignmentId: linkedAssignmentId,
-            assignmentName: String(linkedAssignment.assignmentName || linkedAssignment.name || `Assignment ID: ${linkedAssignmentId}`)
+            assignmentName: String(linkedAssignment.assignmentName || linkedAssignment.name || `Assignment ID: ${linkedAssignmentId}`),
+            studentWorkspaceAssignmentId: Number(linkedAssignment.workspaceId || linkedAssignment.id || 0)
         };
     } catch (error) {
         console.warn('[TBD Logger] Unable to hydrate linked workspace state from database.', error);
@@ -392,15 +397,15 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
     
     // 3. WORKSPACE LINKED STATUS
     if (state.activeAssignment) {
-        globalSb.text = `$(record-keys) Logging Data`;
+        globalSb.text = `$(record) Recording: ${state.activeAssignment}`;
         globalSb.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment}`;
-        globalSb.color = new vscode.ThemeColor('testing.iconPassed'); // Green text
+        globalSb.color = new vscode.ThemeColor('testing.iconPassed');
         globalSb.backgroundColor = undefined;
         globalSb.command = undefined;
     } else {
         globalSb.text = `$(warning) Finish Linking Workspace`;
         globalSb.tooltip = `Click to connect this workspace to an assignment.`;
-        globalSb.color = new vscode.ThemeColor('list.warningForeground'); // Yellow/Orange text
+        globalSb.color = new vscode.ThemeColor('list.warningForeground');
         globalSb.backgroundColor = undefined;
         globalSb.command = 'tbd-logger.openStudentSyncView';
     }
@@ -426,7 +431,7 @@ async function reconcileStudentWorkspaceState(
         return session;
     }
 
-    let assignmentInfo: { classId: number; courseName?: string; assignmentId: number; assignmentName: string } | null = null;
+    let assignmentInfo: { classId: number; courseName?: string; assignmentId: number; assignmentName: string; studentWorkspaceAssignmentId?: number } | null = null;
     const debugAssignments: Array<{ className: string; assignmentName: string; workspaceRootPath?: string }> = [];
 
     try {
@@ -451,7 +456,8 @@ async function reconcileStudentWorkspaceState(
                             classId: c.id,
                             courseName: c.courseName || c.courseCode,
                             assignmentId: linked.assignmentId,
-                            assignmentName: linked.assignmentName || linked.name
+                            assignmentName: linked.assignmentName || linked.name,
+                            studentWorkspaceAssignmentId: Number(linked.workspaceId || linked.id || 0)
                         };
                         break;
                     }
@@ -463,6 +469,7 @@ async function reconcileStudentWorkspaceState(
         assignmentInfo = await (storageManager as any).validateAssignmentLink(session.authUserId, workspaceRoot);
     }
 
+    // FIX: Save studentWorkspaceAssignmentId to session
     if (assignmentInfo) {
         state.isPersonalWorkspace = false;
         state.activeCourse = assignmentInfo.courseName || `Class ID: ${assignmentInfo.classId}`;
@@ -472,6 +479,7 @@ async function reconcileStudentWorkspaceState(
 
         session.workspaceLinkedClassId = assignmentInfo.classId;
         session.workspaceLinkedAssignmentId = assignmentInfo.assignmentId;
+        session.studentWorkspaceAssignmentId = assignmentInfo.studentWorkspaceAssignmentId; 
         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
         return session;
     }
@@ -486,6 +494,7 @@ async function reconcileStudentWorkspaceState(
 
         session.workspaceLinkedClassId = hydrated.classId;
         session.workspaceLinkedAssignmentId = hydrated.assignmentId;
+        session.studentWorkspaceAssignmentId = hydrated.studentWorkspaceAssignmentId; 
         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
         return session;
     }
@@ -574,7 +583,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const startSession = async (userId: number, projectId: number, sessionNumber: number): Promise<number | undefined> => {
         try {
-            const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+            // FIX: Prioritize studentWorkspaceAssignmentId to correctly link to the teacher dashboard
+            let studentWorkspaceAssignmentId = Number(session?.studentWorkspaceAssignmentId ?? 0);
+            
+            if (!studentWorkspaceAssignmentId) {
+                studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+            }
+
             if (!Number.isFinite(studentWorkspaceAssignmentId) || studentWorkspaceAssignmentId <= 0) {
                 throw new Error('Cannot start API session without a valid studentWorkspaceAssignmentId.');
             }
@@ -612,7 +627,6 @@ export async function activate(context: vscode.ExtensionContext) {
         if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         
         const sessionId = context.workspaceState.get<number>(SESSION_ID_KEY);
-        const studentWorkspaceAssignmentId = Number(getWorkspaceAuthSession(context)?.workspaceLinkedAssignmentId ?? 0);
         if (!sessionId) {
             return;
         }
@@ -622,11 +636,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 sessionId,
                 eventType,
                 occurredAt: new Date().toISOString(),
-                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
-                eventData: {
-                    ...data,
-                    StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined
-                }
+                eventData: data
             }));
         } catch (error) {
             console.warn(`[TBD Logger] Failed to log event: ${eventType}`, error);
@@ -674,7 +684,8 @@ export async function activate(context: vscode.ExtensionContext) {
             classId: Number(session.workspaceLinkedClassId ?? 0),
             courseName: state.activeCourse || undefined,
             assignmentId: Number(session.workspaceLinkedAssignmentId ?? 0),
-            assignmentName: state.activeAssignment
+            assignmentName: state.activeAssignment,
+            studentWorkspaceAssignmentId: Number(session.studentWorkspaceAssignmentId ?? 0)
         }
         : null;
 
@@ -1008,10 +1019,10 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.testDbConnection', async () => {
         try {
             const result = await apiGet('/health');
-            vscode.window.showInformationMessage(`✅ API ONLINE\nStatus: ${result?.status ?? 'unknown'}`);
+            vscode.window.showInformationMessage(`API ONLINE\nStatus: ${result?.status ?? 'unknown'}`);
         } catch (err: any) {
             vscode.window.showErrorMessage(
-                `❌ API health check failed!\nError: ${err?.message || String(err)}`
+                `API health check failed!\nError: ${err?.message || String(err)}`
             );
         }
         void updateDbStatusBar(context);
@@ -1075,7 +1086,7 @@ export async function activate(context: vscode.ExtensionContext) {
         
         try {
             await flushBuffer();
-            vscode.window.showInformationMessage(`✅ Successfully synced to: ${assignmentLink.assignmentName}`);
+            vscode.window.showInformationMessage(`Successfully synced to: ${assignmentLink.assignmentName}`);
         } catch (error) {
             vscode.window.showErrorMessage("Sync failed. Check your network connection.");
         } finally {

@@ -943,7 +943,7 @@ export class ApiStorageManager {
             teacherAuthUserId: Number(this.pick(workspace, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0),
             classId: Number(this.pick(workspace, ['classId', 'ClassId']) ?? classId),
             classAssignmentId: Number(this.pick(workspace, ['classAssignmentId', 'ClassAssignmentId', 'assignmentId', 'AssignmentId']) ?? assignmentId),
-            workspaceId: Number(this.pick(workspace, ['workspaceId', 'WorkspaceId']) ?? 0),
+            workspaceId: Number(this.pick(workspace, ['workspaceId', 'WorkspaceId', 'Id', 'id']) ?? 0),
             workspaceName: String(this.pick(workspace, ['workspaceName', 'WorkspaceName']) || ''),
             workspaceRootPath: String(this.pick(workspace, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
             workspaceFoldersJson: String(this.pick(workspace, ['workspaceFoldersJson', 'WorkspaceFoldersJson']) || '[]'),

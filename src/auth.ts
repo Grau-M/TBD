@@ -32,6 +32,7 @@ export interface WorkspaceAuthSession {
     workspaceLinkedActivityId?: number;
     workspaceLinkedClassId?: number;
     workspaceLinkedAssignmentId?: number;
+    studentWorkspaceAssignmentId?: number; // 👉 NEW: Crucial for linking logs to the dashboard
     trackingConsent?: boolean;
     workspaceRootPath?: string;
 }
@@ -163,7 +164,7 @@ async function runSignInFlow(): Promise<AuthIdentity | undefined> {
 async function promptStudentAssignmentLink(
     storageManager: any,
     authUserId: number
-): Promise<{ classId: number; assignmentId: number; workspaceRootPath: string } | undefined> {
+): Promise<{ classId: number; assignmentId: number; workspaceRootPath: string; studentWorkspaceAssignmentId: number } | undefined> {
     const joinCode = await vscode.window.showInputBox({
         title: 'Join Class',
         prompt: 'Enter your class join code provided by your teacher',
@@ -211,7 +212,9 @@ async function promptStudentAssignmentLink(
     const selected = pick as any;
 
     const metadata = extractWorkspaceMetadata();
-    await storageManager.linkStudentWorkspaceToAssignment({
+    
+    // 👉 FIX: Capture the result of the backend link
+    const linkResult = await storageManager.linkStudentWorkspaceToAssignment({
         studentAuthUserId: authUserId,
         teacherAuthUserId: linkedClass.teacherAuthUserId,
         classId: linkedClass.id,
@@ -224,7 +227,9 @@ async function promptStudentAssignmentLink(
     return {
         classId: linkedClass.id,
         assignmentId: selected.assignment.id,
-        workspaceRootPath: metadata.workspaceRootPath // 👉 NEW
+        workspaceRootPath: metadata.workspaceRootPath,
+        // 👉 FIX: Safely parse the returned ID from the database link request
+        studentWorkspaceAssignmentId: Number(linkResult?.id || linkResult?.Id || linkResult?.workspaceId || linkResult?.StudentWorkspaceAssignmentId || 0)
     };
 }
 
@@ -289,14 +294,16 @@ export async function initializeWorkspaceAccess(
     let workspaceLinkedActivityId: number | undefined;
     let workspaceLinkedClassId: number | undefined;
     let workspaceLinkedAssignmentId: number | undefined;
-    let workspaceRootPath: string | undefined; // 👉 NEW
+    let workspaceRootPath: string | undefined;
+    let studentWorkspaceAssignmentId: number | undefined; // 👉 FIX: Initialize new ID state variable
 
     if (resolvedRole === 'Student') {
         const linked = await promptStudentAssignmentLink(storageManager, upserted.authUserId);
         workspaceLinkedClassId = linked?.classId;
         workspaceLinkedAssignmentId = linked?.assignmentId;
         workspaceLinkedActivityId = linked?.assignmentId;
-        workspaceRootPath = linked?.workspaceRootPath; // 👉 FIX: Successfully capture it here
+        workspaceRootPath = linked?.workspaceRootPath;
+        studentWorkspaceAssignmentId = linked?.studentWorkspaceAssignmentId; // 👉 FIX: Capture the ID
     }
 
     const session: WorkspaceAuthSession = {
@@ -309,7 +316,8 @@ export async function initializeWorkspaceAccess(
         workspaceLinkedActivityId,
         workspaceLinkedClassId,
         workspaceLinkedAssignmentId,
-        workspaceRootPath // 👉 FIX: Inject into the session memory
+        studentWorkspaceAssignmentId, // 👉 FIX: Inject into the session memory
+        workspaceRootPath
     };
 
     await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);

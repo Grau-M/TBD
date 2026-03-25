@@ -255,6 +255,81 @@ export function getAccountHtml(
       padding: 9px 12px;
       font-size: 0.95rem;
     }
+    .custom-dropdown {
+      position: relative;
+    }
+    .custom-dropdown-trigger {
+      width: 100%;
+      min-height: 42px;
+      border-radius: 14px;
+      border: 1.5px solid var(--border);
+      background: var(--surface-strong);
+      color: var(--fg);
+      padding: 9px 12px;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    }
+    .custom-dropdown-trigger:hover {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border) 55%);
+    }
+    .custom-dropdown-trigger.open {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+    }
+    .custom-dropdown-trigger:focus,
+    .custom-dropdown-trigger:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+    }
+    .custom-dropdown-chevron {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    .custom-dropdown-trigger.open .custom-dropdown-chevron {
+      transform: rotate(180deg);
+    }
+    .custom-dropdown-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 8px);
+      z-index: 20;
+      padding: 10px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 95%, white 5%), var(--surface));
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 36px rgba(15,23,42,0.18);
+    }
+    .custom-dropdown-option {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--fg);
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: background 0.18s ease, transform 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .custom-dropdown-option:hover,
+    .custom-dropdown-option[aria-selected="true"] {
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 82%, white 18%));
+      color: #fff;
+      box-shadow: 0 8px 16px rgba(15,118,110,0.18);
+    }
+    .custom-dropdown-option + .custom-dropdown-option {
+      margin-top: 4px;
+    }
     input:focus {
       outline: none;
       border-color: var(--accent);

@@ -67,27 +67,24 @@ export async function openAccountView(
 
     let session = storedSession;
 
-    // Always refresh account identity from API so the account form reflects database truth.
+    // Always try to refresh account identity from API, but fall back to the cached session
+    // so the dashboard can still open when the backend is temporarily unreachable.
     try {
         const dbUser = await storageManager.findAuthUserByEmail(storedSession.email);
-        if (!dbUser) {
-            vscode.window.showErrorMessage('Unable to load account information from the database.');
-            openingAccountPanel = false;
-            return undefined;
+        if (dbUser) {
+            session = {
+                ...storedSession,
+                authUserId: dbUser.authUserId,
+                role: dbUser.role,
+                displayName: dbUser.displayName || storedSession.displayName,
+                trackingConsent: dbUser.trackingConsent // Added this mapping
+            };
+            await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+        } else {
+            vscode.window.showWarningMessage('Unable to refresh account information from the database. Showing cached account details instead.');
         }
-
-        session = {
-            ...storedSession,
-            authUserId: dbUser.authUserId,
-            role: dbUser.role,
-            displayName: dbUser.displayName || storedSession.displayName,
-            trackingConsent: dbUser.trackingConsent // Added this mapping
-        };
-        await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
     } catch (error: any) {
-        vscode.window.showErrorMessage(`Unable to load account information from API: ${String(error?.message || error)}`);
-        openingAccountPanel = false;
-        return undefined;
+        vscode.window.showWarningMessage(`Unable to refresh account information from API: ${String(error?.message || error)}. Showing cached details instead.`);
     }
 
     const reopenedPanel = accountPanel;

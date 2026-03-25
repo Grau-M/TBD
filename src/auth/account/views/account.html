@@ -83,12 +83,31 @@
             </label>
           </div>
           <div class="form-group">
-            <label for="account-theme-preference">Theme</label>
-            <select id="account-theme-preference">
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+            <label>Theme</label>
+            <div class="custom-dropdown account-theme-dropdown" id="account-theme-dropdown">
+              <input type="hidden" id="account-theme-preference" value="system" />
+              <button
+                type="button"
+                id="account-theme-trigger"
+                class="custom-dropdown-trigger"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-controls="account-theme-menu"
+              >
+                <span id="account-theme-label">System</span>
+                <span class="custom-dropdown-chevron">⌄</span>
+              </button>
+              <div
+                id="account-theme-menu"
+                class="custom-dropdown-menu hidden"
+                role="listbox"
+                aria-label="Theme preference"
+              >
+                <button type="button" class="custom-dropdown-option" data-value="system" aria-selected="true">System</button>
+                <button type="button" class="custom-dropdown-option" data-value="light" aria-selected="false">Light</button>
+                <button type="button" class="custom-dropdown-option" data-value="dark" aria-selected="false">Dark</button>
+              </div>
+            </div>
           </div>
 
           <div id="account-error" class="account-error hidden"></div>

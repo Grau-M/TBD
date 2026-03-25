@@ -47,6 +47,137 @@
       document.documentElement.classList.toggle("dark", !!shouldUseDark);
     }
 
+    const themeDropdown = $("account-theme-dropdown");
+    const themeTrigger = $("account-theme-trigger");
+    const themeMenu = $("account-theme-menu");
+    const themeInput = $("account-theme-preference");
+    const themeLabel = $("account-theme-label");
+
+    function themeOptions() {
+      return Array.from(themeMenu?.querySelectorAll(".custom-dropdown-option") || []);
+    }
+
+    function setThemePreference(value) {
+      const normalized = normalizeThemePreference(value);
+      if (themeInput) {
+        themeInput.value = normalized;
+      }
+      if (themeLabel) {
+        themeLabel.textContent = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+      }
+      if (themeMenu) {
+        themeMenu.querySelectorAll(".custom-dropdown-option").forEach((option) => {
+          option.setAttribute("aria-selected", String(option.dataset.value === normalized));
+        });
+      }
+    }
+
+    function setThemeMenuOpen(isOpen) {
+      if (themeTrigger) {
+        themeTrigger.classList.toggle("open", isOpen);
+        themeTrigger.setAttribute("aria-expanded", String(isOpen));
+      }
+      if (themeMenu) {
+        themeMenu.classList.toggle("hidden", !isOpen);
+      }
+    }
+
+    function focusThemeOption(index) {
+      const options = themeOptions();
+      if (!options.length) {
+        return;
+      }
+      const normalizedIndex = (index + options.length) % options.length;
+      options[normalizedIndex].focus();
+    }
+
+    function openThemeMenu(focusSelected = false) {
+      setThemeMenuOpen(true);
+      if (!focusSelected) {
+        return;
+      }
+      window.requestAnimationFrame(() => {
+        const options = themeOptions();
+        const selectedIndex = options.findIndex((option) => option.getAttribute("aria-selected") === "true");
+        (options[selectedIndex >= 0 ? selectedIndex : 0] || themeTrigger)?.focus();
+      });
+    }
+
+    themeTrigger?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const isOpen = themeTrigger.classList.contains("open");
+      if (isOpen) {
+        setThemeMenuOpen(false);
+        return;
+      }
+      openThemeMenu(true);
+    });
+
+    themeMenu?.querySelectorAll(".custom-dropdown-option").forEach((option) => {
+      option.addEventListener("click", () => {
+        setThemePreference(option.dataset.value || "system");
+        setThemeMenuOpen(false);
+        themeTrigger?.focus();
+      });
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!themeDropdown || !themeTrigger || !themeMenu) {
+        return;
+      }
+      if (!themeDropdown.contains(event.target)) {
+        setThemeMenuOpen(false);
+      }
+    });
+
+    themeTrigger?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const isOpen = themeTrigger.classList.contains("open");
+        if (isOpen) {
+          setThemeMenuOpen(false);
+        } else {
+          openThemeMenu(true);
+        }
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        openThemeMenu(true);
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        openThemeMenu(true);
+      }
+      if (event.key === "Escape") {
+        setThemeMenuOpen(false);
+      }
+    });
+
+    themeMenu?.addEventListener("keydown", (event) => {
+      const currentIndex = themeOptions().findIndex((option) => option === document.activeElement);
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusThemeOption(currentIndex + 1);
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusThemeOption(currentIndex - 1);
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        focusThemeOption(0);
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        focusThemeOption(themeOptions().length - 1);
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setThemeMenuOpen(false);
+        themeTrigger?.focus();
+      }
+    });
+
     function clearMessages() {
       const err = $("account-error");
       const ok = $("account-success");
@@ -465,11 +596,7 @@
         $("account-tracking-consent").checked = !!data.trackingConsent;
       }
     }
-    if ($("account-theme-preference")) {
-      $("account-theme-preference").value = normalizeThemePreference(
-        data.themePreference,
-      );
-    }
+    setThemePreference(data.themePreference);
     if ($("account-email")) {
       $("account-email").value = data.email || "";
     }
@@ -527,6 +654,7 @@
           break;
         }
         case "themePreferenceApplied": {
+          setThemePreference(msg.themePreference);
           applyThemePreference(msg.themePreference);
           break;
         }

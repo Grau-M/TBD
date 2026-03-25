@@ -114,22 +114,34 @@
       container.innerHTML = "";
 
       if (classes.length === 0) {
-        container.innerHTML = '<div class="meta">No joined classes were found for this student.</div>';
+        container.innerHTML =
+          '<div class="meta">No joined classes were found for this student.</div>';
         return;
       }
 
       classes.forEach((entry) => {
         const classInfo = entry?.classInfo || {};
-        const assignments = Array.isArray(entry?.assignments) ? entry.assignments : [];
+        const assignments = Array.isArray(entry?.assignments)
+          ? entry.assignments
+          : [];
         const classCard = document.createElement("div");
-        classCard.style.cssText = "padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02);";
+        classCard.style.cssText =
+          "padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02);";
 
         const assignmentList = assignments.length
-          ? assignments.slice(0, 8).map((assignment) => {
-              const startedLabel = assignment.started ? "Started" : "Not started";
-              const workspaceLabel = assignment.workspaceName || assignment.workspaceRootPath || "No workspace linked";
-              return `<li style="margin: 0 0 6px 0;">${assignment.name || "Assignment"} <span class="meta">(${startedLabel})</span><div class="meta" style="margin-top: 2px; word-break: break-word;">${workspaceLabel}</div></li>`;
-            }).join("")
+          ? assignments
+              .slice(0, 8)
+              .map((assignment) => {
+                const startedLabel = assignment.started
+                  ? "Started"
+                  : "Not started";
+                const workspaceLabel =
+                  assignment.workspaceName ||
+                  assignment.workspaceRootPath ||
+                  "No workspace linked";
+                return `<li style="margin: 0 0 6px 0;">${assignment.name || "Assignment"} <span class="meta">(${startedLabel})</span><div class="meta" style="margin-top: 2px; word-break: break-word;">${workspaceLabel}</div></li>`;
+              })
+              .join("")
           : '<li class="meta">No assignments found in this class.</li>';
 
         classCard.innerHTML = `
@@ -161,40 +173,132 @@
         : [];
       const focusUserId = 4;
 
-      const classStudent = classStudents.find((student) => Number(student.authUserId) === focusUserId) || null;
-      const assignmentStudent = assignmentStudents.find((student) => Number(student.authUserId) === focusUserId) || null;
+      const classStudent =
+        classStudents.find(
+          (student) => Number(student.authUserId) === focusUserId,
+        ) || null;
+      const assignmentStudent =
+        assignmentStudents.find(
+          (student) => Number(student.authUserId) === focusUserId,
+        ) || null;
       const studentReport = payload?.studentReport || null;
-      const focusStudent = assignmentStudent || classStudent || { authUserId: focusUserId };
+      const focusStudent = assignmentStudent ||
+        classStudent || { authUserId: focusUserId };
       const hasClass = !!classStudent;
       const startedAssignment = !!assignmentStudent;
-      const roleLabel = normalizeRoleLabel(studentReport?.role || focusStudent.role || classStudent?.role || "Student");
-      const studentName = studentReport?.studentName || focusStudent.studentName || "Unknown Student";
-      const currentAssignmentStarted = studentReport?.currentAssignmentStarted || startedAssignment;
-      const workspaceName = String(studentReport?.currentAssignmentWorkspaceName || assignmentStudent?.workspaceName || classStudent?.workspaceName || "No workspace linked");
-      const sessionCount = Number(studentReport?.currentAssignmentSessionCount || assignmentStudent?.sessionCount || 0);
-      const eventCount = Number(studentReport?.currentAssignmentTotalEvents || assignmentStudent?.totalEvents || 0);
-      const lastActive = formatSummaryDate(studentReport?.currentAssignmentLastActive || assignmentStudent?.lastActive);
-      const linkedAt = String(studentReport?.currentAssignmentLinkedAt || assignmentStudent?.linkedAt || classStudent?.linkedAt || "");
-      const rawResponse = payload?.studentWorkRawResponse || payload?.students || [];
+      const roleLabel = normalizeRoleLabel(
+        studentReport?.role ||
+          focusStudent.role ||
+          classStudent?.role ||
+          "Student",
+      );
+      const studentName =
+        studentReport?.studentName ||
+        focusStudent.studentName ||
+        "Unknown Student";
+      const currentAssignmentStarted =
+        studentReport?.currentAssignmentStarted || startedAssignment;
+      const workspaceName = String(
+        studentReport?.currentAssignmentWorkspaceName ||
+          assignmentStudent?.workspaceName ||
+          classStudent?.workspaceName ||
+          "No workspace linked",
+      );
+      const sessionCount = Number(
+        studentReport?.currentAssignmentSessionCount ||
+          assignmentStudent?.sessionCount ||
+          0,
+      );
+      const eventCount = Number(
+        studentReport?.currentAssignmentTotalEvents ||
+          assignmentStudent?.totalEvents ||
+          0,
+      );
+      const lastActive = formatSummaryDate(
+        studentReport?.currentAssignmentLastActive ||
+          assignmentStudent?.lastActive,
+      );
+      const linkedAt = String(
+        studentReport?.currentAssignmentLinkedAt ||
+          assignmentStudent?.linkedAt ||
+          classStudent?.linkedAt ||
+          "",
+      );
+      const rawResponse =
+        payload?.studentWorkRawResponse || payload?.students || [];
 
-      setSummaryText("assignment-summary-modal-title", `Student summary: ${studentName}`);
-      setSummaryText("assignment-summary-modal-subtitle", `User ID ${focusUserId} for ${assignment.name || "Current assignment"}`);
+      setSummaryText(
+        "assignment-summary-modal-title",
+        `Student summary: ${studentName}`,
+      );
+      setSummaryText(
+        "assignment-summary-modal-subtitle",
+        `User ID ${focusUserId} for ${assignment.name || "Current assignment"}`,
+      );
       setSummaryText("assignment-summary-user-name", studentName);
       setSummaryText("assignment-summary-user-role", `| ${roleLabel}`);
-      const joinedClassCount = Array.isArray(studentReport?.classes) ? studentReport.classes.length : (hasClass ? 1 : 0);
-      setSummaryText("assignment-summary-class-membership", joinedClassCount > 0 ? `Yes, joined ${joinedClassCount} class(es).` : "No, this user is not in the current class.");
-      setSummaryText("assignment-summary-assignment-started", currentAssignmentStarted ? "Yes, this user has started this assignment." : "No, this user has not started this assignment.");
-      setSummaryText("assignment-summary-session-count", `${sessionCount} session(s)`);
-      setSummaryText("assignment-summary-event-count", `${eventCount} total log event(s)`);
-      setSummaryText("assignment-summary-last-active", `Last active: ${lastActive}`);
+      const joinedClassCount = Array.isArray(studentReport?.classes)
+        ? studentReport.classes.length
+        : hasClass
+          ? 1
+          : 0;
+      setSummaryText(
+        "assignment-summary-class-membership",
+        joinedClassCount > 0
+          ? `Yes, joined ${joinedClassCount} class(es).`
+          : "No, this user is not in the current class.",
+      );
+      setSummaryText(
+        "assignment-summary-assignment-started",
+        currentAssignmentStarted
+          ? "Yes, this user has started this assignment."
+          : "No, this user has not started this assignment.",
+      );
+      setSummaryText(
+        "assignment-summary-session-count",
+        `${sessionCount} session(s)`,
+      );
+      setSummaryText(
+        "assignment-summary-event-count",
+        `${eventCount} total log event(s)`,
+      );
+      setSummaryText(
+        "assignment-summary-last-active",
+        `Last active: ${lastActive}`,
+      );
       setSummaryText("assignment-summary-workspace-name", workspaceName);
-      setSummaryText("assignment-summary-workspace-linked-at", linkedAt ? `Linked at: ${formatSummaryDate(linkedAt)}` : "No linked workspace timestamp available");
-      setSummaryText("assignment-summary-class-name", classInfo.courseName || "Current class");
-      setSummaryText("assignment-summary-class-code", classInfo.courseCode || "No class code");
-      setSummaryText("assignment-summary-assignment-name", assignment.name || "Current assignment");
-      setSummaryText("assignment-summary-assignment-meta", assignment.description || "No assignment description available");
-      setSummaryText("assignment-summary-status", currentAssignmentStarted ? "Assignment data found" : "No assignment work found for user 4");
-      setSummaryText("assignment-summary-details", `Class ID ${classInfo.id || currentClassId || "-"} • Assignment ID ${assignment.id || currentAssignmentId || "-"}`);
+      setSummaryText(
+        "assignment-summary-workspace-linked-at",
+        linkedAt
+          ? `Linked at: ${formatSummaryDate(linkedAt)}`
+          : "No linked workspace timestamp available",
+      );
+      setSummaryText(
+        "assignment-summary-class-name",
+        classInfo.courseName || "Current class",
+      );
+      setSummaryText(
+        "assignment-summary-class-code",
+        classInfo.courseCode || "No class code",
+      );
+      setSummaryText(
+        "assignment-summary-assignment-name",
+        assignment.name || "Current assignment",
+      );
+      setSummaryText(
+        "assignment-summary-assignment-meta",
+        assignment.description || "No assignment description available",
+      );
+      setSummaryText(
+        "assignment-summary-status",
+        currentAssignmentStarted
+          ? "Assignment data found"
+          : "No assignment work found for user 4",
+      );
+      setSummaryText(
+        "assignment-summary-details",
+        `Class ID ${classInfo.id || currentClassId || "-"} • Assignment ID ${assignment.id || currentAssignmentId || "-"}`,
+      );
       renderJoinedClasses(studentReport);
       renderRawAssignmentWork(rawResponse, payload?.students || []);
 
@@ -209,7 +313,10 @@
       }, 5000);
     }
 
-    assignmentSummaryModalClose?.addEventListener("click", closeAssignmentSummaryModal);
+    assignmentSummaryModalClose?.addEventListener(
+      "click",
+      closeAssignmentSummaryModal,
+    );
     assignmentSummaryModal?.addEventListener("click", (event) => {
       if (event.target === assignmentSummaryModal) {
         closeAssignmentSummaryModal();
@@ -375,7 +482,14 @@
       // Already 24h
       if (/^\d{1,2}:\d{2}$/.test(input)) {
         const [h, m] = input.split(":").map(Number);
-        if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+        if (
+          !Number.isFinite(h) ||
+          !Number.isFinite(m) ||
+          h < 0 ||
+          h > 23 ||
+          m < 0 ||
+          m > 59
+        ) {
           return "";
         }
         return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
@@ -390,7 +504,14 @@
       const minutes = Number(match[2]);
       const meridian = String(match[3] || "").toUpperCase();
 
-      if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours < 1 || hours > 12 || minutes < 0 || minutes > 59) {
+      if (
+        !Number.isFinite(hours) ||
+        !Number.isFinite(minutes) ||
+        hours < 1 ||
+        hours > 12 ||
+        minutes < 0 ||
+        minutes > 59
+      ) {
         return "";
       }
       if (meridian === "AM") {
@@ -441,7 +562,9 @@
         $("class-meeting-time").value = meetingTime;
       }
 
-      const [daysPart, timePart] = meetingTime.split("|").map((s) => String(s || "").trim());
+      const [daysPart, timePart] = meetingTime
+        .split("|")
+        .map((s) => String(s || "").trim());
       if (daysPart) {
         const selected = daysPart.split(",").map((s) => s.trim().toLowerCase());
         meetingDays.forEach((day) => {
@@ -456,7 +579,9 @@
         const [start, end] = timePart.split("-").map((s) => s.trim());
         if ($("class-meeting-start")) {
           $("class-meeting-start").dataset.timeValue = start || "";
-          $("class-meeting-start").value = start ? formatTimeTo12Hour(start) : "";
+          $("class-meeting-start").value = start
+            ? formatTimeTo12Hour(start)
+            : "";
         }
         if ($("class-meeting-end")) {
           $("class-meeting-end").dataset.timeValue = end || "";
@@ -500,7 +625,9 @@
         return meetingTime;
       }
 
-      const [start, end] = timePart.split("-").map((segment) => String(segment || "").trim());
+      const [start, end] = timePart
+        .split("-")
+        .map((segment) => String(segment || "").trim());
       const start12 = formatTimeTo12Hour(start);
       const end12 = formatTimeTo12Hour(end);
       if (!daysPart) {
@@ -592,7 +719,10 @@
         if (!(el instanceof HTMLInputElement)) {
           return null;
         }
-        if ((el.type !== "date" && el.type !== "time") || !targetIds.has(el.id)) {
+        if (
+          (el.type !== "date" && el.type !== "time") ||
+          !targetIds.has(el.id)
+        ) {
           return null;
         }
         return el;
@@ -751,7 +881,9 @@
           return 0;
         }
 
-        const canvas = measureTextWidth._canvas || (measureTextWidth._canvas = document.createElement("canvas"));
+        const canvas =
+          measureTextWidth._canvas ||
+          (measureTextWidth._canvas = document.createElement("canvas"));
         const context = canvas.getContext("2d");
         if (!context) {
           return 0;
@@ -762,19 +894,35 @@
 
         const baseWidth = context.measureText(text).width;
         const letterSpacing = Number.parseFloat(computed.letterSpacing || "0");
-        return baseWidth + (Number.isFinite(letterSpacing) ? Math.max(0, text.length - 1) * letterSpacing : 0);
+        return (
+          baseWidth +
+          (Number.isFinite(letterSpacing)
+            ? Math.max(0, text.length - 1) * letterSpacing
+            : 0)
+        );
       };
 
       const updateGhost = (inputEl) => {
         const ghost = getGhostEl(inputEl);
-        if (!ghost || activeInput !== inputEl || highlightedIndex < 0 || highlightedIndex >= currentVisibleTimes.length) {
+        if (
+          !ghost ||
+          activeInput !== inputEl ||
+          highlightedIndex < 0 ||
+          highlightedIndex >= currentVisibleTimes.length
+        ) {
           hideGhost(inputEl);
           return;
         }
 
-        const suggestion = String(currentVisibleTimes[highlightedIndex]?.label || "");
+        const suggestion = String(
+          currentVisibleTimes[highlightedIndex]?.label || "",
+        );
         const typed = String(inputEl.value || "");
-        if (!suggestion || !typed || !suggestion.toLowerCase().startsWith(typed.toLowerCase())) {
+        if (
+          !suggestion ||
+          !typed ||
+          !suggestion.toLowerCase().startsWith(typed.toLowerCase())
+        ) {
           hideGhost(inputEl);
           return;
         }
@@ -807,7 +955,9 @@
       };
 
       const getPeriodPriorityFromQuery = (query) => {
-        const raw = String(query || "").trim().toUpperCase();
+        const raw = String(query || "")
+          .trim()
+          .toUpperCase();
         if (!raw) {
           return null;
         }
@@ -875,17 +1025,26 @@
       };
 
       const reorderForBlankInput = (entries, query) => {
-        if (!Array.isArray(entries) || entries.length <= 1 || String(query || "").trim()) {
+        if (
+          !Array.isArray(entries) ||
+          entries.length <= 1 ||
+          String(query || "").trim()
+        ) {
           return entries;
         }
-        const startIndex = entries.findIndex((entry) => String(entry?.value || "") === "08:00");
+        const startIndex = entries.findIndex(
+          (entry) => String(entry?.value || "") === "08:00",
+        );
         if (startIndex <= 0) {
           return entries;
         }
         return entries.slice(startIndex).concat(entries.slice(0, startIndex));
       };
 
-      const normalizeTimeSearch = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const normalizeTimeSearch = (value) =>
+        String(value || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
 
       const getHour12FromCanonical = (canonical) => {
         const parts = String(canonical || "").split(":");
@@ -929,7 +1088,9 @@
       };
 
       const entryMatchesQuery = (entry, query) => {
-        const raw = String(query || "").trim().toLowerCase();
+        const raw = String(query || "")
+          .trim()
+          .toLowerCase();
         if (!raw) {
           return true;
         }
@@ -965,7 +1126,12 @@
           }
           if (raw.length === 1) {
             if (raw === "1") {
-              return hourText === "1" || hourText === "10" || hourText === "11" || hourText === "12";
+              return (
+                hourText === "1" ||
+                hourText === "10" ||
+                hourText === "11" ||
+                hourText === "12"
+              );
             }
             return hourText === raw;
           }
@@ -976,12 +1142,17 @@
         return getTimeSearchTokens(entry).some((token) => {
           const tokenLower = String(token || "").toLowerCase();
           const normalizedToken = normalizeTimeSearch(tokenLower);
-          return tokenLower.startsWith(raw) || normalizedToken.startsWith(normalizedQuery);
+          return (
+            tokenLower.startsWith(raw) ||
+            normalizedToken.startsWith(normalizedQuery)
+          );
         });
       };
 
       const sanitizeMinuteDigits = (minuteDigitsRaw) => {
-        const minuteDigits = String(minuteDigitsRaw || "").replace(/\D/g, "").slice(0, 2);
+        const minuteDigits = String(minuteDigitsRaw || "")
+          .replace(/\D/g, "")
+          .slice(0, 2);
         if (!minuteDigits) {
           return "";
         }
@@ -1018,7 +1189,9 @@
         const firstColon = raw.indexOf(":");
         let hasColon = firstColon >= 0;
         let hourPart = hasColon ? raw.slice(0, firstColon) : raw;
-        let minutePart = hasColon ? raw.slice(firstColon + 1).replace(/:/g, "") : "";
+        let minutePart = hasColon
+          ? raw.slice(firstColon + 1).replace(/:/g, "")
+          : "";
         hourPart = hourPart.replace(/\D/g, "");
 
         if (!hourPart) {
@@ -1048,13 +1221,17 @@
               return "1";
             }
             const minuteDigits = sanitizeMinuteDigits(hourPart.slice(2));
-            const base = minuteDigits ? `1${second}:${minuteDigits}` : `1${second}:`;
+            const base = minuteDigits
+              ? `1${second}:${minuteDigits}`
+              : `1${second}:`;
             return meridian ? `${base} ${meridian}` : base;
           }
 
           if (/^[2-9]$/.test(first)) {
             const minuteDigits = sanitizeMinuteDigits(hourPart.slice(1));
-            const base = minuteDigits ? `${first}:${minuteDigits}` : `${first}:`;
+            const base = minuteDigits
+              ? `${first}:${minuteDigits}`
+              : `${first}:`;
             return meridian ? `${base} ${meridian}` : base;
           }
 
@@ -1090,7 +1267,9 @@
 
         let canonical = "";
         if (normalized) {
-          const nakedMatch = normalized.match(/^\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM|A|P)?\s*$/i);
+          const nakedMatch = normalized.match(
+            /^\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM|A|P)?\s*$/i,
+          );
           if (nakedMatch) {
             const hour12 = Number(nakedMatch[1]);
             const minute = String(nakedMatch[2] || "00");
@@ -1103,7 +1282,10 @@
             if (!period) {
               period = getPreferredPeriodFromHour12(hour12);
             }
-            canonical = parseDisplayTimeTo24Hour(`${hour12}:${minute} ${period}`) || parseDisplayTimeTo24Hour(normalized) || "";
+            canonical =
+              parseDisplayTimeTo24Hour(`${hour12}:${minute} ${period}`) ||
+              parseDisplayTimeTo24Hour(normalized) ||
+              "";
           } else {
             canonical = parseDisplayTimeTo24Hour(normalized) || "";
           }
@@ -1126,7 +1308,9 @@
         }
 
         const normalized = normalizeTypedTimeInput(inputEl.value || "");
-        const match = normalized.match(/^\s*(\d{1,2}):(\d{1,2})(?:\s*(AM|PM|A|P))?\s*$/i);
+        const match = normalized.match(
+          /^\s*(\d{1,2}):(\d{1,2})(?:\s*(AM|PM|A|P))?\s*$/i,
+        );
         if (!match) {
           return "";
         }
@@ -1154,7 +1338,9 @@
           period = getPreferredPeriodFromHour12(hour12);
         }
 
-        const canonical = parseDisplayTimeTo24Hour(`${hour12}:${minute} ${period}`);
+        const canonical = parseDisplayTimeTo24Hour(
+          `${hour12}:${minute} ${period}`,
+        );
         if (!canonical) {
           return "";
         }
@@ -1204,7 +1390,10 @@
           highlightedIndex >= 0 &&
           highlightedIndex < currentVisibleTimes.length
         ) {
-          lastSuggestedByInputId.set(activeInput.id, currentVisibleTimes[highlightedIndex]);
+          lastSuggestedByInputId.set(
+            activeInput.id,
+            currentVisibleTimes[highlightedIndex],
+          );
         }
 
         if (activeInput) {
@@ -1212,7 +1401,11 @@
         }
       };
 
-      const renderDropdown = (inputEl, filterText, preserveHighlight = false) => {
+      const renderDropdown = (
+        inputEl,
+        filterText,
+        preserveHighlight = false,
+      ) => {
         if (!(inputEl instanceof HTMLInputElement)) {
           return;
         }
@@ -1246,12 +1439,18 @@
         }
 
         const current = getCanonicalTimeValue(inputEl);
-        let preferredIndex = currentVisibleTimes.findIndex((entry) => entry.value === current);
+        let preferredIndex = currentVisibleTimes.findIndex(
+          (entry) => entry.value === current,
+        );
         if (preferredIndex < 0) {
           preferredIndex = currentVisibleTimes.length ? 0 : -1;
         }
 
-        if (!preserveHighlight || highlightedIndex < 0 || highlightedIndex >= currentVisibleTimes.length) {
+        if (
+          !preserveHighlight ||
+          highlightedIndex < 0 ||
+          highlightedIndex >= currentVisibleTimes.length
+        ) {
           highlightedIndex = preferredIndex;
         }
 
@@ -1312,7 +1511,11 @@
         }
 
         el.addEventListener("keydown", (event) => {
-          const isCharKey = event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
+          const isCharKey =
+            event.key.length === 1 &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !event.altKey;
           if (isCharKey) {
             const caretStart = Number(el.selectionStart ?? el.value.length);
             const meridianStart = el.value.indexOf(" ");
@@ -1325,7 +1528,9 @@
                 return;
               }
             } else if (/[apmAPM]/.test(event.key)) {
-              const canTypeMeridian = hasMinuteSection && (inMeridian || caretStart >= el.value.length - 1);
+              const canTypeMeridian =
+                hasMinuteSection &&
+                (inMeridian || caretStart >= el.value.length - 1);
               if (!canTypeMeridian) {
                 event.preventDefault();
                 return;
@@ -1342,7 +1547,7 @@
             if (start === end && start > 0 && el.value[start - 1] === ":") {
               event.preventDefault();
               const nextChar = el.value[start] || "";
-              const removeCount = nextChar === "1" ? 1 : (nextChar ? 2 : 1);
+              const removeCount = nextChar === "1" ? 1 : nextChar ? 2 : 1;
               const newValue = `${el.value.slice(0, start - 1)}${el.value.slice(start - 1 + removeCount)}`;
               el.value = normalizeTypedTimeInput(newValue);
               const newCaret = Math.max(0, start - 1);
@@ -1379,7 +1584,11 @@
           }
 
           if (event.key === "Enter") {
-            if (dropdown?.style.display === "block" && highlightedIndex >= 0 && highlightedIndex < currentVisibleTimes.length) {
+            if (
+              dropdown?.style.display === "block" &&
+              highlightedIndex >= 0 &&
+              highlightedIndex < currentVisibleTimes.length
+            ) {
               event.preventDefault();
               setInputToEntry(el, currentVisibleTimes[highlightedIndex]);
               closeDropdown();
@@ -1398,7 +1607,11 @@
           }
 
           if (event.key === "Tab") {
-            if (!String(el.dataset.timeValue || "") && highlightedIndex >= 0 && highlightedIndex < currentVisibleTimes.length) {
+            if (
+              !String(el.dataset.timeValue || "") &&
+              highlightedIndex >= 0 &&
+              highlightedIndex < currentVisibleTimes.length
+            ) {
               setInputToEntry(el, currentVisibleTimes[highlightedIndex]);
             }
             coerceTypedTime(el);
@@ -1423,13 +1636,24 @@
           openDropdown(el, el.value);
         });
         el.addEventListener("blur", () => {
-          const lastSuggested = el.id ? lastSuggestedByInputId.get(el.id) : null;
+          const lastSuggested = el.id
+            ? lastSuggestedByInputId.get(el.id)
+            : null;
           if (!String(el.dataset.timeValue || "") && lastSuggested) {
-            const typed = String(el.value || "").trim().toLowerCase();
-            const suggestedLabel = String(lastSuggested.label || "").trim().toLowerCase();
+            const typed = String(el.value || "")
+              .trim()
+              .toLowerCase();
+            const suggestedLabel = String(lastSuggested.label || "")
+              .trim()
+              .toLowerCase();
             const suggestedCanonical = String(lastSuggested.value || "").trim();
-            const suggested12 = formatTimeTo12Hour(suggestedCanonical).toLowerCase();
-            if (!typed || suggestedLabel.startsWith(typed) || suggested12.startsWith(typed)) {
+            const suggested12 =
+              formatTimeTo12Hour(suggestedCanonical).toLowerCase();
+            if (
+              !typed ||
+              suggestedLabel.startsWith(typed) ||
+              suggested12.startsWith(typed)
+            ) {
               setInputToEntry(el, lastSuggested);
             }
           }
@@ -1445,8 +1669,11 @@
           if (!activeInput) {
             return;
           }
-          const clickedInput = target instanceof HTMLElement && target.closest("#class-meeting-start, #class-meeting-end");
-          const clickedDropdown = dropdown && target instanceof Node && dropdown.contains(target);
+          const clickedInput =
+            target instanceof HTMLElement &&
+            target.closest("#class-meeting-start, #class-meeting-end");
+          const clickedDropdown =
+            dropdown && target instanceof Node && dropdown.contains(target);
           if (!clickedInput && !clickedDropdown) {
             closeDropdown();
           }
@@ -1468,9 +1695,14 @@
     window.postTeacherMessage = post;
 
     // --- Shared theme preference (set in Account page) ---
-    const themePreference = String(window.__TBD_THEME_PREFERENCE__ || "system").toLowerCase();
-    const shouldUseDark = themePreference === "dark" ||
-      (themePreference === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const themePreference = String(
+      window.__TBD_THEME_PREFERENCE__ || "system",
+    ).toLowerCase();
+    const shouldUseDark =
+      themePreference === "dark" ||
+      (themePreference === "system" &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.classList.toggle("dark", !!shouldUseDark);
 
     if (hamburgerBtn && sidebarEl) {
@@ -2106,12 +2338,16 @@
           if ($("class-form-card")?.style.display === "block") {
             const errEl = $("class-form-error");
             if (errEl) {
-              errEl.textContent = msg.message || "Unable to save class. Please try again.";
+              errEl.textContent =
+                msg.message || "Unable to save class. Please try again.";
               errEl.style.display = "block";
             }
           }
           // If class loading fails, stop spinner and show empty state instead of hanging.
-          if (currentTab === "class" && $("class-detail-view")?.style.display !== "block") {
+          if (
+            currentTab === "class" &&
+            $("class-detail-view")?.style.display !== "block"
+          ) {
             setClassRefreshLoading(false);
             const loadingEl = $("class-list-loading");
             const emptyEl = $("class-list-empty");
@@ -2170,7 +2406,9 @@
               renderClasses(currentTeacherClasses);
             }
             if (status) {
-              status.textContent = (classes.length || currentTeacherClasses.length) + " class(es) loaded";
+              status.textContent =
+                (classes.length || currentTeacherClasses.length) +
+                " class(es) loaded";
             }
           }
           break;
@@ -2202,7 +2440,9 @@
             const newClass = msg.data;
             currentTeacherClasses = [
               newClass,
-              ...currentTeacherClasses.filter((cls) => Number(cls.id || 0) !== Number(newClass.id || 0)),
+              ...currentTeacherClasses.filter(
+                (cls) => Number(cls.id || 0) !== Number(newClass.id || 0),
+              ),
             ];
             renderClasses(currentTeacherClasses);
           }
@@ -2736,7 +2976,10 @@
       }
 
       const inClassDetail = $("class-detail-view")?.style.display === "block";
-      btn.style.display = inClassDetail && currentClassDetailTab === "assignments" ? "inline-flex" : "none";
+      btn.style.display =
+        inClassDetail && currentClassDetailTab === "assignments"
+          ? "inline-flex"
+          : "none";
     }
 
     function isInClassFlowView() {
@@ -2785,7 +3028,9 @@
       }
       applyMeetingScheduleText(classInfo.meetingTime || "");
       if ($("class-start-date")) {
-        $("class-start-date").value = normalizeDateForInput(classInfo.startDate);
+        $("class-start-date").value = normalizeDateForInput(
+          classInfo.startDate,
+        );
       }
       if ($("class-end-date")) {
         $("class-end-date").value = normalizeDateForInput(classInfo.endDate);
@@ -2803,7 +3048,8 @@
       const loadingEl = $("class-list-loading");
       const detailView = $("class-detail-view");
       const nextClasses = Array.isArray(classes) ? classes : [];
-      const classesToRender = nextClasses.length > 0 ? nextClasses : currentTeacherClasses;
+      const classesToRender =
+        nextClasses.length > 0 ? nextClasses : currentTeacherClasses;
 
       if (loadingEl) {
         loadingEl.style.display = "none";
@@ -3061,16 +3307,24 @@
           return { ...assignment, dueDate, isPastDue };
         })
         .sort((left, right) => {
-          const leftTime = left.dueDate ? left.dueDate.getTime() : Number.POSITIVE_INFINITY;
-          const rightTime = right.dueDate ? right.dueDate.getTime() : Number.POSITIVE_INFINITY;
+          const leftTime = left.dueDate
+            ? left.dueDate.getTime()
+            : Number.POSITIVE_INFINITY;
+          const rightTime = right.dueDate
+            ? right.dueDate.getTime()
+            : Number.POSITIVE_INFINITY;
           if (left.isPastDue !== right.isPastDue) {
             return left.isPastDue ? 1 : -1;
           }
           return leftTime - rightTime;
         });
 
-      const activeAssignments = normalized.filter((assignment) => !assignment.isPastDue);
-      const pastAssignments = normalized.filter((assignment) => assignment.isPastDue);
+      const activeAssignments = normalized.filter(
+        (assignment) => !assignment.isPastDue,
+      );
+      const pastAssignments = normalized.filter(
+        (assignment) => assignment.isPastDue,
+      );
 
       const buildAssignmentCard = (assignment, isPastDue) => {
         const card = document.createElement("div");
@@ -3081,9 +3335,11 @@
           <div style="font-weight:700;">${assignment.name}</div>
           <div class="meta" style="margin-top:4px;">${assignment.description || "No description"}</div>
           <div class="meta" style="margin-top:6px;">
-            ${isPastDue
-              ? `<span style="display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:rgba(239, 68, 68, 0.16); color:#f87171; border:1px solid rgba(239, 68, 68, 0.45); font-weight:700;">Past Due: ${formatClassDateDisplay(assignment.dueDate)}</span>`
-              : `Due: ${assignment.dueDate ? formatClassDateDisplay(assignment.dueDate) : "No due date"}`}
+            ${
+              isPastDue
+                ? `<span style="display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:rgba(239, 68, 68, 0.16); color:#f87171; border:1px solid rgba(239, 68, 68, 0.45); font-weight:700;">Past Due: ${formatClassDateDisplay(assignment.dueDate)}</span>`
+                : `Due: ${assignment.dueDate ? formatClassDateDisplay(assignment.dueDate) : "No due date"}`
+            }
           </div>
           <div style="margin-top:10px;">
             <button class="btn btn-primary assignment-work-btn" style="padding:6px 10px;">View Student Work</button>
@@ -3106,7 +3362,8 @@
 
       if (activeAssignments.length > 0) {
         const activeHeader = document.createElement("div");
-        activeHeader.style.cssText = "margin: 8px 0 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem;";
+        activeHeader.style.cssText =
+          "margin: 8px 0 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem;";
         activeHeader.textContent = "Current Assignments";
         list.appendChild(activeHeader);
 
@@ -3117,7 +3374,8 @@
 
       if (pastAssignments.length > 0) {
         const pastHeader = document.createElement("div");
-        pastHeader.style.cssText = "margin: 8px 0 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem;";
+        pastHeader.style.cssText =
+          "margin: 8px 0 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem;";
         pastHeader.textContent = "Past Assignments";
         list.appendChild(pastHeader);
 
@@ -3130,13 +3388,17 @@
     function renderAssignmentWork(payload) {
       const assignment = payload.assignment || {};
       const students = Array.isArray(payload.students) ? payload.students : [];
-      const classStudents = Array.isArray(payload.classStudents) ? payload.classStudents : [];
+      const classStudents = Array.isArray(payload.classStudents)
+        ? payload.classStudents
+        : [];
       const studentReport = payload.studentReport || null;
-      const rawStudentsWorkRows = Array.isArray(payload.studentWorkRawResponse?.students)
+      const rawStudentsWorkRows = Array.isArray(
+        payload.studentWorkRawResponse?.students,
+      )
         ? payload.studentWorkRawResponse.students
-        : (Array.isArray(payload.studentWorkRawResponse?.data)
+        : Array.isArray(payload.studentWorkRawResponse?.data)
           ? payload.studentWorkRawResponse.data
-          : students);
+          : students;
 
       const view = $("assignment-work-view");
 
@@ -3160,68 +3422,91 @@
       currentAssignmentStudents = rawStudentsWorkRows.map((student) => {
         const studentAuthUserId = Number(
           student?.authUserId ??
-          student?.AuthUserId ??
-          student?.UserId ??
-          student?.userId ??
-          0
+            student?.AuthUserId ??
+            student?.UserId ??
+            student?.userId ??
+            0,
         );
         const studentSessionCount = Number(
           student?.sessionCount ??
-          student?.SessionCount ??
-          student?.totalSessions ??
-          student?.TotalSessions ??
-          studentReport?.currentAssignmentSessionCount ??
-          0
+            student?.SessionCount ??
+            student?.totalSessions ??
+            student?.TotalSessions ??
+            studentReport?.currentAssignmentSessionCount ??
+            0,
         );
         const studentTotalEvents = Number(
           student?.totalEvents ??
-          student?.TotalEvents ??
-          student?.eventCount ??
-          student?.EventCount ??
-          studentReport?.currentAssignmentTotalEvents ??
-          0
+            student?.TotalEvents ??
+            student?.eventCount ??
+            student?.EventCount ??
+            studentReport?.currentAssignmentTotalEvents ??
+            0,
         );
         const studentLastActive = String(
           student?.lastActive ??
-          student?.LastActive ??
-          studentReport?.currentAssignmentLastActive ??
-          ''
+            student?.LastActive ??
+            studentReport?.currentAssignmentLastActive ??
+            "",
         );
         const studentWorkspaceName = String(
           student?.workspaceName ??
-          student?.WorkspaceName ??
-          studentReport?.currentAssignmentWorkspaceName ??
-          ''
+            student?.WorkspaceName ??
+            studentReport?.currentAssignmentWorkspaceName ??
+            "",
         );
         const studentWorkspaceRootPath = String(
           student?.workspaceRootPath ??
-          student?.WorkspaceRootPath ??
-          studentReport?.currentAssignmentWorkspacePath ??
-          ''
+            student?.WorkspaceRootPath ??
+            studentReport?.currentAssignmentWorkspacePath ??
+            "",
         );
         const studentLinkedAt = String(
           student?.linkedAt ??
-          student?.LinkedAt ??
-          studentReport?.currentAssignmentLinkedAt ??
-          ''
+            student?.LinkedAt ??
+            studentReport?.currentAssignmentLinkedAt ??
+            "",
         );
 
-        if (!studentReport || Number(student.authUserId) !== Number(studentReport.authUserId)) {
+        if (
+          !studentReport ||
+          Number(student.authUserId) !== Number(studentReport.authUserId)
+        ) {
           return {
             ...student,
             authUserId: studentAuthUserId,
-            studentName: String(student?.studentName || student?.StudentName || student?.displayName || 'Unknown Student'),
-            studentEmail: String(student?.studentEmail || student?.StudentEmail || student?.email || ''),
-            role: normalizeRoleLabel(student?.role || student?.Role || 'Student'),
+            studentName: String(
+              student?.studentName ||
+                student?.StudentName ||
+                student?.displayName ||
+                "Unknown Student",
+            ),
+            studentEmail: String(
+              student?.studentEmail ||
+                student?.StudentEmail ||
+                student?.email ||
+                "",
+            ),
+            role: normalizeRoleLabel(
+              student?.role || student?.Role || "Student",
+            ),
             workspaceName: studentWorkspaceName,
             workspaceRootPath: studentWorkspaceRootPath,
             linkedAt: studentLinkedAt,
             sessionCount: studentSessionCount,
             totalEvents: studentTotalEvents,
             lastActive: studentLastActive,
-            aiEventCount: Number(student?.aiEventCount ?? student?.AiEventCount ?? 0),
-            totalPasteEvents: Number(student?.totalPasteEvents ?? student?.TotalPasteEvents ?? 0),
-            suspiciousPasteCount: Number(student?.suspiciousPasteCount ?? student?.SuspiciousPasteCount ?? 0)
+            aiEventCount: Number(
+              student?.aiEventCount ?? student?.AiEventCount ?? 0,
+            ),
+            totalPasteEvents: Number(
+              student?.totalPasteEvents ?? student?.TotalPasteEvents ?? 0,
+            ),
+            suspiciousPasteCount: Number(
+              student?.suspiciousPasteCount ??
+                student?.SuspiciousPasteCount ??
+                0,
+            ),
           };
         }
 
@@ -3231,40 +3516,74 @@
           studentName: studentReport.studentName || student.studentName,
           studentEmail: studentReport.studentEmail || student.studentEmail,
           role: studentReport.role || student.role,
-          workspaceName: studentReport.currentAssignmentWorkspaceName || studentWorkspaceName,
-          workspaceRootPath: studentReport.currentAssignmentWorkspacePath || studentWorkspaceRootPath,
+          workspaceName:
+            studentReport.currentAssignmentWorkspaceName ||
+            studentWorkspaceName,
+          workspaceRootPath:
+            studentReport.currentAssignmentWorkspacePath ||
+            studentWorkspaceRootPath,
           linkedAt: studentReport.currentAssignmentLinkedAt || studentLinkedAt,
-          sessionCount: Number(studentReport.currentAssignmentSessionCount ?? studentSessionCount ?? 0),
-          totalEvents: Number(studentReport.currentAssignmentTotalEvents ?? studentTotalEvents ?? 0),
-          lastActive: studentReport.currentAssignmentLastActive || studentLastActive,
-          aiEventCount: Number(student?.aiEventCount ?? student?.AiEventCount ?? 0),
-          totalPasteEvents: Number(student?.totalPasteEvents ?? student?.TotalPasteEvents ?? 0),
-          suspiciousPasteCount: Number(student?.suspiciousPasteCount ?? student?.SuspiciousPasteCount ?? 0)
+          sessionCount: Number(
+            studentReport.currentAssignmentSessionCount ??
+              studentSessionCount ??
+              0,
+          ),
+          totalEvents: Number(
+            studentReport.currentAssignmentTotalEvents ??
+              studentTotalEvents ??
+              0,
+          ),
+          lastActive:
+            studentReport.currentAssignmentLastActive || studentLastActive,
+          aiEventCount: Number(
+            student?.aiEventCount ?? student?.AiEventCount ?? 0,
+          ),
+          totalPasteEvents: Number(
+            student?.totalPasteEvents ?? student?.TotalPasteEvents ?? 0,
+          ),
+          suspiciousPasteCount: Number(
+            student?.suspiciousPasteCount ?? student?.SuspiciousPasteCount ?? 0,
+          ),
         };
       });
       currentClassStudents = classStudents;
       clearAssignmentComparisonSelection();
 
       // Hide previous views
-    // Hide previous views
-      if (classDetailView) { classDetailView.style.display = "none"; }
+      // Hide previous views
+      if (classDetailView) {
+        classDetailView.style.display = "none";
+      }
       if ($("class-assignments-list")) {
         $("class-assignments-list").style.display = "none";
       }
       if ($("class-assignments-empty")) {
         $("class-assignments-empty").style.display = "none";
       }
-      if (studentView) { studentView.style.display = "none"; }
-      if (logView) { logView.style.display = "none"; }
+      if (studentView) {
+        studentView.style.display = "none";
+      }
+      if (logView) {
+        logView.style.display = "none";
+      }
 
       view.style.display = "block";
       list.innerHTML = "";
 
       showAssignmentSummaryModal(payload);
 
-      const currentStudent = currentAssignmentStudents.find((student) => Number(student.authUserId) === Number(studentReport?.authUserId)) || currentAssignmentStudents[0] || null;
+      const currentStudent =
+        currentAssignmentStudents.find(
+          (student) =>
+            Number(student.authUserId) === Number(studentReport?.authUserId),
+        ) ||
+        currentAssignmentStudents[0] ||
+        null;
       if (currentStudent) {
-        assignment.description = assignment.description || currentStudent.workspaceName || "No description";
+        assignment.description =
+          assignment.description ||
+          currentStudent.workspaceName ||
+          "No description";
       }
 
       title.textContent = `Assignment Details: ${currentAssignmentName || "Assignment"}`;
@@ -3472,66 +3791,53 @@
     function renderAssignmentStudentSessions(payload) {
       const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
       const studentName = payload.studentName || "Student";
+
       const normalizeSessionValue = (session, keys, fallback = "") => {
         for (const key of keys) {
-          if (session?.[key] !== undefined && session?.[key] !== null && String(session?.[key]).trim() !== "") {
+          if (
+            session?.[key] !== undefined &&
+            session?.[key] !== null &&
+            String(session?.[key]).trim() !== ""
+          ) {
             return session[key];
           }
         }
         return fallback;
       };
+
       const formatSessionDate = (value) => {
-        if (!value) {
-          return "Unknown time";
-        }
+        if (!value) return "Unknown time";
         const parsed = new Date(value);
-        return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString();
+        return Number.isNaN(parsed.getTime())
+          ? String(value)
+          : parsed.toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            });
       };
-      const formatSessionEventData = (session) => {
-        const eventData = session?.EventData ?? session?.eventData ?? {};
-        if (!eventData || typeof eventData !== "object") {
-          return String(eventData || "{}");
-        }
-        try {
-          return JSON.stringify(eventData, null, 2);
-        } catch {
-          return String(eventData);
-        }
-      };
-      console.log('[TBD Teacher Webview] renderAssignmentStudentSessions payload:', {
-        classId: payload.classId,
-        assignmentId: payload.assignmentId,
-        studentAuthUserId: payload.studentAuthUserId,
-        studentName,
-        sessionCount: sessions.length,
-        sessionsShape: sessions.map((session) => ({
-          keys: Object.keys(session || {}),
-          SessionId: session?.SessionId ?? session?.sessionId,
-          StudentWorkspaceAssignmentId: session?.StudentWorkspaceAssignmentId ?? session?.studentWorkspaceAssignmentId,
-          OccurredAt: session?.OccurredAt ?? session?.occurredAt,
-          EventType: session?.EventType ?? session?.eventType,
-          EventDataKeys: Object.keys(session?.EventData ?? session?.eventData ?? {})
-        }))
-      });
+
       const studentView = $("assignment-student-view");
       const title = $("assignment-student-title");
       const empty = $("assignment-student-sessions-empty");
       const list = $("assignment-student-sessions-list");
       const logView = $("assignment-session-log-view");
       const workView = $("assignment-work-view");
+
       if (!studentView || !title || !empty || !list) {
         return;
       }
+
       // Hide the parent view (student list)
-      if (workView) {
-        workView.style.display = "none";
-      }
+      if (workView) workView.style.display = "none";
+      if (logView) logView.style.display = "none";
+
       studentView.style.display = "block";
       title.textContent = `${studentName} - Session Logs`;
       list.innerHTML = "";
-      if (logView) {
-        logView.style.display = "none";
-      }
 
       if (!sessions.length) {
         empty.style.display = "block";
@@ -3539,43 +3845,327 @@
       }
       empty.style.display = "none";
 
-      sessions.forEach((s) => {
-        const row = document.createElement("button");
-        row.className = "btn btn-secondary";
+      sessions.forEach((s, index) => {
+        const row = document.createElement("div");
+        row.className = "card";
         row.style.cssText =
-          "text-align:left; border:1px solid var(--border); background:var(--surface); padding:12px; white-space:normal;";
-        const sessionId = normalizeSessionValue(s, ["SessionId", "sessionId", "id", "Id"], "Unknown");
-        const assignmentLinkId = normalizeSessionValue(s, ["StudentWorkspaceAssignmentId", "studentWorkspaceAssignmentId"], "-");
-        const occurredAt = normalizeSessionValue(s, ["OccurredAt", "occurredAt", "timestamp", "Timestamp", "createdAt", "CreatedAt"], "");
-        const eventType = normalizeSessionValue(s, ["EventType", "eventType", "type", "Type"], "Unknown event");
-        const eventDataText = formatSessionEventData(s);
+          "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
+
+        const sessionId = normalizeSessionValue(
+          s,
+          ["SessionId", "sessionId", "id", "Id"],
+          "Unknown",
+        );
+        const occurredAt = normalizeSessionValue(
+          s,
+          [
+            "OccurredAt",
+            "occurredAt",
+            "timestamp",
+            "Timestamp",
+            "createdAt",
+            "CreatedAt",
+          ],
+          "",
+        );
+        const eventType = normalizeSessionValue(
+          s,
+          ["EventType", "eventType", "type", "Type"],
+          "Unknown event",
+        );
+
+        // Extract the JSON data
+        let eventData = {};
+        const rawData = s?.EventData ?? s?.eventData ?? {};
+        try {
+          eventData =
+            typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+        } catch (e) {
+          eventData = rawData;
+        }
+
+        // --- Event Type Badge Color Logic ---
+        let badgeColor = "var(--fg)";
+        let badgeBg = "var(--bg)";
+        const eType = String(eventType).toLowerCase();
+
+        if (eType.includes("paste")) {
+          badgeColor = "#ef4444";
+          badgeBg = "rgba(239, 68, 68, 0.12)";
+        } else if (
+          eType.includes("input") ||
+          eType.includes("edit") ||
+          eType.includes("replace") ||
+          eType.includes("delete")
+        ) {
+          badgeColor = "#3b82f6";
+          badgeBg = "rgba(59, 130, 246, 0.12)";
+        } else if (
+          eType.includes("focus") ||
+          eType.includes("window") ||
+          eType.includes("active_editor")
+        ) {
+          badgeColor = "#10b981";
+          badgeBg = "rgba(16, 185, 129, 0.12)";
+        } else if (eType.includes("save")) {
+          badgeColor = "#8b5cf6";
+          badgeBg = "rgba(139, 92, 246, 0.12)";
+        } else if (eType.includes("start") || eType.includes("end")) {
+          badgeColor = "#f59e0b";
+          badgeBg = "rgba(245, 158, 11, 0.12)";
+        }
+
+        // --- Build Body Variables ---
+        const items = [];
+        if (eventData.file)
+          items.push(
+            `<span style="color: var(--muted)">File:</span> <strong>${eventData.file}</strong>`,
+          );
+        if (eventData.fileView && eventData.fileView !== eventData.file)
+          items.push(
+            `<span style="color: var(--muted)">View:</span> <strong>${eventData.fileView}</strong>`,
+          );
+        if (eventData.charsAdded !== undefined)
+          items.push(
+            `<span style="color: var(--muted)">Chars Added:</span> <strong>${eventData.charsAdded}</strong>`,
+          );
+        if (eventData.pasteCharCount !== undefined)
+          items.push(
+            `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${eventData.pasteCharCount}</strong>`,
+          );
+        if (eventData.flightTime !== undefined)
+          items.push(
+            `<span style="color: var(--muted)">Flight Time:</span> <strong>${eventData.flightTime}ms</strong>`,
+          );
+        if (eventData.focused !== undefined)
+          items.push(
+            `<span style="color: var(--muted)">Window Focused:</span> <strong>${eventData.focused}</strong>`,
+          );
+        if (eventData.workspaceName)
+          items.push(
+            `<span style="color: var(--muted)">Workspace:</span> <strong>${eventData.workspaceName}</strong>`,
+          );
+
+        let noteHtml = "";
+        if (eventData.possibleAiDetection) {
+          noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${eventData.possibleAiDetection}</div>`;
+        }
+
+        let rawStringFallback =
+          typeof rawData === "string" ? rawData : JSON.stringify(rawData);
+        let bodyHtml =
+          items.length > 0
+            ? items.join(
+                ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
+              )
+            : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${rawStringFallback}</code>`;
+
         row.innerHTML = `
-          <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; width:100%;">
-            <div style="flex:1; min-width:0;">
-              <div style="font-weight:700;">Session ${sessionId}</div>
-              <div class="meta" style="font-size:0.8rem; margin-top:4px;">${formatSessionDate(occurredAt)} • ${eventType}</div>
-              <div class="meta" style="font-size:0.78rem; margin-top:4px;">StudentWorkspaceAssignmentId: ${assignmentLinkId}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${eventType}</span>
+              <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${sessionId}</strong> &bull; ${formatSessionDate(occurredAt)}</span>
             </div>
-            <div class="meta" style="font-size:0.78rem; white-space:nowrap;">Row ${sessions.indexOf(s) + 1}</div>
+            <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${index + 1}</div>
           </div>
-          <pre style="margin:10px 0 0; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); white-space:pre-wrap; word-break:break-word; max-height:180px; overflow:auto; font-size:0.78rem; line-height:1.45;">${eventDataText}</pre>
+          <div style="font-size: 0.9rem; line-height: 1.5; color: var(--fg);">
+            ${bodyHtml}
+            ${noteHtml}
+          </div>
         `;
-        row.addEventListener("click", () => {
-          console.log('[TBD Teacher Webview] session row clicked:', s);
-        });
+
         list.appendChild(row);
       });
     }
 
+    function parseLogText(text) {
+      const lines = String(text || "")
+        .trim()
+        .split("\n");
+      const events = [];
+      let currentEvent = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        if (line.startsWith("Session ")) {
+          if (currentEvent) events.push(currentEvent);
+          currentEvent = { session: line.replace("Session ", ""), rawJson: "" };
+        } else if (currentEvent && line.includes(" • ")) {
+          const parts = line.split(" • ");
+          currentEvent.timestamp = parts[0];
+          currentEvent.eventType = parts[1];
+        } else if (
+          currentEvent &&
+          line.startsWith("StudentWorkspaceAssignmentId:")
+        ) {
+          currentEvent.swaId = line.replace(
+            "StudentWorkspaceAssignmentId: ",
+            "",
+          );
+        } else if (currentEvent && line.startsWith("Row ")) {
+          currentEvent.row = line.replace("Row ", "");
+        } else if (currentEvent && line.startsWith("{")) {
+          currentEvent.rawJson = line;
+          try {
+            currentEvent.data = JSON.parse(line);
+          } catch (e) {}
+        }
+      }
+      if (currentEvent) events.push(currentEvent);
+      return events;
+    }
+
+    // Completely revamped UI/UX for Session Logs
     function renderAssignmentSessionLog(payload) {
       const title = $("assignment-session-log-title");
       const content = $("assignment-session-log-content");
       const view = $("assignment-session-log-view");
+
       if (!title || !content || !view) {
         return;
       }
+
       title.textContent = payload.filename || "Session Log";
-      content.textContent = payload.text || "No log data available.";
+
+      // Reset inline styles from the HTML that forced monospace
+      content.style.whiteSpace = "normal";
+      content.style.fontFamily = "inherit";
+      content.style.background = "transparent";
+      content.style.border = "none";
+      content.style.padding = "0";
+      content.innerHTML = "";
+
+      const text = payload.text || "";
+      if (!text) {
+        content.innerHTML = `<div class="meta" style="padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px;">No log data available for this session.</div>`;
+        view.style.display = "block";
+        return;
+      }
+
+      const events = parseLogText(text);
+
+      if (events.length === 0) {
+        // Fallback if parsing fails
+        content.innerHTML = `<pre style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); overflow-x: auto;">${text}</pre>`;
+      } else {
+        const container = document.createElement("div");
+        container.style.cssText =
+          "display: flex; flex-direction: column; gap: 8px;";
+
+        events.forEach((evt) => {
+          const card = document.createElement("div");
+          card.style.cssText =
+            "background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;";
+
+          // --- HEADER ROW ---
+          const header = document.createElement("div");
+          header.style.cssText =
+            "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 4px;";
+
+          // Event type badge color logic
+          const typeBadge = document.createElement("span");
+          let badgeColor = "var(--fg)";
+          let badgeBg = "var(--bg)";
+          const eType = (evt.eventType || "").toLowerCase();
+
+          if (eType.includes("paste")) {
+            badgeColor = "#ef4444";
+            badgeBg = "rgba(239, 68, 68, 0.1)";
+          } // Red
+          else if (
+            eType.includes("input") ||
+            eType.includes("edit") ||
+            eType.includes("replace")
+          ) {
+            badgeColor = "#3b82f6";
+            badgeBg = "rgba(59, 130, 246, 0.1)";
+          } // Blue
+          else if (eType.includes("focus") || eType.includes("window")) {
+            badgeColor = "#10b981";
+            badgeBg = "rgba(16, 185, 129, 0.1)";
+          } // Green
+          else if (eType.includes("save")) {
+            badgeColor = "#8b5cf6";
+            badgeBg = "rgba(139, 92, 246, 0.1)";
+          } // Purple
+          else if (eType.includes("start") || eType.includes("end")) {
+            badgeColor = "#f59e0b";
+            badgeBg = "rgba(245, 158, 11, 0.1)";
+          } // Orange
+
+          typeBadge.style.cssText = `font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;`;
+          typeBadge.textContent = evt.eventType || "Unknown Event";
+
+          const timeSpan = document.createElement("span");
+          timeSpan.style.cssText = "font-size: 0.8rem; color: var(--muted);";
+          timeSpan.innerHTML = `<strong>Session ${evt.session}</strong> &bull; Row ${evt.row} &bull; ${evt.timestamp}`;
+
+          header.appendChild(typeBadge);
+          header.appendChild(timeSpan);
+          card.appendChild(header);
+
+          // --- BODY ROW ---
+          const body = document.createElement("div");
+          body.style.cssText = "font-size: 0.9rem; line-height: 1.4;";
+
+          if (evt.data) {
+            const items = [];
+            if (evt.data.file)
+              items.push(
+                `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
+              );
+            if (evt.data.fileView && evt.data.fileView !== evt.data.file)
+              items.push(
+                `<span style="color: var(--muted)">View:</span> <strong>${evt.data.fileView}</strong>`,
+              );
+            if (evt.data.charsAdded !== undefined)
+              items.push(
+                `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
+              );
+            if (evt.data.pasteCharCount !== undefined)
+              items.push(
+                `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
+              );
+            if (evt.data.flightTime !== undefined)
+              items.push(
+                `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
+              );
+            if (evt.data.focused !== undefined)
+              items.push(
+                `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
+              );
+            if (evt.data.workspaceName)
+              items.push(
+                `<span style="color: var(--muted)">Workspace:</span> <strong>${evt.data.workspaceName}</strong>`,
+              );
+
+            // Highlight AI or Interruption Notes
+            if (evt.data.possibleAiDetection) {
+              items.push(
+                `<div style="margin-top: 8px; width: 100%; padding: 8px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 4px 4px 0;"><strong>Note:</strong> ${evt.data.possibleAiDetection}</div>`,
+              );
+            }
+
+            if (items.length > 0) {
+              body.innerHTML = items.join(
+                ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
+              );
+            } else {
+              body.innerHTML = `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson}</code>`;
+            }
+          } else {
+            body.innerHTML = `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson || "(Empty Data)"}</code>`;
+          }
+
+          card.appendChild(body);
+          container.appendChild(card);
+        });
+
+        content.appendChild(container);
+      }
+
       view.style.display = "block";
     }
 

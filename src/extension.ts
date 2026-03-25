@@ -519,6 +519,9 @@ export async function activate(context: vscode.ExtensionContext) {
     installNotificationToastTimeouts();
     console.log('TBD Logger: activate');
 
+    // 👉 RULE 1 FIX: Every time VS Code boots up, wipe the old Session ID cache so a new one is forced!
+    await context.workspaceState.update(SESSION_ID_KEY, undefined);
+
     const statusBarItem = createStatusBar(context);
     const uiTimerDisposable = startUiTimer(statusBarItem);
     context.subscriptions.push(uiTimerDisposable);
@@ -630,8 +633,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     await storageManager.init(context);
 
-    // DYNAMIC BOOT SEQUENCE
-    // Checks database link and boots logging without needing a window reload
     let isBootingSession = false;
     const bootStudentSession = async (silentCheck = false) => {
         if (isBootingSession) return;
@@ -682,7 +683,6 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     };
 
-    // Run the boot sequence instantly on startup
     await bootStudentSession(false);
 
     const startupDebugSession = getWorkspaceAuthSession(context);
@@ -725,7 +725,6 @@ export async function activate(context: vscode.ExtensionContext) {
     const wRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
     await showStartupWorkspaceDebugPopup(startupDebugSession, wRoot, startupAssignmentInfo, startupDebugAssignments);
 
-    // Policy Consent Gate on Startup
     let latestSessionForConsent = getWorkspaceAuthSession(context);
     if (latestSessionForConsent?.authenticated) {
         if (latestSessionForConsent.role === 'Student' && !state.isPersonalWorkspace) {
@@ -767,9 +766,15 @@ export async function activate(context: vscode.ExtensionContext) {
         state.isConsentGiven = true;
     }
 
+    // 👉 RULE 2 FIX: Tell the interruption tracker to force a new session after 60 mins of inactivity
     await SessionInterruptionTracker.install(context, {
-        inactivityThresholdMs: 5 * 60 * 1000,
-        checkEveryMs: 10_000
+        inactivityThresholdMs: 5 * 60 * 1000,     // 5 minutes = standard pause
+        checkEveryMs: 10_000,
+        newSessionThresholdMs: 60 * 60 * 1000,    // 60 minutes = hard split into new session
+        onRequireNewSession: async () => {
+            await context.workspaceState.update(SESSION_ID_KEY, undefined);
+            void bootStudentSession(true);
+        }
     });
 
     if ((state.currentUserRole === 'Student' || state.currentUserRole === 'None') && !state.isPersonalWorkspace) {
@@ -1049,14 +1054,12 @@ export async function activate(context: vscode.ExtensionContext) {
     }, CONSTANTS.FLUSH_INTERVAL_MS);
     context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
 
-    // BACKGROUND BOOT CHECKER
-    // Automatically links workspace and starts logging if user signs in mid-session
     const statusUpdateTimer = setInterval(() => {
         const curSession = getWorkspaceAuthSession(context);
         if (curSession?.authenticated && curSession.role === 'Student' && !state.isPersonalWorkspace) {
             const hasSessionId = !!context.workspaceState.get<number>(SESSION_ID_KEY);
             if (!state.activeAssignment || !hasSessionId) {
-                void bootStudentSession(true); // Silent check, no modal spam
+                void bootStudentSession(true);
             }
         }
         void updateDbStatusBar(context);

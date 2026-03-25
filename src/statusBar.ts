@@ -65,23 +65,32 @@ export function updateApiKeyStatus(_isValidOrPresent: boolean) {
     if (!apiStatusItem) { return; }
 
     apiStatusItem.text = '$(cloud-upload)';
-    const hasWorkspaceLink = Boolean(state.activeCourse || state.activeAssignment || state.isSessionActive);
     const isOnline = state.isApiOnline === true;
     const isOffline = state.isApiOnline === false;
+    const isTeacherContext = state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin';
+    const isRoutingActive = isTeacherContext && !state.isPersonalWorkspace;
+    const hasWorkspaceLink = Boolean(state.activeCourse || state.activeAssignment || state.isSessionActive);
 
-    if (isOnline) {
+    if (isTeacherContext) {
+        apiStatusItem.color = isOnline
+            ? new vscode.ThemeColor('charts.green')
+            : new vscode.ThemeColor('charts.orange');
+        apiStatusItem.tooltip = `API: ${isOnline ? 'Online' : isOffline ? 'Offline' : 'Unknown'} | Routing: ${isRoutingActive ? 'Active' : 'Inactive'}`;
+    } else if (isOnline) {
         apiStatusItem.color = hasWorkspaceLink
             ? new vscode.ThemeColor('charts.green')
             : new vscode.ThemeColor('charts.purple');
+        apiStatusItem.tooltip = `Sync: ${isOnline ? 'online' : isOffline ? 'offline' : 'unknown'} | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
     } else if (isOffline && hasWorkspaceLink) {
         apiStatusItem.color = undefined;
+        apiStatusItem.tooltip = `Sync: ${isOnline ? 'online' : isOffline ? 'offline' : 'unknown'} | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
     } else if (isOffline) {
         apiStatusItem.color = new vscode.ThemeColor('charts.orange');
+        apiStatusItem.tooltip = `Sync: ${isOnline ? 'online' : isOffline ? 'offline' : 'unknown'} | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
     } else {
         apiStatusItem.color = undefined;
+        apiStatusItem.tooltip = `Sync: ${isOnline ? 'online' : isOffline ? 'offline' : 'unknown'} | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
     }
-
-    apiStatusItem.tooltip = `Sync: ${isOnline ? 'online' : isOffline ? 'offline' : 'unknown'} | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
     apiStatusItem.command = 'tbd-logger.openStudentSyncView';
     apiStatusItem.show();
 }

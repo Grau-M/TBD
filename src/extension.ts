@@ -93,6 +93,13 @@ async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void
     }
 
     if (session.role === 'Teacher' || session.role === 'Admin') {
+        try {
+            await apiGet('/health');
+            state.isApiOnline = true;
+        } catch {
+            state.isApiOnline = false;
+        }
+        updateApiKeyStatus(false);
         statusItem.hide();
         return;
     }
@@ -105,6 +112,7 @@ async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void
         } catch {
             state.isApiOnline = false;
         }
+        updateApiKeyStatus(true);
         updateStudentLoggingStatus(globalSb);
         statusItem.hide();
         return;
@@ -127,6 +135,7 @@ async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void
     try {
         const health = await apiGet('/health');
         state.isApiOnline = true;
+        updateApiKeyStatus(true);
         const apiStatus = String(health?.status ?? 'ok');
         const syncState = apiStatus.toLowerCase() === 'ok' ? 'online' : 'offline';
         const linkedTo = `${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
@@ -148,6 +157,7 @@ async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void
         }
     } catch (err) {
         state.isApiOnline = false;
+        updateApiKeyStatus(false);
         statusItem.text = '$(refresh)';
         statusItem.color = undefined;
         statusItem.tooltip = `Sync: offline | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
@@ -395,8 +405,6 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
         
         globalSb.hide();
         dbItem?.hide();
-        const apiStatusItem = (global as any).apiStatusBarItem as vscode.StatusBarItem | undefined;
-        apiStatusItem?.hide();
         syncTeacherDashboardLock(context);
         return;
     }

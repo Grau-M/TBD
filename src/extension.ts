@@ -392,9 +392,6 @@ async function updateAuthStatusBar(context: vscode.ExtensionContext): Promise<vo
     authItem.show();
     globalSb.show();
     dbItem?.show();
-
-    updateTrackingUI(session?.role);
-    updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');
     
     if (session.role !== 'Student') {
         authItem.text = `$(account) ${session.role}`;
@@ -404,6 +401,7 @@ async function updateAuthStatusBar(context: vscode.ExtensionContext): Promise<vo
         
         globalSb.hide();
         dbItem?.hide();
+        await updateDbStatusBar(context);
         await syncTeacherDashboardLock(context);
         return;
     }
@@ -429,8 +427,9 @@ async function updateAuthStatusBar(context: vscode.ExtensionContext): Promise<vo
         globalSb.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         globalSb.color = new vscode.ThemeColor('statusBarItem.warningForeground');
         globalSb.command = undefined;
+        await updateDbStatusBar(context);
+        updateTrackingUI(session?.role);
         await syncTeacherDashboardLock(context);
-        void updateDbStatusBar(context);
         return;
     }
     
@@ -444,11 +443,9 @@ async function updateAuthStatusBar(context: vscode.ExtensionContext): Promise<vo
     apiStatusItem?.show();
     dbItem?.hide();
     
-    // 3. WORKSPACE LINKED STATUS
-    updateStudentLoggingStatus(globalSb);
-
+    await updateDbStatusBar(context);
+    updateTrackingUI(session?.role);
     await syncTeacherDashboardLock(context);
-    void updateDbStatusBar(context);
     return;
 }
 
@@ -678,12 +675,18 @@ export async function activate(context: vscode.ExtensionContext) {
     await storageManager.init(context);
 
     let isBootingSession = false;
+    let pendingBootStudentSession = false;
+    let pendingBootStudentSilentCheck = true;
     const bootStudentSession = async (silentCheck = false) => {
-        if (isBootingSession) return;
+        if (isBootingSession) {
+            pendingBootStudentSession = true;
+            pendingBootStudentSilentCheck = pendingBootStudentSilentCheck && silentCheck;
+            return;
+        }
         isBootingSession = true;
         try {
             let curSession = getWorkspaceAuthSession(context);
-            if (!curSession?.authenticated || curSession.role !== 'Student' || state.isPersonalWorkspace) {
+            if (!curSession?.authenticated || curSession.role !== 'Student') {
                 return;
             }
             
@@ -715,15 +718,21 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
                 }
             }
-            
-            updateTrackingUI(curSession.role);
-            updateApiKeyStatus(true);
+
+            state.isApiOnline = null;
+            await updateDbStatusBar(context);
             await updateAuthStatusBar(context);
-            void updateDbStatusBar(context);
+            updateTrackingUI(curSession.role);
         } catch (e) {
             console.error('[TBD Logger] Boot session error', e);
         } finally {
             isBootingSession = false;
+            if (pendingBootStudentSession) {
+                const rerunSilentCheck = pendingBootStudentSilentCheck;
+                pendingBootStudentSession = false;
+                pendingBootStudentSilentCheck = true;
+                void bootStudentSession(rerunSilentCheck);
+            }
         }
     };
 
@@ -1154,7 +1163,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (statusSnapshot !== lastStatusSnapshot) {
             lastStatusSnapshot = statusSnapshot;
-            if (curSession?.authenticated && curSession.role === 'Student' && !state.isPersonalWorkspace) {
+            if (curSession?.authenticated && curSession.role === 'Student') {
                 void bootStudentSession(true);
             } else {
                 void updateAuthStatusBar(context);

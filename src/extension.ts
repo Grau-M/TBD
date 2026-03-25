@@ -327,12 +327,12 @@ async function hydrateLinkedStudentWorkspace(
     }
 }
 
-function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
+async function syncTeacherDashboardLock(context: vscode.ExtensionContext): Promise<void> {
     const session = getWorkspaceAuthSession(context);
-    const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin')) && !state.isPersonalWorkspace;
+    const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin'));
     const hiddenItem = (global as any).hiddenStatusBarItem as vscode.StatusBarItem | undefined;
 
-    void vscode.commands.executeCommand('setContext', 'tbd.hasTeacherDashboardAccess', shouldShowLock);
+    await vscode.commands.executeCommand('setContext', 'tbd.hasTeacherDashboardAccess', shouldShowLock);
 
     if (shouldShowLock) {
         if (!hiddenItem) {
@@ -340,10 +340,14 @@ function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
             newHiddenItem.text = '$(layout)';
             newHiddenItem.tooltip = 'Open Teacher Dashboard';
             newHiddenItem.command = 'tbd-logger.openTeacherView';
-            newHiddenItem.show();
             context.subscriptions.push(newHiddenItem);
             (global as any).hiddenStatusBarItem = newHiddenItem;
+        } else {
+            hiddenItem.text = '$(layout)';
+            hiddenItem.tooltip = 'Open Teacher Dashboard';
+            hiddenItem.command = 'tbd-logger.openTeacherView';
         }
+        (global as any).hiddenStatusBarItem?.show();
         return;
     }
 
@@ -353,7 +357,7 @@ function syncTeacherDashboardLock(context: vscode.ExtensionContext): void {
     }
 }
 
-function updateAuthStatusBar(context: vscode.ExtensionContext): void {
+async function updateAuthStatusBar(context: vscode.ExtensionContext): Promise<void> {
     const authItem = (global as any).authStatusBarItem as vscode.StatusBarItem | undefined;
     const globalSb = (global as any).statusBarItem as vscode.StatusBarItem | undefined;
     const dbItem = (global as any).dbStatusBarItem as vscode.StatusBarItem | undefined;
@@ -381,7 +385,7 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
         apiStatusItem?.hide();
         const hiddenItem = (global as any).hiddenStatusBarItem as vscode.StatusBarItem | undefined;
         hiddenItem?.hide();
-        syncTeacherDashboardLock(context);
+        await syncTeacherDashboardLock(context);
         return;
     }
 
@@ -400,7 +404,7 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
         
         globalSb.hide();
         dbItem?.hide();
-        syncTeacherDashboardLock(context);
+        await syncTeacherDashboardLock(context);
         return;
     }
 
@@ -425,7 +429,7 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
         globalSb.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         globalSb.color = new vscode.ThemeColor('statusBarItem.warningForeground');
         globalSb.command = undefined;
-        syncTeacherDashboardLock(context);
+        await syncTeacherDashboardLock(context);
         void updateDbStatusBar(context);
         return;
     }
@@ -443,7 +447,7 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
     // 3. WORKSPACE LINKED STATUS
     updateStudentLoggingStatus(globalSb);
 
-    syncTeacherDashboardLock(context);
+    await syncTeacherDashboardLock(context);
     void updateDbStatusBar(context);
     return;
 }
@@ -574,7 +578,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const currentSession = getWorkspaceAuthSession(context); 
         const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
         const workspaceName = vscode.workspace.name || 'Unknown Workspace';
-        
+            const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin'));
         const classId = Number(currentSession?.workspaceLinkedClassId ?? 0);
         const assignmentId = Number(currentSession?.workspaceLinkedAssignmentId ?? 0);
         const userId = Number(currentSession?.authUserId ?? 0);
@@ -714,7 +718,7 @@ export async function activate(context: vscode.ExtensionContext) {
             
             updateTrackingUI(curSession.role);
             updateApiKeyStatus(true);
-            updateAuthStatusBar(context);
+            await updateAuthStatusBar(context);
             void updateDbStatusBar(context);
         } catch (e) {
             console.error('[TBD Logger] Boot session error', e);
@@ -768,12 +772,12 @@ export async function activate(context: vscode.ExtensionContext) {
     const session = startupDebugSession;
     updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');
     await updateDbStatusBar(context);
-    updateAuthStatusBar(context);
+    await updateAuthStatusBar(context);
 
     // 3. Update the tracking UI based on role and validation results
     updateTrackingUI(session?.role);
     updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');
-    updateAuthStatusBar(context);
+    await updateAuthStatusBar(context);
 
     const CURRENT_POLICY_VERSION = 'v1.1'; 
 
@@ -951,13 +955,19 @@ export async function activate(context: vscode.ExtensionContext) {
             const ideIdentity = getSessionInfo().user;
             const workspaceName = vscode.workspace.name || 'Unknown Workspace';
 
-            await openAccountView(context, storageManager, { ideUser: ideIdentity, workspaceName });
-            updateAuthStatusBar(context);
+            const refreshedSession = await openAccountView(context, storageManager, { ideUser: ideIdentity, workspaceName });
+            if (refreshedSession?.role === 'Student') {
+                await bootStudentSession(false);
+            }
+            await updateAuthStatusBar(context);
             return;
         }
 
-        await openAuthView(context, storageManager);
-        updateAuthStatusBar(context);
+        const signedSession = await openAuthView(context, storageManager);
+        if (signedSession?.role === 'Student') {
+            await bootStudentSession(false);
+        }
+        await updateAuthStatusBar(context);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.signOut', async () => {
@@ -975,7 +985,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (answer) {
             await closeAllWebviews();
             await clearWorkspaceAuthSession(context);
-            updateAuthStatusBar(context);
+            await updateAuthStatusBar(context);
             vscode.window.showInformationMessage('You have been logged out.');
         }
     }));
@@ -1127,16 +1137,32 @@ export async function activate(context: vscode.ExtensionContext) {
     }, CONSTANTS.FLUSH_INTERVAL_MS);
     context.subscriptions.push({ dispose: () => clearInterval(flushTimer) });
 
+    let lastStatusSnapshot = '';
     const statusUpdateTimer = setInterval(() => {
         const curSession = getWorkspaceAuthSession(context);
-        if (curSession?.authenticated && curSession.role === 'Student' && !state.isPersonalWorkspace) {
-            const hasSessionId = !!context.workspaceState.get<number>(SESSION_ID_KEY);
-            if (!state.activeAssignment || !hasSessionId) {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+        const statusSnapshot = [
+            curSession?.authenticated ? '1' : '0',
+            curSession?.role || 'None',
+            String(curSession?.authUserId || 0),
+            workspaceRoot,
+            state.isPersonalWorkspace ? '1' : '0',
+            state.activeCourse || '',
+            state.activeAssignment || '',
+            String(context.workspaceState.get<number>(SESSION_ID_KEY) || 0)
+        ].join('|');
+
+        if (statusSnapshot !== lastStatusSnapshot) {
+            lastStatusSnapshot = statusSnapshot;
+            if (curSession?.authenticated && curSession.role === 'Student' && !state.isPersonalWorkspace) {
                 void bootStudentSession(true);
+            } else {
+                void updateAuthStatusBar(context);
             }
         }
+
         void updateDbStatusBar(context);
-    }, 5000); 
+    }, 2000); 
     context.subscriptions.push({ dispose: () => clearInterval(statusUpdateTimer) });
 
     void updateDbStatusBar(context);

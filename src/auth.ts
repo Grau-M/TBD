@@ -352,6 +352,12 @@ export async function clearWorkspaceAuthSession(context: vscode.ExtensionContext
     
     // 👉 NEW: Clear the global state and update the UI upon logout
     state.currentUserRole = 'None';
+    state.isConsentGiven = false;
+    state.activeCourse = null;
+    state.activeAssignment = null;
+    state.studentName = null;
+    state.isSessionActive = false;
+    state.isApiOnline = null;
     updateTrackingUI();
 }
 

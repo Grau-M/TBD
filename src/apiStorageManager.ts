@@ -236,20 +236,144 @@ export class ApiStorageManager {
         await this.context.workspaceState.update(key, true);
     }
 
-    async listLogFiles(): Promise<Array<{ label: string; uri: vscode.Uri }>> {
-        return [];
+   async listLogFiles(): Promise<Array<{ label: string; uri: vscode.Uri }>> {
+        if (!this.context) return [];
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const teacherId = Number(session?.authUserId || 0);
+        if (!teacherId) return [];
+
+        const classes = await this.listTeacherClasses(teacherId);
+        const logs: Array<{ label: string; uri: vscode.Uri }> = [];
+
+        for (const c of classes) {
+            const assignments = await this.listClassAssignments(c.id, teacherId);
+            for (const a of assignments) {
+                const students = await this.listAssignmentStudentWork(c.id, a.id, teacherId);
+                for (const s of students) {
+                    if (Number(s.sessionCount) > 0) {
+                        try {
+                            const sessionsAndEvents = await this.listAssignmentStudentSessions(c.id, a.id, s.authUserId, teacherId);
+                            const uniqueSessionIds = new Set<number>();
+                            for (const row of sessionsAndEvents) {
+                                const sid = Number(row?.SessionId ?? row?.sessionId);
+                                if (sid > 0) uniqueSessionIds.add(sid);
+                            }
+
+                            for (const sid of uniqueSessionIds) {
+                                const safeCourse = String(c.courseName || 'Class').replace(/[^a-zA-Z0-9]/g, '');
+                                const safeAssign = String(a.name || 'Assign').replace(/[^a-zA-Z0-9]/g, '');
+                                const safeStudent = String(s.studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '');
+                                const label = `${safeCourse}_${safeAssign}_${safeStudent}_Session${sid}.log`;
+                                
+                                const uri = vscode.Uri.parse(`tbd-cloud:${sid}?classId=${c.id}&assignId=${a.id}&studentId=${s.authUserId}`);
+                                logs.push({ label, uri });
+                            }
+                        } catch(e) {
+                            console.warn('Failed to fetch sessions for virtual log', e);
+                        }
+                    }
+                }
+            }
+        }
+        return logs;
     }
 
-    async retrieveLogContentForUri(_passwordAttempt: string, _fileUri: vscode.Uri): Promise<string> {
-        throw new Error('Log retrieval from local SQL storage is not available in API-only mode.');
+    async retrieveLogContentForUri(_passwordAttempt: string, fileUri: vscode.Uri): Promise<string> {
+        if (fileUri.scheme !== 'tbd-cloud') {
+            return 'No cloud data found for this URI.';
+        }
+
+        const session = this.context?.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const teacherId = Number(session?.authUserId || 0);
+
+        // Parse custom query string
+        const queryParts = fileUri.query.split('&');
+        const params: Record<string, string> = {};
+        for (const part of queryParts) {
+            const [k, v] = part.split('=');
+            params[k] = v;
+        }
+
+        const classId = Number(params['classId']);
+        const assignId = Number(params['assignId']);
+        const studentId = Number(params['studentId']);
+        const targetSessionId = Number(fileUri.path);
+
+        const rows = await this.listAssignmentStudentSessions(classId, assignId, studentId, teacherId);
+        const sessionEvents = rows.filter((r: any) => Number(r?.SessionId ?? r?.sessionId) === targetSessionId);
+
+        let logText = '';
+        for (const row of sessionEvents) {
+            let eventData = row?.EventData ?? row?.eventData ?? {};
+            if (typeof eventData === 'string') {
+                try { eventData = JSON.parse(eventData); } catch(e) {}
+            }
+            
+            const merged = {
+                ...eventData,
+                time: eventData.time || row?.OccurredAt || row?.occurredAt,
+                eventType: row?.EventType || row?.eventType,
+            };
+            logText += JSON.stringify(merged) + '\n';
+        }
+        
+        return logText.trim();
     }
 
-    async retrieveHiddenLogContent(_passwordAttempt: string): Promise<string> {
-        throw new Error('Hidden log retrieval from local SQL storage is not available in API-only mode.');
+   async retrieveHiddenLogContent(_passwordAttempt: string): Promise<string> {
+        if (!this.context) return '{"deletions":[]}';
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const teacherId = Number(session?.authUserId || 0);
+        if (!teacherId) return '{"deletions":[]}';
+
+        const classes = await this.listTeacherClasses(teacherId);
+        const deletions: any[] = [];
+
+        for (const c of classes) {
+            const assignments = await this.listClassAssignments(c.id, teacherId);
+            for (const a of assignments) {
+                const students = await this.listAssignmentStudentWork(c.id, a.id, teacherId);
+                for (const s of students) {
+                    if (Number(s.sessionCount) > 0) {
+                        try {
+                            const sessionsAndEvents = await this.listAssignmentStudentSessions(c.id, a.id, s.authUserId, teacherId);
+                            for (const row of sessionsAndEvents) {
+                                const eventType = String(row?.EventType ?? row?.eventType ?? '').toLowerCase();
+                                if (eventType === 'delete' || eventType === 'paste') {
+                                    let eventData = row?.EventData ?? row?.eventData ?? {};
+                                    if (typeof eventData === 'string') {
+                                        try { eventData = JSON.parse(eventData); } catch(e) {}
+                                    }
+
+                                    deletions.push({
+                                        activityType: eventType,
+                                        actor: s.studentName,
+                                        file: eventData.file || eventData.fileEdit || 'Unknown',
+                                        time: eventData.time || row?.OccurredAt || row?.occurredAt,
+                                        note: eventType === 'paste' 
+                                            ? `Pasted ${eventData.pasteCharCount || eventData.charsAdded || 0} chars` 
+                                            : `Deleted text`,
+                                        ...eventData
+                                    });
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Failed to fetch deletions', e);
+                        }
+                    }
+                }
+            }
+        }
+
+        return JSON.stringify({
+            header: { note: "Cloud Deletions & Pastes Log", createdAt: new Date().toISOString() },
+            deletions: deletions
+        }, null, 2);
     }
 
-    async retrieveLogContentWithPassword(_passwordAttempt: string, _fileUri: vscode.Uri): Promise<{ text: string; partial: boolean }> {
-        throw new Error('Log retrieval is not available in API-only mode.');
+   async retrieveLogContentWithPassword(passwordAttempt: string, fileUri: vscode.Uri): Promise<{ text: string; partial: boolean }> {
+        const text = await this.retrieveLogContentForUri(passwordAttempt, fileUri);
+        return { text, partial: false };
     }
 
     async saveLogNotes(_passwordAttempt: string, _filename: string, _notes: Array<{ timestamp: string; text: string }>): Promise<void> {

@@ -54,19 +54,16 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
 
   // Auto-Heals the connection if the cloud database was recently wiped or recreated
   const getValidTeacherId = async (): Promise<number> => {
-    // Cast to 'any' to dynamically pull whatever data is available in the local cache
     const session = getWorkspaceAuthSession(context) as any;
     if (!session?.authenticated) {
       throw new Error('Not authenticated. Please restart the extension and log in.');
     }
 
-    // Prefer the authenticated session user ID to avoid unnecessary upsert/role calls.
     const existingAuthUserId = Number(session.authUserId || 0);
     if (Number.isFinite(existingAuthUserId) && existingAuthUserId > 0) {
       return existingAuthUserId;
     }
 
-    // Force-register the local cached user into the new database to get a valid Foreign Key ID
     const authResult = await storageManager.upsertAuthUser({
       provider: session.provider || 'local-cache',
       subjectId: session.subjectId || session.email || 'teacher-sync',
@@ -74,10 +71,8 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
       displayName: session.displayName || session.name || 'Teacher'
     });
 
-    // Ensure the new database recognizes this ID as a Teacher
     await storageManager.updateAuthUserRole(authResult.authUserId, 'Teacher');
-
-    return authResult.authUserId; // Returns the fresh, valid ID for the new database!
+    return authResult.authUserId; 
   };
 
   panel.webview.onDidReceiveMessage(async message => {
@@ -401,24 +396,6 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             studentAuthUserId,
             teacherId
           );
-
-          console.log('[TBD Teacher UI] assignmentStudentSessions payload before webview post:', {
-            classId,
-            assignmentId,
-            studentAuthUserId,
-            studentName: String(message.studentName || ''),
-            sessionCount: Array.isArray(sessions) ? sessions.length : 0,
-            sessionsShape: Array.isArray(sessions)
-              ? sessions.map((session: any) => ({
-                  keys: Object.keys(session || {}),
-                  SessionId: session?.SessionId ?? session?.sessionId,
-                  StudentWorkspaceAssignmentId: session?.StudentWorkspaceAssignmentId ?? session?.studentWorkspaceAssignmentId,
-                  OccurredAt: session?.OccurredAt ?? session?.occurredAt,
-                  EventType: session?.EventType ?? session?.eventType,
-                  EventDataKeys: Object.keys(session?.EventData ?? session?.eventData ?? {})
-                }))
-              : []
-          });
 
           panel?.webview.postMessage({
             command: 'assignmentStudentSessions',

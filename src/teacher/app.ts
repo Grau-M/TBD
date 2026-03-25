@@ -256,6 +256,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           const teacherId = await getValidTeacherId();
           const classId = Number(message.classId);
           const assignmentId = Number(message.assignmentId);
+          const focusStudentAuthUserId = Number(message.studentAuthUserId || 4);
           
           const classInfo = await storageManager.getTeacherClassById(classId, teacherId);
           if (!classInfo) {
@@ -270,15 +271,120 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             break;
           }
 
+          let classStudents: any[] = [];
           let students: any[] = [];
+          try {
+            classStudents = await storageManager.listClassStudentsSummary(classId, teacherId);
+          } catch (error) {
+            console.warn('Failed to load class students for openAssignmentWork:', error);
+          }
+
           try {
             students = await storageManager.listAssignmentStudentWork(classId, assignmentId, teacherId);
           } catch (error) {
             console.warn('Failed to load assignment student work for openAssignmentWork:', error);
           }
+          const studentWorkRawResponse = (students as any)?.rawResponse ?? null;
+          const studentWorkRows = Array.isArray(studentWorkRawResponse?.students)
+            ? studentWorkRawResponse.students
+            : (Array.isArray(studentWorkRawResponse?.data) ? studentWorkRawResponse.data : students);
+          const focusedStudentWorkRow = (studentWorkRows || []).find((studentRow: any) => Number(studentRow?.authUserId ?? studentRow?.UserId ?? studentRow?.userId ?? 0) === focusStudentAuthUserId) || null;
+
+          let studentReport: any = null;
+          try {
+            const teacherClasses = await storageManager.listTeacherClasses(teacherId);
+            const joinedClasses: any[] = [];
+            let resolvedStudent: any = null;
+            let currentAssignmentRecord: any = null;
+
+            for (const teacherClass of teacherClasses || []) {
+              const teacherClassId = Number(teacherClass?.id ?? teacherClass?.classId ?? 0);
+              if (!teacherClassId) {
+                continue;
+              }
+
+              let classStudents: any[] = [];
+              try {
+                classStudents = await storageManager.listClassStudentsSummary(teacherClassId, teacherId);
+              } catch (error) {
+                console.warn(`Failed to load students for class ${teacherClassId}:`, error);
+              }
+
+              const studentEntry = classStudents.find((student: any) => Number(student.authUserId) === focusStudentAuthUserId) || null;
+              if (!studentEntry) {
+                continue;
+              }
+
+              if (!resolvedStudent) {
+                resolvedStudent = studentEntry;
+              }
+
+              let classAssignments: any[] = [];
+              let studentAssignments: any[] = [];
+              try {
+                classAssignments = await storageManager.listClassAssignments(teacherClassId, teacherId);
+              } catch (error) {
+                console.warn(`Failed to load assignments for class ${teacherClassId}:`, error);
+              }
+
+              try {
+                studentAssignments = await storageManager.listStudentAssignmentsForClass(focusStudentAuthUserId, teacherClassId);
+              } catch (error) {
+                console.warn(`Failed to load student assignments for class ${teacherClassId}:`, error);
+              }
+
+              if (teacherClassId === classId) {
+                currentAssignmentRecord = (studentAssignments || []).find((assignmentRow: any) => Number(assignmentRow?.assignmentId ?? assignmentRow?.id ?? 0) === assignmentId) || currentAssignmentRecord;
+              }
+
+              const studentAssignmentMap = new Map<number, any>();
+              for (const assignmentRow of studentAssignments || []) {
+                const key = Number(assignmentRow?.assignmentId ?? assignmentRow?.id ?? 0);
+                if (key > 0) {
+                  studentAssignmentMap.set(key, assignmentRow);
+                }
+              }
+
+              joinedClasses.push({
+                classInfo: teacherClass,
+                student: studentEntry,
+                assignments: (classAssignments || []).map((assignmentRow: any) => {
+                  const assignmentKey = Number(assignmentRow?.id ?? assignmentRow?.assignmentId ?? 0);
+                  const studentAssignment = studentAssignmentMap.get(assignmentKey) || null;
+                  return {
+                    ...assignmentRow,
+                    started: !!studentAssignment,
+                    workspaceName: String(studentAssignment?.workspaceName || ''),
+                    workspaceRootPath: String(studentAssignment?.workspaceRootPath || ''),
+                    linkedAt: String(studentAssignment?.linkedAt || ''),
+                    hasWorkspace: !!studentAssignment?.workspaceRootPath
+                  };
+                })
+              });
+            }
+
+            studentReport = {
+              authUserId: focusStudentAuthUserId,
+              studentName: resolvedStudent?.studentName || resolvedStudent?.displayName || 'Unknown Student',
+              studentEmail: resolvedStudent?.studentEmail || resolvedStudent?.email || '',
+              role: resolvedStudent?.role || 'Student',
+              classes: joinedClasses,
+              currentClassJoined: !!classStudents.find((student: any) => Number(student.authUserId) === focusStudentAuthUserId),
+              currentAssignmentStarted: !!focusedStudentWorkRow || !!students.find((student: any) => Number(student.authUserId) === focusStudentAuthUserId),
+              currentAssignmentWorkspaceName: String(focusedStudentWorkRow?.workspaceName || currentAssignmentRecord?.workspaceName || ''),
+              currentAssignmentWorkspacePath: String(focusedStudentWorkRow?.workspaceRootPath || currentAssignmentRecord?.workspaceRootPath || ''),
+              currentAssignmentLinkedAt: String(focusedStudentWorkRow?.linkedAt || currentAssignmentRecord?.linkedAt || ''),
+              currentAssignmentSessionCount: Number(focusedStudentWorkRow?.sessionCount ?? currentAssignmentRecord?.sessionCount ?? 0),
+              currentAssignmentTotalEvents: Number(focusedStudentWorkRow?.totalEvents ?? currentAssignmentRecord?.totalEvents ?? 0),
+              currentAssignmentLastActive: String(focusedStudentWorkRow?.lastActive || currentAssignmentRecord?.lastActive || '')
+            };
+          } catch (error) {
+            console.warn('Failed to build student report for openAssignmentWork:', error);
+          }
+
           panel?.webview.postMessage({
             command: 'assignmentWorkData',
-            data: { classInfo, assignment, students }
+            data: { classInfo, assignment, classStudents, students, studentReport, studentWorkRawResponse }
           });
           break;
         }
@@ -295,6 +401,24 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             studentAuthUserId,
             teacherId
           );
+
+          console.log('[TBD Teacher UI] assignmentStudentSessions payload before webview post:', {
+            classId,
+            assignmentId,
+            studentAuthUserId,
+            studentName: String(message.studentName || ''),
+            sessionCount: Array.isArray(sessions) ? sessions.length : 0,
+            sessionsShape: Array.isArray(sessions)
+              ? sessions.map((session: any) => ({
+                  keys: Object.keys(session || {}),
+                  SessionId: session?.SessionId ?? session?.sessionId,
+                  StudentWorkspaceAssignmentId: session?.StudentWorkspaceAssignmentId ?? session?.studentWorkspaceAssignmentId,
+                  OccurredAt: session?.OccurredAt ?? session?.occurredAt,
+                  EventType: session?.EventType ?? session?.eventType,
+                  EventDataKeys: Object.keys(session?.EventData ?? session?.eventData ?? {})
+                }))
+              : []
+          });
 
           panel?.webview.postMessage({
             command: 'assignmentStudentSessions',

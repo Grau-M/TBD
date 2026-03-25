@@ -32,9 +32,11 @@
   let currentAssignmentName = "";
   let currentClassDetailTab = "assignments";
   let currentClassDisplayName = "";
+  let currentClassStudents = [];
   let currentAssignmentStudents = [];
   let selectedComparisonStudentIds = [];
   let currentAssignmentComparison = null;
+  let assignmentSummaryModalTimer = null;
   let currentComparisonFilters = {
     input: true,
     edit: true,
@@ -56,6 +58,163 @@
     const assignSearchClear = $("assignment-search-clear");
     const assignSearchDropdown = $("assignment-student-dropdown");
     const assignSortSelect = $("assignment-student-sort");
+    const assignmentSummaryModal = $("assignment-summary-modal");
+    const assignmentSummaryModalClose = $("assignment-summary-modal-close");
+
+    function closeAssignmentSummaryModal() {
+      if (assignmentSummaryModalTimer) {
+        clearTimeout(assignmentSummaryModalTimer);
+        assignmentSummaryModalTimer = null;
+      }
+      if (assignmentSummaryModal) {
+        assignmentSummaryModal.style.display = "none";
+      }
+    }
+
+    function normalizeRoleLabel(role) {
+      const value = String(role || "Student").trim();
+      return value ? value.toUpperCase() : "STUDENT";
+    }
+
+    function formatSummaryDate(value) {
+      if (!value) {
+        return "Never Started";
+      }
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return String(value);
+      }
+      return parsed.toLocaleString();
+    }
+
+    function setSummaryText(id, value) {
+      const element = $(id);
+      if (element) {
+        element.textContent = String(value);
+      }
+    }
+
+    function renderRawAssignmentWork(rawResponse, students) {
+      const rawContainer = $("assignment-summary-raw-response");
+      if (!rawContainer) {
+        return;
+      }
+
+      const rawValue = rawResponse ?? students ?? null;
+      rawContainer.textContent = JSON.stringify(rawValue, null, 2);
+    }
+
+    function renderJoinedClasses(report) {
+      const container = $("assignment-summary-joined-classes");
+      if (!container) {
+        return;
+      }
+
+      const classes = Array.isArray(report?.classes) ? report.classes : [];
+      container.innerHTML = "";
+
+      if (classes.length === 0) {
+        container.innerHTML = '<div class="meta">No joined classes were found for this student.</div>';
+        return;
+      }
+
+      classes.forEach((entry) => {
+        const classInfo = entry?.classInfo || {};
+        const assignments = Array.isArray(entry?.assignments) ? entry.assignments : [];
+        const classCard = document.createElement("div");
+        classCard.style.cssText = "padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02);";
+
+        const assignmentList = assignments.length
+          ? assignments.slice(0, 8).map((assignment) => {
+              const startedLabel = assignment.started ? "Started" : "Not started";
+              const workspaceLabel = assignment.workspaceName || assignment.workspaceRootPath || "No workspace linked";
+              return `<li style="margin: 0 0 6px 0;">${assignment.name || "Assignment"} <span class="meta">(${startedLabel})</span><div class="meta" style="margin-top: 2px; word-break: break-word;">${workspaceLabel}</div></li>`;
+            }).join("")
+          : '<li class="meta">No assignments found in this class.</li>';
+
+        classCard.innerHTML = `
+          <div style="display:flex; justify-content:space-between; gap: 12px; align-items:flex-start;">
+            <div>
+              <div style="font-weight:700;">${classInfo.courseName || "Unnamed Class"}</div>
+              <div class="meta" style="margin-top: 3px;">${classInfo.courseCode || "No class code"}</div>
+            </div>
+            <div class="meta" style="white-space: nowrap;">${assignments.length} assignment(s)</div>
+          </div>
+          <ul style="margin: 10px 0 0 18px; padding: 0;">${assignmentList}</ul>
+        `;
+        container.appendChild(classCard);
+      });
+    }
+
+    function showAssignmentSummaryModal(payload) {
+      if (!assignmentSummaryModal) {
+        return;
+      }
+
+      const classInfo = payload?.classInfo || {};
+      const assignment = payload?.assignment || {};
+      const classStudents = Array.isArray(payload?.classStudents)
+        ? payload.classStudents
+        : currentClassStudents;
+      const assignmentStudents = Array.isArray(payload?.students)
+        ? payload.students
+        : [];
+      const focusUserId = 4;
+
+      const classStudent = classStudents.find((student) => Number(student.authUserId) === focusUserId) || null;
+      const assignmentStudent = assignmentStudents.find((student) => Number(student.authUserId) === focusUserId) || null;
+      const studentReport = payload?.studentReport || null;
+      const focusStudent = assignmentStudent || classStudent || { authUserId: focusUserId };
+      const hasClass = !!classStudent;
+      const startedAssignment = !!assignmentStudent;
+      const roleLabel = normalizeRoleLabel(studentReport?.role || focusStudent.role || classStudent?.role || "Student");
+      const studentName = studentReport?.studentName || focusStudent.studentName || "Unknown Student";
+      const currentAssignmentStarted = studentReport?.currentAssignmentStarted || startedAssignment;
+      const workspaceName = String(studentReport?.currentAssignmentWorkspaceName || assignmentStudent?.workspaceName || classStudent?.workspaceName || "No workspace linked");
+      const sessionCount = Number(studentReport?.currentAssignmentSessionCount || assignmentStudent?.sessionCount || 0);
+      const eventCount = Number(studentReport?.currentAssignmentTotalEvents || assignmentStudent?.totalEvents || 0);
+      const lastActive = formatSummaryDate(studentReport?.currentAssignmentLastActive || assignmentStudent?.lastActive);
+      const linkedAt = String(studentReport?.currentAssignmentLinkedAt || assignmentStudent?.linkedAt || classStudent?.linkedAt || "");
+      const rawResponse = payload?.studentWorkRawResponse || payload?.students || [];
+
+      setSummaryText("assignment-summary-modal-title", `Student summary: ${studentName}`);
+      setSummaryText("assignment-summary-modal-subtitle", `User ID ${focusUserId} for ${assignment.name || "Current assignment"}`);
+      setSummaryText("assignment-summary-user-name", studentName);
+      setSummaryText("assignment-summary-user-role", `| ${roleLabel}`);
+      const joinedClassCount = Array.isArray(studentReport?.classes) ? studentReport.classes.length : (hasClass ? 1 : 0);
+      setSummaryText("assignment-summary-class-membership", joinedClassCount > 0 ? `Yes, joined ${joinedClassCount} class(es).` : "No, this user is not in the current class.");
+      setSummaryText("assignment-summary-assignment-started", currentAssignmentStarted ? "Yes, this user has started this assignment." : "No, this user has not started this assignment.");
+      setSummaryText("assignment-summary-session-count", `${sessionCount} session(s)`);
+      setSummaryText("assignment-summary-event-count", `${eventCount} total log event(s)`);
+      setSummaryText("assignment-summary-last-active", `Last active: ${lastActive}`);
+      setSummaryText("assignment-summary-workspace-name", workspaceName);
+      setSummaryText("assignment-summary-workspace-linked-at", linkedAt ? `Linked at: ${formatSummaryDate(linkedAt)}` : "No linked workspace timestamp available");
+      setSummaryText("assignment-summary-class-name", classInfo.courseName || "Current class");
+      setSummaryText("assignment-summary-class-code", classInfo.courseCode || "No class code");
+      setSummaryText("assignment-summary-assignment-name", assignment.name || "Current assignment");
+      setSummaryText("assignment-summary-assignment-meta", assignment.description || "No assignment description available");
+      setSummaryText("assignment-summary-status", currentAssignmentStarted ? "Assignment data found" : "No assignment work found for user 4");
+      setSummaryText("assignment-summary-details", `Class ID ${classInfo.id || currentClassId || "-"} • Assignment ID ${assignment.id || currentAssignmentId || "-"}`);
+      renderJoinedClasses(studentReport);
+      renderRawAssignmentWork(rawResponse, payload?.students || []);
+
+      if (assignmentSummaryModalTimer) {
+        clearTimeout(assignmentSummaryModalTimer);
+      }
+      assignmentSummaryModalTimer = setTimeout(() => {
+        if (assignmentSummaryModal) {
+          assignmentSummaryModal.style.display = "flex";
+        }
+        assignmentSummaryModalTimer = null;
+      }, 5000);
+    }
+
+    assignmentSummaryModalClose?.addEventListener("click", closeAssignmentSummaryModal);
+    assignmentSummaryModal?.addEventListener("click", (event) => {
+      if (event.target === assignmentSummaryModal) {
+        closeAssignmentSummaryModal();
+      }
+    });
 
     // Helper to draw and filter the autocomplete dropdown
     function updateAssignmentSearchDropdown() {
@@ -82,10 +241,11 @@
           '<div style="padding: 10px 14px; color: var(--muted); font-size: 0.9rem;">No students found</div>';
       } else {
         filtered.forEach((s) => {
+          const roleLabel = normalizeRoleLabel(s.role || "Student");
           const div = document.createElement("div");
           div.style.cssText =
             "padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 0.9rem;";
-          div.innerHTML = `<strong>${s.studentName || "Unknown"}</strong> <span class="meta" style="font-size: 0.8rem; margin-left: 6px;">${s.studentEmail || ""}</span>`;
+          div.innerHTML = `<strong>${s.studentName || "Unknown"}</strong> <span class="meta" style="font-size: 0.8rem; margin-left: 6px;">| ${roleLabel}</span> <span class="meta" style="font-size: 0.8rem; margin-left: 6px;">${s.studentEmail || ""}</span>`;
 
           // Hover effect
           div.onmouseover = () => (div.style.background = "var(--bg)");
@@ -2735,6 +2895,7 @@
       currentClassId = classInfo.id;
       currentClassDisplayName = classInfo.courseName || "Class Detail";
       currentClassAssignments = assignments;
+      currentClassStudents = students;
       currentAssignmentStudents = [];
       setClassRefreshLoading(false);
 
@@ -2765,6 +2926,7 @@
       if ($("assignment-session-log-view")) {
         $("assignment-session-log-view").style.display = "none";
       }
+      closeAssignmentSummaryModal();
       currentAssignmentId = null;
       currentAssignmentName = "";
       clearAssignmentComparisonSelection();
@@ -2968,6 +3130,13 @@
     function renderAssignmentWork(payload) {
       const assignment = payload.assignment || {};
       const students = Array.isArray(payload.students) ? payload.students : [];
+      const classStudents = Array.isArray(payload.classStudents) ? payload.classStudents : [];
+      const studentReport = payload.studentReport || null;
+      const rawStudentsWorkRows = Array.isArray(payload.studentWorkRawResponse?.students)
+        ? payload.studentWorkRawResponse.students
+        : (Array.isArray(payload.studentWorkRawResponse?.data)
+          ? payload.studentWorkRawResponse.data
+          : students);
 
       const view = $("assignment-work-view");
 
@@ -2988,7 +3157,92 @@
 
       currentAssignmentId = assignment.id || currentAssignmentId;
       currentAssignmentName = assignment.name || currentAssignmentName;
-      currentAssignmentStudents = students;
+      currentAssignmentStudents = rawStudentsWorkRows.map((student) => {
+        const studentAuthUserId = Number(
+          student?.authUserId ??
+          student?.AuthUserId ??
+          student?.UserId ??
+          student?.userId ??
+          0
+        );
+        const studentSessionCount = Number(
+          student?.sessionCount ??
+          student?.SessionCount ??
+          student?.totalSessions ??
+          student?.TotalSessions ??
+          studentReport?.currentAssignmentSessionCount ??
+          0
+        );
+        const studentTotalEvents = Number(
+          student?.totalEvents ??
+          student?.TotalEvents ??
+          student?.eventCount ??
+          student?.EventCount ??
+          studentReport?.currentAssignmentTotalEvents ??
+          0
+        );
+        const studentLastActive = String(
+          student?.lastActive ??
+          student?.LastActive ??
+          studentReport?.currentAssignmentLastActive ??
+          ''
+        );
+        const studentWorkspaceName = String(
+          student?.workspaceName ??
+          student?.WorkspaceName ??
+          studentReport?.currentAssignmentWorkspaceName ??
+          ''
+        );
+        const studentWorkspaceRootPath = String(
+          student?.workspaceRootPath ??
+          student?.WorkspaceRootPath ??
+          studentReport?.currentAssignmentWorkspacePath ??
+          ''
+        );
+        const studentLinkedAt = String(
+          student?.linkedAt ??
+          student?.LinkedAt ??
+          studentReport?.currentAssignmentLinkedAt ??
+          ''
+        );
+
+        if (!studentReport || Number(student.authUserId) !== Number(studentReport.authUserId)) {
+          return {
+            ...student,
+            authUserId: studentAuthUserId,
+            studentName: String(student?.studentName || student?.StudentName || student?.displayName || 'Unknown Student'),
+            studentEmail: String(student?.studentEmail || student?.StudentEmail || student?.email || ''),
+            role: normalizeRoleLabel(student?.role || student?.Role || 'Student'),
+            workspaceName: studentWorkspaceName,
+            workspaceRootPath: studentWorkspaceRootPath,
+            linkedAt: studentLinkedAt,
+            sessionCount: studentSessionCount,
+            totalEvents: studentTotalEvents,
+            lastActive: studentLastActive,
+            aiEventCount: Number(student?.aiEventCount ?? student?.AiEventCount ?? 0),
+            totalPasteEvents: Number(student?.totalPasteEvents ?? student?.TotalPasteEvents ?? 0),
+            suspiciousPasteCount: Number(student?.suspiciousPasteCount ?? student?.SuspiciousPasteCount ?? 0)
+          };
+        }
+
+        return {
+          ...student,
+          authUserId: studentAuthUserId,
+          studentName: studentReport.studentName || student.studentName,
+          studentEmail: studentReport.studentEmail || student.studentEmail,
+          role: studentReport.role || student.role,
+          workspaceName: studentReport.currentAssignmentWorkspaceName || studentWorkspaceName,
+          workspaceRootPath: studentReport.currentAssignmentWorkspacePath || studentWorkspaceRootPath,
+          linkedAt: studentReport.currentAssignmentLinkedAt || studentLinkedAt,
+          sessionCount: Number(studentReport.currentAssignmentSessionCount ?? studentSessionCount ?? 0),
+          totalEvents: Number(studentReport.currentAssignmentTotalEvents ?? studentTotalEvents ?? 0),
+          lastActive: studentReport.currentAssignmentLastActive || studentLastActive,
+          aiEventCount: Number(student?.aiEventCount ?? student?.AiEventCount ?? 0),
+          totalPasteEvents: Number(student?.totalPasteEvents ?? student?.TotalPasteEvents ?? 0),
+          suspiciousPasteCount: Number(student?.suspiciousPasteCount ?? student?.SuspiciousPasteCount ?? 0)
+        };
+      });
+      currentClassStudents = classStudents;
       clearAssignmentComparisonSelection();
 
       // Hide previous views
@@ -3005,6 +3259,13 @@
 
       view.style.display = "block";
       list.innerHTML = "";
+
+      showAssignmentSummaryModal(payload);
+
+      const currentStudent = currentAssignmentStudents.find((student) => Number(student.authUserId) === Number(studentReport?.authUserId)) || currentAssignmentStudents[0] || null;
+      if (currentStudent) {
+        assignment.description = assignment.description || currentStudent.workspaceName || "No description";
+      }
 
       title.textContent = `Assignment Details: ${currentAssignmentName || "Assignment"}`;
       meta.textContent = `Students who started: ${students.length || 0}`;
@@ -3132,13 +3393,13 @@
             }
           }
 
-          const pathStr = s.workspaceRootPath || "No workspace linked";
+          const roleLabel = normalizeRoleLabel(s.role || "Student");
+          const workspaceLabel = s.workspaceName || "No workspace linked";
 
           card.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
               <div>
-                <div style="font-weight:800; font-size:1.15rem; color:var(--accent);">${s.studentName || "Unknown Student"}</div>
-                <div class="meta" style="font-size:0.85rem; margin-top:2px;">${s.studentEmail || ""} &bull; ${s.role || "Student"}</div>
+                <div style="font-weight:800; font-size:1.15rem; color:var(--accent);">${s.studentName || "Unknown Student"} <span class="meta" style="font-size:0.8rem; margin-left: 6px;">| ${roleLabel}</span></div>
               </div>
               <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
                 <div style="font-size:0.85rem; font-weight:700; padding:6px 10px; background:${aiBadgeBg}; color:${aiColor}; border-radius:6px; border:1px solid ${aiColor};">
@@ -3151,7 +3412,7 @@
             </div>
 
             <div class="meta" style="font-size:0.85rem; font-family:monospace; background:var(--bg); padding:8px 12px; border-radius:4px; border:1px solid var(--border); word-break:break-all;">
-              📁 ${pathStr}
+              📁 ${workspaceLabel}
             </div>
 
             <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; font-size:0.9rem; background:var(--bg); padding:12px; border-radius:6px; border:1px solid var(--border);">
@@ -3211,6 +3472,21 @@
     function renderAssignmentStudentSessions(payload) {
       const sessions = payload.sessions || [];
       const studentName = payload.studentName || "Student";
+      console.log('[TBD Teacher Webview] renderAssignmentStudentSessions payload:', {
+        classId: payload.classId,
+        assignmentId: payload.assignmentId,
+        studentAuthUserId: payload.studentAuthUserId,
+        studentName,
+        sessionCount: sessions.length,
+        sessionsShape: sessions.map((session) => ({
+          keys: Object.keys(session || {}),
+          SessionId: session?.SessionId ?? session?.sessionId,
+          StudentWorkspaceAssignmentId: session?.StudentWorkspaceAssignmentId ?? session?.studentWorkspaceAssignmentId,
+          OccurredAt: session?.OccurredAt ?? session?.occurredAt,
+          EventType: session?.EventType ?? session?.eventType,
+          EventDataKeys: Object.keys(session?.EventData ?? session?.eventData ?? {})
+        }))
+      });
       const studentView = $("assignment-student-view");
       const title = $("assignment-student-title");
       const empty = $("assignment-student-sessions-empty");
@@ -3339,6 +3615,7 @@
     });
 
     $("btn-back-to-assignments")?.addEventListener("click", () => {
+      closeAssignmentSummaryModal();
       if ($("assignment-student-view")) {
         $("assignment-student-view").style.display = "none";
       }
@@ -3356,6 +3633,7 @@
     });
 
     $("btn-back-to-assignment-students")?.addEventListener("click", () => {
+      closeAssignmentSummaryModal();
       if ($("assignment-student-view")) {
         $("assignment-student-view").style.display = "none";
       }

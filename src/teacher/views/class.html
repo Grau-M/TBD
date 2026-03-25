@@ -463,5 +463,94 @@
         "
       ></div>
     </div>
+
+      <div
+        id="assignment-summary-modal"
+        style="
+          display: none;
+          position: fixed;
+          inset: 0;
+          z-index: 400;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          background: rgba(2, 6, 23, 0.72);
+          backdrop-filter: blur(8px);
+        "
+      >
+        <div
+          class="card"
+          style="
+            width: min(860px, 100%);
+            max-height: min(85vh, 900px);
+            overflow: auto;
+            margin: 0;
+            padding: 18px;
+            box-shadow: 0 22px 64px rgba(0, 0, 0, 0.35);
+          "
+        >
+          <div style="display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 16px;">
+            <div>
+              <div id="assignment-summary-modal-kicker" class="meta" style="margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;">Assignment summary</div>
+              <h3 id="assignment-summary-modal-title" style="margin: 0;">Assignment summary</h3>
+              <div id="assignment-summary-modal-subtitle" class="meta" style="margin-top: 4px;"></div>
+            </div>
+            <button id="assignment-summary-modal-close" class="btn btn-secondary" style="white-space: nowrap;">Close</button>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px;">
+            <div class="card" style="margin: 0; padding: 14px; background: var(--bg);">
+              <div class="meta" style="margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">User</div>
+              <div id="assignment-summary-user-name" style="font-weight: 700; font-size: 1.05rem;">-</div>
+              <div id="assignment-summary-user-role" class="meta" style="margin-top: 6px;">-</div>
+            </div>
+            <div class="card" style="margin: 0; padding: 14px; background: var(--bg);">
+              <div class="meta" style="margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">Class membership</div>
+              <div id="assignment-summary-class-membership" style="font-weight: 700; font-size: 1.05rem;">-</div>
+              <div id="assignment-summary-assignment-started" class="meta" style="margin-top: 6px;">-</div>
+            </div>
+            <div class="card" style="margin: 0; padding: 14px; background: var(--bg);">
+              <div class="meta" style="margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">Assignment stats</div>
+              <div id="assignment-summary-session-count" style="font-weight: 700; font-size: 1.05rem;">-</div>
+              <div id="assignment-summary-event-count" class="meta" style="margin-top: 6px;">-</div>
+              <div id="assignment-summary-last-active" class="meta" style="margin-top: 4px;">-</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin: 0; padding: 14px; background: var(--bg);">
+            <div class="meta" style="margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">Linked Workspace</div>
+            <div id="assignment-summary-workspace-name" style="font-weight: 700;">-</div>
+            <div id="assignment-summary-workspace-linked-at" class="meta" style="margin-top: 4px;">-</div>
+          </div>
+
+          <div class="card" style="margin: 12px 0 0; padding: 14px; background: var(--bg);">
+            <div class="meta" style="margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">Raw students-work response</div>
+            <pre id="assignment-summary-raw-response" style="margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; font-size: 0.82rem; line-height: 1.45; background: rgba(0,0,0,0.18); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">[]</pre>
+          </div>
+
+          <div class="card" style="margin: 12px 0 0; padding: 14px; background: var(--bg);">
+            <div class="meta" style="margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">Joined Classes and Assignments</div>
+            <div id="assignment-summary-joined-classes" style="display: grid; gap: 10px;"></div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px;">
+            <div class="card" style="margin: 0; padding: 14px; background: var(--bg);">
+              <div class="meta" style="margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">Class</div>
+              <div id="assignment-summary-class-name" style="font-weight: 700;">-</div>
+              <div id="assignment-summary-class-code" class="meta" style="margin-top: 4px;">-</div>
+            </div>
+            <div class="card" style="margin: 0; padding: 14px; background: var(--bg);">
+              <div class="meta" style="margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">Assignment</div>
+              <div id="assignment-summary-assignment-name" style="font-weight: 700;">-</div>
+              <div id="assignment-summary-assignment-meta" class="meta" style="margin-top: 4px;">-</div>
+            </div>
+            <div class="card" style="margin: 0; padding: 14px; background: var(--bg);">
+              <div class="meta" style="margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">Status</div>
+              <div id="assignment-summary-status" style="font-weight: 700;">-</div>
+              <div id="assignment-summary-details" class="meta" style="margin-top: 4px;">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
   </div>
 </div>

@@ -3,6 +3,7 @@ import { WorkspaceAuthSession } from '../auth';
 import { state, storageManager } from '../state';
 import { apiGet } from '../api';
 import { updateApiKeyStatus } from '../statusBar';
+import { registerWebviewPanel } from '../webviewRegistry';
 
 interface ClassQuickPickItem extends vscode.QuickPickItem {
     classId: number;
@@ -13,20 +14,39 @@ interface AssignmentQuickPickItem extends vscode.QuickPickItem {
     assignmentId: number;
 }
 
+let panel: vscode.WebviewPanel | undefined;
+let openingPanel = false;
+
 export async function openStudentSyncView(context: vscode.ExtensionContext) {
+    const currentPanel = panel;
+    if (currentPanel) {
+        currentPanel.reveal(vscode.ViewColumn.One);
+        return;
+    }
+
+    if (openingPanel) {
+        return;
+    }
+
+    openingPanel = true;
+
     const session = context.workspaceState.get<WorkspaceAuthSession>('tbd.auth.workspaceSession.v1');
 
     if (!session?.authenticated) {
         vscode.window.showErrorMessage("Access Denied: You must be logged in to view the Sync Dashboard.");
+        openingPanel = false;
         return;
     }
 
-    const panel = vscode.window.createWebviewPanel(
+    panel = vscode.window.createWebviewPanel(
         'syncDashboardView',
         'TBD: Sync Dashboard',
         vscode.ViewColumn.One,
         { enableScripts: true }
     );
+
+    const activePanel = panel;
+    registerWebviewPanel(activePanel);
 
     let apiStatus = 'Offline';
     try {
@@ -94,19 +114,19 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     updateApiKeyStatus(apiStatus === 'Online');
 
     const render = () => {
-        panel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus);
+        activePanel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus);
     };
 
     render();
 
-    panel.webview.onDidReceiveMessage(async (message) => {
+    activePanel.webview.onDidReceiveMessage(async (message) => {
         if (message.command === 'forceSync') {
             try {
                 await vscode.commands.executeCommand('tbd-logger.forceSync');
-                panel.webview.postMessage({ command: 'syncComplete' });
+                activePanel.webview.postMessage({ command: 'syncComplete' });
             } catch (err) {
                 vscode.window.showErrorMessage("Sync Failed.");
-                panel.webview.postMessage({ command: 'syncError' });
+                activePanel.webview.postMessage({ command: 'syncError' });
             }
         } 
         
@@ -119,7 +139,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 if (choice === "Open Folder") {
                     vscode.commands.executeCommand('vscode.openFolder');
                 }
-                panel.webview.postMessage({ command: 'syncReset' });
+                activePanel.webview.postMessage({ command: 'syncReset' });
                 return;
             }
 
@@ -127,7 +147,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 const classes = await (storageManager as any).listStudentClasses(session.authUserId);
                 if (!classes || classes.length === 0) {
                     vscode.window.showInformationMessage("You are not currently enrolled in any active classes.");
-                    panel.webview.postMessage({ command: 'syncReset' });
+                    activePanel.webview.postMessage({ command: 'syncReset' });
                     return;
                 }
 
@@ -144,7 +164,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 });
 
                 if (!selectedClass) {
-                    panel.webview.postMessage({ command: 'syncReset' });
+                    activePanel.webview.postMessage({ command: 'syncReset' });
                     return;
                 }
 
@@ -153,7 +173,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 
                 if (availableAssignments.length === 0) {
                     vscode.window.showInformationMessage("All assignments in this class are already linked to other workspaces.");
-                    panel.webview.postMessage({ command: 'syncReset' });
+                    activePanel.webview.postMessage({ command: 'syncReset' });
                     return;
                 }
 
@@ -169,7 +189,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 });
 
                 if (!selectedAssignment) {
-                    panel.webview.postMessage({ command: 'syncReset' });
+                    activePanel.webview.postMessage({ command: 'syncReset' });
                     return;
                 }
 
@@ -221,10 +241,17 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 } else {
                     vscode.window.showErrorMessage(`Failed to link assignment: ${error.message || error}`);
                 }
-                panel.webview.postMessage({ command: 'syncReset' });
+                activePanel.webview.postMessage({ command: 'syncReset' });
             }
         }
     });
+
+    activePanel.onDidDispose(() => {
+        panel = undefined;
+        openingPanel = false;
+    });
+
+    openingPanel = false;
 }
 
 function getDashboardHtml(session: any, assignment: any, apiStatus: string) {

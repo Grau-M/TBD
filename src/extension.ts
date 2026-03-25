@@ -25,6 +25,7 @@ import { updateTrackingUI } from './statusBar';
 import * as path from 'path';
 import { openStudentSyncView } from './auth/studentSyncView';
 import { installNotificationToastTimeouts } from './notificationToasts';
+import { closeAllWebviews } from './webviewRegistry';
 
 const originalEmitWarning = process.emitWarning.bind(process);
 let runtimeWarningFilterInstalled = false;
@@ -65,6 +66,11 @@ async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void
     if (!statusItem) { return; }
 
     const session = getWorkspaceAuthSession(context);
+    if (!session?.authenticated) {
+        statusItem.hide();
+        return;
+    }
+
     const isTeacherView = !!session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin');
     const formatTeacherApiTooltip = (apiStatus: string, backendStatus: string, routingStatus: string): string => {
         return `API: ${apiStatus} | Backend: ${backendStatus} | Routing: ${routingStatus}`;
@@ -78,6 +84,12 @@ async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void
     statusItem.show();
     statusItem.command = 'tbd-logger.openStudentSyncView';
 
+    const setTeacherApiIndicator = (isOnline: boolean, tooltip: string) => {
+        statusItem.text = '$(cloud-upload)';
+        statusItem.color = new vscode.ThemeColor(isOnline ? 'charts.green' : 'charts.orange');
+        statusItem.tooltip = tooltip;
+    };
+
     try {
         const health = await apiGet('/health');
         const apiStatus = String(health?.status ?? 'ok');
@@ -86,26 +98,35 @@ async function updateDbStatusBar(context: vscode.ExtensionContext): Promise<void
 
         try {
             await apiGet('/api/sessions');
-            statusItem.text = isTeacherView ? '$(cloud-upload) API Connected' : '$(refresh)';
-            statusItem.tooltip = isTeacherView
-                ? formatTeacherApiTooltip('Online', 'Online', 'Active & Responding')
-                : `Sync: ${syncState} | Linked to: ${linkedTo}`;
+            if (isTeacherView) {
+                setTeacherApiIndicator(true, formatTeacherApiTooltip('Online', 'Online', 'Active & Responding'));
+            } else {
+                statusItem.text = '$(refresh)';
+                statusItem.color = undefined;
+                statusItem.tooltip = `Sync: ${syncState} | Linked to: ${linkedTo}`;
+            }
             return;
         } catch (authErr) {
             if (authErr instanceof ApiHttpError && (authErr.status === 401 || authErr.status === 403)) {
-                statusItem.text = isTeacherView ? '$(cloud-offline) API Auth Error' : '$(refresh)';
-                statusItem.tooltip = isTeacherView
-                    ? formatTeacherApiTooltip('Online', 'Online', 'Authentication Error')
-                    : `Sync: offline | Linked to: ${linkedTo}`;
+                if (isTeacherView) {
+                    setTeacherApiIndicator(false, formatTeacherApiTooltip('Online', 'Online', 'Authentication Error'));
+                } else {
+                    statusItem.text = '$(refresh)';
+                    statusItem.color = undefined;
+                    statusItem.tooltip = `Sync: offline | Linked to: ${linkedTo}`;
+                }
                 return;
             }
             throw authErr;
         }
     } catch (err) {
-        statusItem.text = isTeacherView ? '$(database) API Offline' : '$(refresh)';
-        statusItem.tooltip = isTeacherView
-            ? formatTeacherApiTooltip('Offline', 'Offline', 'Not Responding')
-            : `Sync: offline | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
+        if (isTeacherView) {
+            setTeacherApiIndicator(false, formatTeacherApiTooltip('Offline', 'Offline', 'Not Responding'));
+        } else {
+            statusItem.text = '$(refresh)';
+            statusItem.color = undefined;
+            statusItem.tooltip = `Sync: offline | Linked to: ${state.activeCourse || 'None'} | ${state.activeAssignment || 'None'}`;
+        }
     }
 }
 
@@ -892,6 +913,7 @@ export async function activate(context: vscode.ExtensionContext) {
         });
 
         if (answer) {
+            await closeAllWebviews();
             await clearWorkspaceAuthSession(context);
             updateAuthStatusBar(context);
             vscode.window.showInformationMessage('You have been logged out.');

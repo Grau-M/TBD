@@ -78,10 +78,8 @@ export function updateTrackingUI(role?: string) {
     const currentRole = role || state.currentUserRole;
 
     if (currentRole === 'None' || !currentRole) {
-        trackingItem.text = "$(person) TBD: Not Logged In";
-        trackingItem.tooltip = "Please log in to use TBD Logger.";
-        trackingItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground'); 
-        trackingItem.show();
+        trackingItem.hide();
+        dbItem?.hide();
         return; 
     }
 

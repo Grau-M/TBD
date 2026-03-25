@@ -4,11 +4,14 @@ import { WorkspaceAuthSession } from '../auth';
 import { getAuthHtml } from './getHtml';
 import { ApiHttpError } from '../api';
 import { getThemePreference } from '../themePreference';
+import { registerWebviewPanel } from '../webviewRegistry';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 let authPanel: vscode.WebviewPanel | undefined;
 let logoutConfirmPanel: vscode.WebviewPanel | undefined;
+let openingAuthPanel = false;
+let openingLogoutConfirmPanel = false;
 
 function buildLocalSession(params: {
     role: UserRole;
@@ -52,6 +55,12 @@ export async function openAuthView(
         return undefined;
     }
 
+    if (openingAuthPanel) {
+        return undefined;
+    }
+
+    openingAuthPanel = true;
+
     return new Promise<WorkspaceAuthSession | undefined>((resolve) => {
         authPanel = vscode.window.createWebviewPanel(
             'tbdAuthView',
@@ -64,13 +73,18 @@ export async function openAuthView(
             }
         );
 
+        registerWebviewPanel(authPanel);
+
         authPanel.webview.html = getAuthHtml(authPanel.webview, context);
 
         // Panel closed without completing auth
         authPanel.onDidDispose(() => {
             authPanel = undefined;
+            openingAuthPanel = false;
             resolve(undefined);
         }, null, context.subscriptions);
+
+        openingAuthPanel = false;
 
         authPanel.webview.onDidReceiveMessage(async (message) => {
             try {
@@ -313,6 +327,12 @@ export async function openLogoutConfirmView(
                 return false;
         }
 
+    if (openingLogoutConfirmPanel) {
+        return false;
+    }
+
+    openingLogoutConfirmPanel = true;
+
         return new Promise<boolean>((resolve) => {
                 let settled = false;
 
@@ -338,6 +358,7 @@ export async function openLogoutConfirmView(
                 );
 
                 logoutConfirmPanel = panel;
+                registerWebviewPanel(panel);
 
                 const nonce = getNonce();
                 const payload = JSON.stringify({
@@ -490,8 +511,11 @@ export async function openLogoutConfirmView(
 
                 panel.onDidDispose(() => {
                         logoutConfirmPanel = undefined;
+            openingLogoutConfirmPanel = false;
                         finish(false);
                 }, null, context.subscriptions);
+
+        openingLogoutConfirmPanel = false;
 
                 panel.webview.onDidReceiveMessage((message) => {
                         if (message.command === 'confirmLogout') {

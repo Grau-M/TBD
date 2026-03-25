@@ -83,7 +83,8 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                                 classId: c.id,
                                 courseName: c.courseName || c.courseCode || `Class ID: ${c.id}`,
                                 assignmentId: linked.assignmentId,
-                                assignmentName: linked.assignmentName || linked.name || linked.WorkplaceName || linked.workplaceName || `Assignment ID: ${linked.assignmentId}`
+                                assignmentName: linked.assignmentName || linked.name || linked.WorkplaceName || linked.workplaceName || `Assignment ID: ${linked.assignmentId}`,
+                                workspaceRootPath: String(linked.workspaceRootPath || workspaceRoot || '')
                             };
 
                             state.activeCourse = assignmentInfo.courseName;
@@ -196,6 +197,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 }
 
                 const workspaceName = currentWorkspaceFolder.name;
+                const workspaceRootPath = currentWorkspaceFolder.uri.fsPath;
                 await vscode.window.withProgress({
                     location: vscode.ProgressLocation.Notification,
                     title: "Linking workspace to assignment...",
@@ -207,7 +209,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                         classId: selectedClass.classId,
                         assignmentId: selectedAssignment.assignmentId,
                         workspaceName: workspaceName,
-                        workspaceRootPath: workspaceRoot,
+                        workspaceRootPath,
                         workspaceFoldersJson: JSON.stringify([{ name: workspaceName, uri: currentWorkspaceFolder.uri.toString() }])
                     });
                 });
@@ -229,7 +231,8 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                     classId: selectedClass.classId,
                     courseName: selectedClass.label,
                     assignmentId: selectedAssignment.assignmentId,
-                    assignmentName: selectedAssignment.label
+                    assignmentName: selectedAssignment.label,
+                    workspaceRootPath
                 };
 
                 state.activeCourse = selectedClass.label;
@@ -310,8 +313,8 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
                         <div class="value">${assignment.assignmentName || 'Active Assignment'}</div>
                     </div>
                     <div class="field">
-                        <div class="label">Student Name</div>
-                        <div class="value">${session.displayName || 'N/A'}</div>
+                        <div class="label">Workspace Path</div>
+                        <div class="value">${assignment.workspaceRootPath || 'N/A'}</div>
                     </div>
                 </div>
                 <button id="forceSyncBtn" class="btn-sync">

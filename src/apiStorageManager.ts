@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { StandardEvent } from './types';
-import { ApiHttpError, apiGet, apiPatch, apiPost, apiPut } from './api';
+import { API_BASE, ApiHttpError, apiGet, apiPatch, apiPost, apiPut } from './api';
 
 interface ApiSyncStatus {
     state: 'synced' | 'syncing' | 'offline' | 'queue-warning' | 'conflict' | 'idle';
@@ -50,6 +50,21 @@ export class ApiStorageManager {
                 return obj[key];
             }
         }
+
+        const lowerKeyMap = new Map<string, string>();
+        for (const key of Object.keys(obj)) {
+            if (!lowerKeyMap.has(key.toLowerCase())) {
+                lowerKeyMap.set(key.toLowerCase(), key);
+            }
+        }
+
+        for (const key of keys) {
+            const matchedKey = lowerKeyMap.get(key.toLowerCase());
+            if (matchedKey && obj[matchedKey] !== undefined && obj[matchedKey] !== null) {
+                return obj[matchedKey];
+            }
+        }
+
         return undefined;
     }
 
@@ -156,11 +171,15 @@ export class ApiStorageManager {
             throw new Error('Cannot flush logs without an active session id.');
         }
 
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+
         for (const event of _newEvents) {
             const response = await apiPost('/api/events', {
                 sessionId,
                 eventType: event.eventType,
                 occurredAt: event.time,
+                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
                 eventData: {
                     time: event.time,
                     flightTime: event.flightTime,
@@ -168,7 +187,8 @@ export class ApiStorageManager {
                     fileView: event.fileView,
                     possibleAiDetection: event.possibleAiDetection,
                     fileFocusCount: event.fileFocusCount,
-                    pasteCharCount: event.pasteCharCount
+                    pasteCharCount: event.pasteCharCount,
+                    StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined
                 }
             });
 
@@ -764,12 +784,25 @@ export class ApiStorageManager {
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.students) ? result.students : (Array.isArray(result?.data) ? result.data : []));
-        return rows.map((row: any) => ({
+        const normalizedRows = rows.map((row: any) => ({
+            ...row,
             authUserId: Number(row.UserId || row.userId || row.authUserId || 0),
             studentName: String(row.StudentName || row.studentName || row.displayName || 'Unknown Student'),
-            totalEvents: Number(row.TotalEvents || row.totalEvents || row.eventCount || 0),
-            lastActive: String(row.LastActive || row.lastActive || '')
+            studentEmail: String(row.StudentEmail || row.studentEmail || row.email || ''),
+            role: this.normalizeRole(row.Role || row.role || row.assignedRole || row.AssignedRole),
+            sessionCount: Number(this.pick(row, ['SessionCount', 'sessionCount', 'totalSessions', 'TotalSessions']) ?? 0),
+            totalEvents: Number(this.pick(row, ['TotalEvents', 'totalEvents', 'eventCount', 'EventCount']) ?? 0),
+            lastActive: String(this.pick(row, ['LastActive', 'lastActive']) || ''),
+            workspaceName: String(row.WorkspaceName || row.workspaceName || ''),
+            workspaceRootPath: String(row.WorkspaceRootPath || row.workspaceRootPath || ''),
+            linkedAt: String(this.pick(row, ['LinkedAt', 'linkedAt']) || ''),
+            synced: Boolean(row.synced ?? row.Synced ?? false),
+            aiEventCount: Number(row.AiEventCount || row.aiEventCount || 0),
+            totalPasteEvents: Number(row.TotalPasteEvents || row.totalPasteEvents || 0),
+            suspiciousPasteCount: Number(row.SuspiciousPasteCount || row.suspiciousPasteCount || 0)
         }));
+        (normalizedRows as any).rawResponse = result;
+        return normalizedRows;
     }
 
     async listAssignmentStudentSessions(
@@ -779,13 +812,45 @@ export class ApiStorageManager {
         teacherAuthUserId?: number
     ): Promise<any[]> {
         const teacherId = Number(teacherAuthUserId ?? 0);
-        const result = await this.apiGetFirst([
-            `/api/classes/${classId}/assignments/${assignmentId}/students/${studentAuthUserId}/sessions?teacherAuthUserId=${teacherId}`,
-            `/api/classes/assignment-student-sessions?classId=${classId}&assignmentId=${assignmentId}&studentAuthUserId=${studentAuthUserId}&teacherAuthUserId=${teacherId}`
-        ]);
+        const primaryPath = `/api/classes/assignment-student-sessions?classId=${classId}&assignmentId=${assignmentId}&studentAuthUserId=${studentAuthUserId}`;
+        const fallbackPath = `/api/classes/${classId}/assignments/${assignmentId}/students/${studentAuthUserId}/sessions?teacherAuthUserId=${teacherId}`;
+
+        console.groupCollapsed('[TBD Teacher] Loading assignment sessions');
+        console.log('Full URL being requested:', `${API_BASE}${primaryPath}`);
+        console.log('Query parameters:', { classId, assignmentId, studentAuthUserId });
+        console.log('Fallback request path:', `${API_BASE}${fallbackPath}`);
+
+        let result: any;
+        try {
+            result = await this.apiGetFirst([
+                primaryPath,
+                fallbackPath
+            ]);
+            console.log('Raw JSON response from backend:', result);
+        } catch (error) {
+            console.error('[TBD Teacher] assignment sessions request failed:', {
+                classId,
+                assignmentId,
+                studentAuthUserId,
+                teacherAuthUserId: teacherId,
+                error
+            });
+            console.groupEnd();
+            throw error;
+        }
+
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.sessions) ? result.sessions : (Array.isArray(result?.data) ? result.data : []));
+        console.log('Data shape before UI:', rows.map((row: any) => ({
+            keys: Object.keys(row || {}),
+            SessionId: row?.SessionId ?? row?.sessionId,
+            StudentWorkspaceAssignmentId: row?.StudentWorkspaceAssignmentId ?? row?.studentWorkspaceAssignmentId,
+            OccurredAt: row?.OccurredAt ?? row?.occurredAt,
+            EventType: row?.EventType ?? row?.eventType,
+            EventDataKeys: Object.keys(row?.EventData ?? row?.eventData ?? {})
+        })));
+        console.groupEnd();
         return rows;
     }
 
@@ -830,9 +895,12 @@ export class ApiStorageManager {
                 name: String(this.pick(row, ['assignmentName', 'AssignmentName', 'name', 'Name', 'title', 'Title']) || 'Untitled Assignment'),
                 description: String(this.pick(row, ['description', 'Description', 'details', 'Details']) || 'No assignment description was provided.'),
                 dueDate: String(this.pick(row, ['dueDate', 'DueDate']) || ''),
+                sessionCount: Number(this.pick(row, ['SessionCount', 'sessionCount', 'totalSessions', 'TotalSessions']) ?? 0),
+                totalEvents: Number(this.pick(row, ['TotalEvents', 'totalEvents', 'eventCount', 'EventCount']) ?? 0),
+                lastActive: String(this.pick(row, ['LastActive', 'lastActive']) || ''),
                 workspaceName: String(this.pick(row, ['workspaceName', 'WorkspaceName']) || ''),
                 workspaceRootPath: String(this.pick(row, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
-                linkedAt: String(this.pick(row, ['linkedAt', 'LinkedAt']) || ''),
+                linkedAt: String(this.pick(row, ['LinkedAt', 'linkedAt']) || ''),
                 classId: Number(this.pick(row, ['classId', 'ClassId']) ?? classId),
                 teacherAuthUserId: Number(this.pick(row, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0),
                 studentAuthUserId: Number(this.pick(row, ['studentAuthUserId', 'StudentAuthUserId']) ?? studentAuthUserId)
@@ -851,8 +919,8 @@ export class ApiStorageManager {
                 workspaceName: String(this.pick(workspace, ['workspaceName', 'WorkspaceName']) || row.workspaceName || ''),
                 workspaceRootPath: String(this.pick(workspace, ['workspaceRootPath', 'WorkspaceRootPath']) || row.workspaceRootPath || ''),
                 workspaceFoldersJson: String(this.pick(workspace, ['workspaceFoldersJson', 'WorkspaceFoldersJson']) || row.workspaceFoldersJson || '[]'),
-                linkedAt: String(this.pick(workspace, ['linkedAt', 'LinkedAt']) || row.linkedAt || ''),
-                updatedAt: String(this.pick(workspace, ['updatedAt', 'UpdatedAt']) || row.updatedAt || ''),
+                linkedAt: String(this.pick(workspace, ['LinkedAt', 'linkedAt']) || row.linkedAt || ''),
+                updatedAt: String(this.pick(workspace, ['UpdatedAt', 'updatedAt']) || row.updatedAt || ''),
                 teacherAuthUserId: Number(this.pick(workspace, ['teacherAuthUserId', 'TeacherAuthUserId']) ?? row.teacherAuthUserId ?? 0)
             };
         }));
@@ -879,8 +947,8 @@ export class ApiStorageManager {
             workspaceName: String(this.pick(workspace, ['workspaceName', 'WorkspaceName']) || ''),
             workspaceRootPath: String(this.pick(workspace, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
             workspaceFoldersJson: String(this.pick(workspace, ['workspaceFoldersJson', 'WorkspaceFoldersJson']) || '[]'),
-            linkedAt: String(this.pick(workspace, ['linkedAt', 'LinkedAt']) || ''),
-            updatedAt: String(this.pick(workspace, ['updatedAt', 'UpdatedAt']) || '')
+            linkedAt: String(this.pick(workspace, ['LinkedAt', 'linkedAt']) || ''),
+            updatedAt: String(this.pick(workspace, ['UpdatedAt', 'updatedAt']) || '')
         };
     }
 }

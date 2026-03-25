@@ -1,4 +1,4 @@
-const API_BASE = 'http://142.55.32.101';
+export const API_BASE = 'http://142.55.32.101';
 const API_KEY = 'supersecretkey123';
 
 function formatErrorBody(raw: string): string {
@@ -64,27 +64,39 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 async function apiRequest(path: string, init: RequestInit): Promise<any> {
   const authHeaders = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      ...(init.headers || {}),
-      ...authHeaders
-    }
-  });
-
-  const raw = await res.text();
-  if (!res.ok) {
-    throw new ApiHttpError(path, res.status, raw);
-  }
-
-  if (!raw) {
-    return {};
-  }
+  const url = `${API_BASE}${path}`;
+  const method = String(init.method || 'GET').toUpperCase();
 
   try {
-    return JSON.parse(raw);
-  } catch {
-    return { raw };
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        ...(init.headers || {}),
+        ...authHeaders
+      }
+    });
+
+    const raw = await res.text();
+    if (!res.ok) {
+      console.error('[TBD API ERROR]', { method, url, status: res.status, responseBody: raw });
+      throw new ApiHttpError(path, res.status, raw);
+    }
+
+    if (!raw) {
+      return {};
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      console.log('[TBD API RESPONSE]', { method, url, response: parsed });
+      return parsed;
+    } catch {
+      console.log('[TBD API RESPONSE]', { method, url, response: { raw } });
+      return { raw };
+    }
+  } catch (error) {
+    console.error('[TBD API FETCH ERROR]', { method, url, error });
+    throw error;
   }
 }
 

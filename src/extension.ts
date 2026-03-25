@@ -392,7 +392,7 @@ function updateAuthStatusBar(context: vscode.ExtensionContext): void {
     
     // 3. WORKSPACE LINKED STATUS
     if (state.activeAssignment) {
-        globalSb.text = `$(record) Recording: ${state.activeAssignment}`;
+        globalSb.text = `$(record-keys) Logging Data`;
         globalSb.tooltip = `Logging data to ${state.activeCourse || 'Linked Assignment'} | ${state.activeAssignment}`;
         globalSb.color = new vscode.ThemeColor('testing.iconPassed'); // Green text
         globalSb.backgroundColor = undefined;
@@ -612,6 +612,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         
         const sessionId = context.workspaceState.get<number>(SESSION_ID_KEY);
+        const studentWorkspaceAssignmentId = Number(getWorkspaceAuthSession(context)?.workspaceLinkedAssignmentId ?? 0);
         if (!sessionId) {
             return;
         }
@@ -621,7 +622,11 @@ export async function activate(context: vscode.ExtensionContext) {
                 sessionId,
                 eventType,
                 occurredAt: new Date().toISOString(),
-                eventData: data
+                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
+                eventData: {
+                    ...data,
+                    StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined
+                }
             }));
         } catch (error) {
             console.warn(`[TBD Logger] Failed to log event: ${eventType}`, error);

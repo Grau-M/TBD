@@ -34,9 +34,16 @@ export class ApiStorageManager {
     }
 
     private getQueueUri(): vscode.Uri | null {
-        if (!this.context) return null;
-        // Store inside the workspace global storage for persistence across reloads
-        return vscode.Uri.joinPath(this.context.globalStorageUri, 'tbd_offline_queue.enc');
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            // Fallback to global storage if no workspace is active
+            return this.context ? vscode.Uri.joinPath(this.context.globalStorageUri, 'tbd_offline_queue.enc') : null;
+        }
+        
+        // Target the active workspace's .vscode/logs directory
+        const workspaceRoot = workspaceFolders[0].uri;
+        return vscode.Uri.joinPath(workspaceRoot, '.vscode', 'logs', 'tbd_offline_queue.enc');
     }
 
     private encrypt(text: string): Buffer {
@@ -69,20 +76,25 @@ export class ApiStorageManager {
         }
     }
 
-    private async writeQueue(events: any[]): Promise<void> {
+   private async writeQueue(events: any[]): Promise<void> {
         const uri = this.getQueueUri();
         if (!uri) return;
         
         try {
-            await vscode.workspace.fs.createDirectory(this.context!.globalStorageUri);
-        } catch (e) {}
+            // Ensure the .vscode/logs directory exists before attempting to write
+            const logsDir = vscode.Uri.joinPath(uri, '..');
+            await vscode.workspace.fs.createDirectory(logsDir);
+        } catch (e) {
+            console.warn('[TBD Logger] Could not create .vscode/logs directory', e);
+        }
 
         if (events.length === 0) {
-            // Clear file if queue is empty
+            // Clear file if the queue successfully emptied (synced to cloud)
             try { await vscode.workspace.fs.delete(uri); } catch (e) {}
             return;
         }
 
+        // Encrypt and write the offline events to the workspace logs folder
         const data = this.encrypt(JSON.stringify(events));
         await vscode.workspace.fs.writeFile(uri, data);
     }
@@ -229,65 +241,81 @@ export class ApiStorageManager {
     }
 
     async flush(_newEvents: StandardEvent[]): Promise<void> {
-        if (!this.context) {
-            throw new Error('Storage manager is not initialized.');
-        }
+        if (!this.context) throw new Error('Storage manager is not initialized.');
 
-        const sessionId = this.context.workspaceState.get<number>('sessionId');
-        if (!sessionId) {
-            throw new Error('Cannot flush logs without an active session id.');
-        }
-
+        // 1. Get current session info (This will be null if they started offline!)
+        let currentSessionId = this.context.workspaceState.get<number>('sessionId') || null;
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        
         const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+        const userId = Number(session?.authUserId ?? 0);
+        const projectId = Number(session?.workspaceLinkedClassId ?? 0); // Fallback for project ID mapping
 
-        // 1. Format new events into payloads
+        // 2. Format new events, tagging them with the current session state
         const newPayloads = _newEvents.map(event => ({
-            sessionId,
+            sessionId: currentSessionId, // Could be null if DB was down at startup
             eventType: event.eventType,
-            occurredAt: event.time,
-            StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
-            eventData: {
-                time: event.time,
-                flightTime: event.flightTime,
-                fileEdit: event.fileEdit,
-                fileView: event.fileView,
-                possibleAiDetection: event.possibleAiDetection,
-                fileFocusCount: event.fileFocusCount,
-                pasteCharCount: event.pasteCharCount,
-                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined
-            }
+            occurredAt: event.time || new Date().toISOString(),
+            flightTimeMs: event.flightTime ? Number(event.flightTime) : null,
+            fileEdit: event.fileEdit || null,
+            fileView: event.fileView || null,
+            fileFocusCount: event.fileFocusCount || null,
+            charsAdded: event.charsAdded || null,
+            pasteCharCount: event.pasteCharCount || null,
+            windowFocused: event.windowFocused !== undefined ? event.windowFocused : true,
+            workspaceName: vscode.workspace.name || null,
+            studentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : null,
+            possibleAiDetection: event.possibleAiDetection || null
         }));
 
-        // 2. Load the offline queue from the encrypted disk file
+        // 3. Load the existing offline queue from .vscode/logs/tbd_offline_queue.enc
         let offlineQueue = await this.readQueue();
         
-        // 3. Add new events to the back of the queue
+        // 4. Add new events to the back of the queue
         offlineQueue.push(...newPayloads);
         this.syncStatus.pendingQueueCount = offlineQueue.length;
 
-        // 4. Try to push everything in the queue to the API
+        // 5. Try to push everything in the queue to the API
         const remainingQueue: any[] = [];
         let isOffline = false;
 
         for (let i = 0; i < offlineQueue.length; i++) {
             const payload = offlineQueue[i];
             
-            // If we already detected the API is down during this flush, just keep queueing locally
+            // If the API drops mid-upload, stop making network calls and cache the rest
             if (isOffline) {
                 remainingQueue.push(payload);
                 continue;
             }
 
             try {
-                const response = await apiPost('/api/events', payload);
-                const eventId = response?.event?.Id ?? response?.event?.id ?? response?.id ?? response?.Id;
-                console.log(
-                    `[TBD Logger] Pushed event to /api/events: ${payload.eventType} @ ${payload.occurredAt}` +
-                    (eventId ? ` (event id: ${eventId})` : '')
-                );
+                // SCENARIO 1: They started offline and need a new Session ID generated
+                if (!payload.sessionId) {
+                    // Call your Express backend to create a new session natively
+                    const newSession = await apiPost('/api/sessions', {
+                        userId: userId,
+                        projectId: projectId,
+                        sessionNumber: Math.floor(Date.now() / 1000), // Generate a fallback session number
+                        startedAt: payload.occurredAt,
+                        studentWorkspaceAssignmentId: studentWorkspaceAssignmentId
+                    });
+
+                    // Save the new session ID so subsequent events use it
+                    currentSessionId = newSession.Id || newSession.id || newSession.SessionId;
+                    await this.context.workspaceState.update('sessionId', currentSessionId);
+                    
+                    // Attach the new ID to the payload
+                    payload.sessionId = currentSessionId;
+                    console.log(`[TBD Logger] Recovered from offline start. Generated new Session ID: ${currentSessionId}`);
+                }
+
+                // SCENARIO 2: Upload the event (handles both existing sessions and newly generated ones)
+                await apiPost('/api/events', payload);
+                console.log(`[TBD Logger] Pushed event to DB: ${payload.eventType}`);
+                
             } catch (error) {
-                console.warn('[TBD Logger] API is offline or failed. Queuing remaining events to encrypted disk storage.');
+                // Network failed. Flag as offline and push back into the remaining queue
+                console.warn('[TBD Logger] API is offline. Queuing event locally.');
                 isOffline = true;
                 remainingQueue.push(payload);
                 this.syncStatus.state = 'offline';
@@ -295,23 +323,21 @@ export class ApiStorageManager {
             }
         }
 
-        // 5. Save the remaining queue back to the encrypted file
+        // 6. Save the remaining queue back to the encrypted file in .vscode/logs/
+        // (If the queue is empty, this function automatically deletes the .enc file)
         try {
             await this.writeQueue(remainingQueue);
             this.syncStatus.pendingQueueCount = remainingQueue.length;
         } catch (e) {
             console.error('[TBD Logger] Failed to write offline queue to disk!', e);
-            throw e; // Throw so flush.ts can recover it in memory
+            throw e; 
         }
 
-        // 6. Update statuses if successfully connected
+        // 7. Resolve status
         if (!isOffline) {
             this.syncStatus.lastSyncedAt = new Date().toISOString();
             this.syncStatus.state = 'synced';
             this.syncStatus.lastError = null;
-            if (offlineQueue.length > 0) {
-                console.log(`[TBD Logger] Flush complete: ${offlineQueue.length} event(s) successfully processed.`);
-            }
         }
     }
 

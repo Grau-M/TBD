@@ -17,4 +17,5 @@ export interface StandardEvent {
     fileFocusCount?: string;
     pasteCharCount?: number;
     windowFocused?: boolean;
+    charsAdded?: number;
 }

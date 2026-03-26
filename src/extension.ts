@@ -649,7 +649,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     };
 
-    const logEvent = async (eventType: string, data: any): Promise<void> => {
+const logEvent = async (eventType: string, data: any): Promise<void> => {
         if (state.isPersonalWorkspace) { return; }
         if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
         
@@ -663,7 +663,18 @@ export async function activate(context: vscode.ExtensionContext) {
                 sessionId,
                 eventType,
                 occurredAt: new Date().toISOString(),
-                eventData: data
+                
+                // --- Flattened Native Columns ---
+                flightTimeMs: data.flightTime ? Number(data.flightTime) : null,
+                fileEdit: data.fileEdit || data.file || null,
+                fileView: data.fileView || null,
+                fileFocusCount: data.fileFocusCount || null,
+                charsAdded: data.charsAdded || null,
+                pasteCharCount: data.pasteCharCount || null,
+                windowFocused: data.focused !== undefined ? data.focused : null,
+                workspaceName: data.workspaceName || vscode.workspace.name || null,
+                studentWorkspaceAssignmentId: data.StudentWorkspaceAssignmentId || null,
+                possibleAiDetection: data.possibleAiDetection || null
             }));
         } catch (error) {
             console.warn(`[TBD Logger] Failed to log event: ${eventType}`, error);

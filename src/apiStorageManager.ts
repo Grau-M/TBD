@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import type { StandardEvent } from './types';
 import { API_BASE, ApiHttpError, apiGet, apiPatch, apiPost, apiPut } from './api';
 
@@ -21,6 +22,71 @@ export class ApiStorageManager {
         lastError: null,
         lastConflictAt: null
     };
+
+    // --- ENCRYPTED OFFLINE QUEUE CONFIGURATION ---
+    private readonly SECRET_PASSPHRASE = 'password';
+    private readonly SALT = 'salty_buffer_tbd';
+    private readonly ALGORITHM = 'aes-256-cbc';
+    private readonly IV_LENGTH = 16;
+    
+    private get KEY() { 
+        return crypto.scryptSync(this.SECRET_PASSPHRASE, this.SALT, 32); 
+    }
+
+    private getQueueUri(): vscode.Uri | null {
+        if (!this.context) return null;
+        // Store inside the workspace global storage for persistence across reloads
+        return vscode.Uri.joinPath(this.context.globalStorageUri, 'tbd_offline_queue.enc');
+    }
+
+    private encrypt(text: string): Buffer {
+        const iv = crypto.randomBytes(this.IV_LENGTH);
+        const cipher = crypto.createCipheriv(this.ALGORITHM, this.KEY, iv);
+        const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+        return Buffer.concat([iv, encrypted]);
+    }
+
+    private decrypt(buffer: Uint8Array): string {
+        const buf = Buffer.from(buffer);
+        if (buf.length < this.IV_LENGTH) return '[]';
+        const iv = buf.subarray(0, this.IV_LENGTH);
+        const content = buf.subarray(this.IV_LENGTH);
+        const decipher = crypto.createDecipheriv(this.ALGORITHM, this.KEY, iv);
+        const decrypted = Buffer.concat([decipher.update(content), decipher.final()]);
+        return decrypted.toString('utf8');
+    }
+
+    private async readQueue(): Promise<any[]> {
+        const uri = this.getQueueUri();
+        if (!uri) return [];
+        try {
+            const data = await vscode.workspace.fs.readFile(uri);
+            const jsonStr = this.decrypt(data);
+            const parsed = JSON.parse(jsonStr);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+
+    private async writeQueue(events: any[]): Promise<void> {
+        const uri = this.getQueueUri();
+        if (!uri) return;
+        
+        try {
+            await vscode.workspace.fs.createDirectory(this.context!.globalStorageUri);
+        } catch (e) {}
+
+        if (events.length === 0) {
+            // Clear file if queue is empty
+            try { await vscode.workspace.fs.delete(uri); } catch (e) {}
+            return;
+        }
+
+        const data = this.encrypt(JSON.stringify(events));
+        await vscode.workspace.fs.writeFile(uri, data);
+    }
+    // ---------------------------------------------
 
     private normalizeRole(value: unknown): UserRole {
         const v = String(value || '').trim().toLowerCase();
@@ -76,6 +142,7 @@ export class ApiStorageManager {
         }
         return `TBD-${suffix}`;
     }
+
     private generateWorkspaceId(classAssignmentId: number, workspaceRootPath: string, workspaceName: string): number {
         const source = `${classAssignmentId}|${workspaceRootPath}|${workspaceName}`;
         let hash = 2166136261;
@@ -174,34 +241,78 @@ export class ApiStorageManager {
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
 
-        for (const event of _newEvents) {
-            const response = await apiPost('/api/events', {
-                sessionId,
-                eventType: event.eventType,
-                occurredAt: event.time,
-                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
-                eventData: {
-                    time: event.time,
-                    flightTime: event.flightTime,
-                    fileEdit: event.fileEdit,
-                    fileView: event.fileView,
-                    possibleAiDetection: event.possibleAiDetection,
-                    fileFocusCount: event.fileFocusCount,
-                    pasteCharCount: event.pasteCharCount,
-                    StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined
-                }
-            });
+        // 1. Format new events into payloads
+        const newPayloads = _newEvents.map(event => ({
+            sessionId,
+            eventType: event.eventType,
+            occurredAt: event.time,
+            StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
+            eventData: {
+                time: event.time,
+                flightTime: event.flightTime,
+                fileEdit: event.fileEdit,
+                fileView: event.fileView,
+                possibleAiDetection: event.possibleAiDetection,
+                fileFocusCount: event.fileFocusCount,
+                pasteCharCount: event.pasteCharCount,
+                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined
+            }
+        }));
 
-            const eventId = response?.event?.Id ?? response?.event?.id ?? response?.id ?? response?.Id;
-            console.log(
-                `[TBD Logger] Pushed event to /api/events: ${event.eventType} @ ${event.time}` +
-                (eventId ? ` (event id: ${eventId})` : '')
-            );
+        // 2. Load the offline queue from the encrypted disk file
+        let offlineQueue = await this.readQueue();
+        
+        // 3. Add new events to the back of the queue
+        offlineQueue.push(...newPayloads);
+        this.syncStatus.pendingQueueCount = offlineQueue.length;
+
+        // 4. Try to push everything in the queue to the API
+        const remainingQueue: any[] = [];
+        let isOffline = false;
+
+        for (let i = 0; i < offlineQueue.length; i++) {
+            const payload = offlineQueue[i];
+            
+            // If we already detected the API is down during this flush, just keep queueing locally
+            if (isOffline) {
+                remainingQueue.push(payload);
+                continue;
+            }
+
+            try {
+                const response = await apiPost('/api/events', payload);
+                const eventId = response?.event?.Id ?? response?.event?.id ?? response?.id ?? response?.Id;
+                console.log(
+                    `[TBD Logger] Pushed event to /api/events: ${payload.eventType} @ ${payload.occurredAt}` +
+                    (eventId ? ` (event id: ${eventId})` : '')
+                );
+            } catch (error) {
+                console.warn('[TBD Logger] API is offline or failed. Queuing remaining events to encrypted disk storage.');
+                isOffline = true;
+                remainingQueue.push(payload);
+                this.syncStatus.state = 'offline';
+                this.syncStatus.lastError = String(error);
+            }
         }
 
-        this.syncStatus.lastSyncedAt = new Date().toISOString();
-        this.syncStatus.state = 'synced';
-        console.log(`[TBD Logger] Flush complete: ${_newEvents.length} event(s) pushed to /api/events.`);
+        // 5. Save the remaining queue back to the encrypted file
+        try {
+            await this.writeQueue(remainingQueue);
+            this.syncStatus.pendingQueueCount = remainingQueue.length;
+        } catch (e) {
+            console.error('[TBD Logger] Failed to write offline queue to disk!', e);
+            throw e; // Throw so flush.ts can recover it in memory
+        }
+
+        // 6. Update statuses if successfully connected
+        if (!isOffline) {
+            this.syncStatus.lastSyncedAt = new Date().toISOString();
+            this.syncStatus.state = 'synced';
+            this.syncStatus.lastError = null;
+            if (offlineQueue.length > 0) {
+                console.log(`[TBD Logger] Flush complete: ${offlineQueue.length} event(s) successfully processed.`);
+            }
+        }
     }
 
     isOnline(): boolean {
@@ -438,7 +549,6 @@ export class ApiStorageManager {
         // Intentionally no-op in API-only mode.
     }
 
-    // 1. Update the signature and payload for upsertAuthUser
     async upsertAuthUser(identity: { email: string; displayName: string; trackingConsent?: boolean; [key: string]: any }): Promise<{ authUserId: number; role: UserRole; isNew: boolean; trackingConsent: boolean }> {
         const email = this.normalizeEmail(identity.email);
         const displayName = this.titleCaseName(identity.displayName);
@@ -465,7 +575,6 @@ export class ApiStorageManager {
         const result = await apiPost('/api/auth/upsert-user', payload);
         const user = result?.user ?? result;
         return {
-            // ... (keep authUserId, role, isNew mapping) ...
             authUserId: Number(this.pick(result, ['authUserId', 'AuthUserId']) ?? this.pick(user, ['id', 'Id', 'authUserId', 'AuthUserId']) ?? 0),
             role: this.normalizeRole(this.pick(result, ['role', 'Role']) ?? this.pick(user, ['role', 'Role'])),
             isNew: Boolean(this.pick(result, ['isNew', 'IsNew']) ?? false),
@@ -474,6 +583,7 @@ export class ApiStorageManager {
             trackingConsent: Boolean(this.pick(result, ['trackingConsent', 'TrackingConsent']) ?? this.pick(user, ['trackingConsent', 'TrackingConsent']) ?? false)
         };
     }
+    
     async updateAuthUserProfile(email: string, changes: { displayName?: string; trackingConsent?: boolean }): Promise<void> {
         const normalizedEmail = String(email || '').trim().toLowerCase();
         if (!normalizedEmail) {
@@ -498,8 +608,6 @@ export class ApiStorageManager {
         await apiPatch('/api/auth/update-account-information', payload);
     }
 
-
-
     async updateAuthUserRole(authUserId: number, role: UserRole): Promise<void> {
         await apiPost('/api/auth/update-role', {
             authUserId,
@@ -509,8 +617,6 @@ export class ApiStorageManager {
         });
     }
 
-
-    // Update the login/fetch methods so the session knows the consent state
     async findAuthUserByEmail(email: string): Promise<{ authUserId: number; role: UserRole; displayName: string; trackingConsent: boolean } | null> {
         const result = await apiGet(`/api/auth/user-by-email?email=${encodeURIComponent(email.toLowerCase())}`);
         const user = result?.user ?? result;
@@ -559,11 +665,6 @@ export class ApiStorageManager {
         const result = await this.apiGetFirst([
             `/api/classes/join-code/${encoded}`,
             `/api/class/join-code/${encoded}`
-            // `/api/classes/join-code/${encodeURIComponent(joinCode.trim())}`,
-            // `/api/class/join-code/${encodeURIComponent(joinCode.trim())}`,
-            // `/api/classes/by-join-code?joinCode=${encodeURIComponent(joinCode.trim())}`,
-            // `/api/classes/join-code?joinCode=${encodeURIComponent(joinCode.trim())}`,
-            // `/api/class-activities/by-join-code?joinCode=${encodeURIComponent(joinCode.trim())}`
         ]);
         const cls = result?.class ?? result?.data ?? result;
         if (!cls) {
@@ -674,7 +775,6 @@ export class ApiStorageManager {
             return null;
         }
 
-        // 👉 NEW FEATURE: Ask the backend if this file path is already registered!
         try {
             const result = await this.apiPostFirst([
                 '/api/workspace/validate',
@@ -697,7 +797,6 @@ export class ApiStorageManager {
             console.log("[TBD Logger] Backend validation route unavailable. Falling back to local cache.");
         }
 
-        // 👉 FALLBACK: Check local memory if the API doesn't respond
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const classId = Number(session?.workspaceLinkedClassId ?? 0);
         const assignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
@@ -740,7 +839,6 @@ export class ApiStorageManager {
                 ? result
                 : (Array.isArray(result?.classes) ? result.classes : (Array.isArray(result?.data) ? result.data : []));
         } catch (_getError) {
-            // Some backends expose list routes as POST instead of GET.
             try {
                 const postResult = await this.apiPostFirst([
                     '/api/classes/list',
@@ -759,7 +857,6 @@ export class ApiStorageManager {
                     ? postResult
                     : (Array.isArray(postResult?.classes) ? postResult.classes : (Array.isArray(postResult?.data) ? postResult.data : []));
             } catch (postError: any) {
-                // Return empty list if no known listing route exists instead of crashing class tab.
                 console.warn('Unable to list teacher classes from API:', String(postError?.message || postError));
                 return [];
             }
@@ -768,7 +865,6 @@ export class ApiStorageManager {
         return rows
             .filter((row: any) => {
                 const rowTeacherId = Number(this.pick(row, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0);
-                // If backend already filtered by teacher, keep rows that omit teacher id too.
                 return !rowTeacherId || rowTeacherId === teacherAuthUserId;
             })
             .map((row: any) => ({
@@ -981,42 +1077,19 @@ export class ApiStorageManager {
         const primaryPath = `/api/classes/assignment-student-sessions?classId=${classId}&assignmentId=${assignmentId}&studentAuthUserId=${studentAuthUserId}`;
         const fallbackPath = `/api/classes/${classId}/assignments/${assignmentId}/students/${studentAuthUserId}/sessions?teacherAuthUserId=${teacherId}`;
 
-        console.groupCollapsed('[TBD Teacher] Loading assignment sessions');
-        console.log('Full URL being requested:', `${API_BASE}${primaryPath}`);
-        console.log('Query parameters:', { classId, assignmentId, studentAuthUserId });
-        console.log('Fallback request path:', `${API_BASE}${fallbackPath}`);
-
         let result: any;
         try {
             result = await this.apiGetFirst([
                 primaryPath,
                 fallbackPath
             ]);
-            console.log('Raw JSON response from backend:', result);
         } catch (error) {
-            console.error('[TBD Teacher] assignment sessions request failed:', {
-                classId,
-                assignmentId,
-                studentAuthUserId,
-                teacherAuthUserId: teacherId,
-                error
-            });
-            console.groupEnd();
             throw error;
         }
 
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.sessions) ? result.sessions : (Array.isArray(result?.data) ? result.data : []));
-        console.log('Data shape before UI:', rows.map((row: any) => ({
-            keys: Object.keys(row || {}),
-            SessionId: row?.SessionId ?? row?.sessionId,
-            StudentWorkspaceAssignmentId: row?.StudentWorkspaceAssignmentId ?? row?.studentWorkspaceAssignmentId,
-            OccurredAt: row?.OccurredAt ?? row?.occurredAt,
-            EventType: row?.EventType ?? row?.eventType,
-            EventDataKeys: Object.keys(row?.EventData ?? row?.eventData ?? {})
-        })));
-        console.groupEnd();
         return rows;
     }
 

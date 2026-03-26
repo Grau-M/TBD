@@ -19,7 +19,7 @@ import { StandardEvent } from '../types';
 // heuristics for detecting potential AI-assisted edits.
 export function createEditListener(): vscode.Disposable {
     return vscode.workspace.onDidChangeTextDocument((event) => {
-        // 👉 The Student-Only Gate: Cut the microphone
+        // The Student-Only Gate: Cut the microphone
     if (state.currentUserRole !== 'Student') {
         return; 
     }
@@ -40,9 +40,10 @@ export function createEditListener(): vscode.Disposable {
         const activeEditor = vscode.window.activeTextEditor;
         
         // Check if the user is focusing on the file they are editing
-        const isFocusMismatch = activeEditor 
-            ? activeEditor.document.uri.toString() !== event.document.uri.toString() 
-            : true; 
+        // const isFocusMismatch = activeEditor 
+        //     ? activeEditor.document.uri.toString() !== event.document.uri.toString() 
+        //     : true; 
+        const isFocusMismatch = true;
 
         // Get clean filenames
         const fileViewRaw = activeEditor ? path.basename(activeEditor.document.fileName) : 'System/Sidebar';
@@ -97,7 +98,8 @@ export function createEditListener(): vscode.Disposable {
                 flightTime: String(timeDiff),
                 eventType,
                 fileEdit: fileEditRaw,
-                fileView
+                fileView,
+                charsAdded: change.text.length
             };
 
             // We check if the event involves adding text (paste, replace, or ai-paste) and log the character count for potential AI detection heuristics and understanding paste sizes. 

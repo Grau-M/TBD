@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import { storageManager } from '../state';
+import { storageManager, state } from '../state';
 import { getHtml } from './getHtml';
 import { requireRoleAccess, getWorkspaceAuthSession } from '../auth';
+import { apiGet } from '../api';
 import { handleAnalyzeLogs, handleCompareAssignmentStudents, handleGenerateProfile, handleGenerateTimeline } from './services/dashboardService';
 import {
   handleOpenLog,
@@ -49,6 +50,15 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
     // Non-blocking: dashboard can still open when alert query is unavailable.
   }
 
+  let apiOnline = true;
+  try {
+    await apiGet('/health');
+    state.isApiOnline = true;
+  } catch {
+    apiOnline = false;
+    state.isApiOnline = false;
+  }
+
   const reopenedPanel = panel;
   if (reopenedPanel) {
     reopenedPanel.reveal(vscode.ViewColumn.One);
@@ -65,7 +75,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
 
   registerWebviewPanel(panel);
 
-  panel.webview.html = getHtml(panel.webview, context);
+  panel.webview.html = getHtml(panel.webview, context, apiOnline);
 
   panel.onDidDispose(() => {
     panel = undefined;

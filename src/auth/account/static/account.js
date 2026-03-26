@@ -12,6 +12,8 @@
       selectedClassId: null,
       classes: [],
       assignmentsByClassId: Object.create(null),
+      joinPanelOpen: false,
+      joinOutsideHandler: null,
     };
 
     function post(command, payload) {
@@ -25,6 +27,53 @@
         return;
       }
       el.classList.toggle("hidden", !show);
+    }
+
+    function setJoinPanelOpen(isOpen) {
+      const panel = $("join-class-panel");
+      const input = $("join-class-input");
+      const open = !!isOpen;
+      state.joinPanelOpen = open;
+      setVisible(panel, open);
+      panel?.setAttribute("aria-hidden", String(!open));
+      if (open) {
+        window.requestAnimationFrame(() => {
+          input?.focus();
+          if (input && typeof input.select === "function") {
+            input.select();
+          }
+        });
+        return;
+      }
+      if (input) {
+        input.value = "";
+      }
+      const joinError = $("student-classes-error");
+      if (joinError) {
+        joinError.textContent = "";
+        setVisible(joinError, false);
+      }
+    }
+
+    function closeJoinPanel() {
+      setJoinPanelOpen(false);
+    }
+
+    function submitJoinCode() {
+      const joinInput = $("join-class-input");
+      const joinCode = String(joinInput?.value || "").trim();
+      if (!joinCode) {
+        showClassesError("Enter a class join code.");
+        joinInput?.focus();
+        return;
+      }
+      clearMessages();
+      const joinBtn = $("btn-submit-join-class");
+      if (joinBtn) {
+        joinBtn.disabled = true;
+        joinBtn.textContent = "Joining...";
+      }
+      post("joinStudentClass", { joinCode });
     }
 
     function normalizeThemePreference(value) {
@@ -607,13 +656,33 @@
     $("nav-classes")?.addEventListener("click", () => setActiveView("classes"));
     $("btn-join-class")?.addEventListener("click", () => {
       clearMessages();
-      const joinBtn = $("btn-join-class");
-      if (joinBtn) {
-        joinBtn.disabled = true;
-        joinBtn.textContent = "Joining...";
+      if (state.joinPanelOpen) {
+        closeJoinPanel();
+        return;
       }
-      post("joinStudentClass");
+      setJoinPanelOpen(true);
     });
+
+    $("btn-submit-join-class")?.addEventListener("click", submitJoinCode);
+    $("btn-close-join-class")?.addEventListener("click", closeJoinPanel);
+
+    $("join-class-input")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitJoinCode();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeJoinPanel();
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.joinPanelOpen) {
+        closeJoinPanel();
+      }
+    });
+
     setActiveView("account");
 
     const saveBtn = $("btn-save-account");
@@ -675,6 +744,11 @@
           if (joinBtn) {
             joinBtn.disabled = false;
             joinBtn.textContent = "Join Class";
+          }
+          const submitJoinBtn = $("btn-submit-join-class");
+          if (submitJoinBtn) {
+            submitJoinBtn.disabled = false;
+            submitJoinBtn.textContent = "Submit";
           }
           const errorMessage = buildErrorMessage(
             msg,
@@ -794,14 +868,22 @@
           break;
         }
         case "studentClassJoinResult": {
-          const joinBtn = $("btn-join-class");
-          if (joinBtn) {
-            joinBtn.disabled = false;
-            joinBtn.textContent = "Join Class";
+          const submitJoinBtn = $("btn-submit-join-class");
+          if (submitJoinBtn) {
+            submitJoinBtn.disabled = false;
+            submitJoinBtn.textContent = "Submit";
           }
           if (msg.joined) {
             state.classesLoaded = false;
-            showClassesSuccess("Class added successfully.");
+            closeJoinPanel();
+            if (msg.message) {
+              showClassesSuccess(msg.message);
+            } else {
+              showClassesSuccess("Class added successfully.");
+            }
+          } else if (msg.message) {
+            showClassesError(msg.message);
+            setJoinPanelOpen(true);
           }
           break;
         }

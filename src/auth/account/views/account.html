@@ -134,6 +134,33 @@
             </button>
           </div>
 
+          <div id="join-class-panel" class="join-class-panel hidden" aria-hidden="true">
+            <div class="join-class-panel-card" role="dialog" aria-label="Enter class join code">
+              <div class="join-class-panel-header">
+                <div>
+                  <p class="join-class-eyebrow">Enter the class join code</p>
+                  <h3 class="join-class-title">Join a class</h3>
+                </div>
+                <button id="btn-close-join-class" class="join-class-close" type="button" aria-label="Close join class panel">×</button>
+              </div>
+              <p class="join-class-copy">Type the code your teacher shared, then press Enter to join.</p>
+              <div class="form-group join-class-input-group">
+                <label for="join-class-input">Join code</label>
+                <input
+                  type="text"
+                  id="join-class-input"
+                  placeholder="Enter the class join code"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="join-class-actions">
+                <button id="btn-submit-join-class" class="btn-primary" type="button">Submit</button>
+              </div>
+              <p class="join-class-hint">Press Enter to submit, or Esc / X to close this panel.</p>
+            </div>
+          </div>
+
           <div id="student-classes-status" class="account-success hidden"></div>
           <div id="student-classes-error" class="account-error hidden"></div>
 

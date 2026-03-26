@@ -10,35 +10,23 @@ const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 let accountPanel: vscode.WebviewPanel | undefined;
 let openingAccountPanel = false;
 
-async function promptStudentClassJoin(storageManager: any, authUserId: number): Promise<boolean> {
-    const joinCode = await vscode.window.showInputBox({
-        title: 'Join Class',
-        prompt: 'Enter the class join code provided by your teacher',
-        placeHolder: 'Example: TBD-A1B2C3',
-        ignoreFocusOut: true
-    });
-
-    if (!joinCode) {
-        return false;
+async function joinStudentClassByCode(storageManager: any, authUserId: number, joinCode: string): Promise<{ joined: boolean; message?: string }> {
+    const normalizedJoinCode = String(joinCode || '').trim();
+    if (!normalizedJoinCode) {
+        return { joined: false, message: 'Enter a class join code.' };
     }
 
-    const linkedClass = await storageManager.findClassByJoinCode(joinCode.trim());
+    const linkedClass = await storageManager.findClassByJoinCode(normalizedJoinCode);
     if (!linkedClass) {
-        vscode.window.showErrorMessage('Class join code not found. Please verify the code with your teacher.');
-        return false;
+        return { joined: false, message: 'Class join code not found. Please verify the code with your teacher.' };
     }
 
-    //see if they were already in the class
     const isNewEnrollment = await storageManager.enrollStudentInClass(authUserId, linkedClass);
-    
     if (isNewEnrollment) {
-        vscode.window.showInformationMessage(`Successfully joined ${linkedClass.courseName} (${linkedClass.courseCode}).`);
-    } else {
-        // RAINY DAY: Double Enrollment Message
-        vscode.window.showInformationMessage(`You are already enrolled in ${linkedClass.courseName}.`);
+        return { joined: true, message: `Successfully joined ${linkedClass.courseName} (${linkedClass.courseCode}).` };
     }
-    
-    return true; // We return true because the end state (being in the class) is successful
+
+    return { joined: true, message: `You are already enrolled in ${linkedClass.courseName}.` };
 }
 
 export async function openAccountView(
@@ -245,9 +233,14 @@ export async function openAccountView(
                             return;
                         }
 
-                        const joined = await promptStudentClassJoin(storageManager, currentSession.authUserId);
-                        accountPanel?.webview.postMessage({ command: 'studentClassJoinResult', joined });
-                        if (joined) {
+                        const joinCode = String(message.joinCode || '');
+                        const result = await joinStudentClassByCode(storageManager, currentSession.authUserId, joinCode);
+                        accountPanel?.webview.postMessage({
+                            command: 'studentClassJoinResult',
+                            joined: result.joined,
+                            message: result.message
+                        });
+                        if (result.joined) {
                             const classes = await storageManager.listStudentClasses(currentSession.authUserId);
                             accountPanel?.webview.postMessage({ command: 'studentClassesData', data: classes });
                         }

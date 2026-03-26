@@ -361,6 +361,7 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 20px; padding: 40px; width: 100%; max-width: 480px;
             box-shadow: 0 12px 48px rgba(0,0,0,0.14);
+            min-width: 0;
         }
 
         .header { text-align: center; margin-bottom: 24px; }
@@ -379,7 +380,7 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
         .info-grid { display: grid; gap: 16px; margin-bottom: 32px; }
         .field { background: var(--bg); padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border); }
         .label { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
-        .value { font-size: 0.95rem; font-weight: 600; }
+        .value { font-size: 0.95rem; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; min-width: 0; }
 
         .btn-sync {
             width: 100%; padding: 14px; font-size: 1rem; font-weight: 700;
@@ -393,6 +394,18 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
             display: inline-block; padding: 6px 12px; border-radius: 8px;
             font-size: 0.8rem; font-weight: 700; margin-top: 12px;
             color: white;
+        }
+
+        .info-grid,
+        .field {
+            min-width: 0;
+        }
+
+        @media (max-width: 560px) {
+            body { padding: 16px; }
+            .card { padding: 24px; border-radius: 16px; }
+            .title { font-size: 1.35rem; }
+            .error-banner { margin-bottom: 18px; }
         }
     </style>
 </head>

@@ -110,6 +110,10 @@ async function apiRequest(path: string, init: RequestInit, options?: ApiRequestO
 }
 
 export async function apiPost(path: string, body: any, options?: ApiRequestOptions): Promise<any> {
+  // --- TEMPORARY TEST HACK ---
+    // Uncomment the line below to simulate the server being dead
+     //throw new Error("Simulated Offline Mode"); 
+    // ---------------------------
   return apiRequest(path, {
     method: 'POST',
     headers: {

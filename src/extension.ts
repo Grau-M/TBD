@@ -56,6 +56,57 @@ const SESSION_ID_KEY = 'sessionId';
 const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
+function getNonce(): string {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}
+
+function getWorkspaceTypeHtml(webview: vscode.Webview, nonce: string): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline';">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Workspace Type</title>
+<style>
+    body { margin: 0; font-family: var(--vscode-font-family, Segoe UI, Arial, sans-serif); background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); }
+    .card { max-width: 480px; margin: 30px auto; padding: 24px; background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+    h1 { font-size: 1.4rem; margin: 0 0 12px; }
+    p { margin: 0 0 20px; color: var(--vscode-descriptionForeground); }
+    .buttons { display: flex; gap: 12px; }
+    button { flex: 1; padding: 10px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+    button:hover { filter: brightness(1.05); }
+    .personal { background: var(--vscode-inputValidation-infoBackground); }
+    .school { background: var(--vscode-inputValidation-warningBackground); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>TBD Logger: Workspace Type</h1>
+  <p>Is this a Personal Project or a School Assignment?</p>
+  <div class="buttons">
+    <button id="personal" class="personal">Personal Project</button>
+    <button id="school" class="school">School Project</button>
+  </div>
+</div>
+<script nonce="${nonce}">
+  const vscodeApi = acquireVsCodeApi();
+  document.getElementById('personal').addEventListener('click', () => {
+    vscodeApi.postMessage({ type: 'workspaceType', value: 'Personal Project' });
+  });
+  document.getElementById('school').addEventListener('click', () => {
+    vscodeApi.postMessage({ type: 'workspaceType', value: 'School Project' });
+  });
+</script>
+</body>
+</html>`;
+}
+
 function isTrackingConsentGranted(value: unknown): boolean {
     return value === true || value === 'true' || value === 1 || value === '1';
 }
@@ -476,10 +527,28 @@ async function reconcileStudentWorkspaceState(
         return session;
     }
 
-    const personalFlagKey = `tbd.personalWorkspace.${workspaceRoot}`;
-    const isAlreadyPersonal = context.workspaceState.get<boolean>(personalFlagKey);
-    if (isAlreadyPersonal) {
-        state.isPersonalWorkspace = true;
+    const schoolFlagKey = `tbd.schoolWorkspace.${workspaceRoot}`;
+    const hasSchoolWorkspace = context.workspaceState.get<boolean>(schoolFlagKey) === true;
+
+    // Keep personal selection session-only; school is persisted across restarts.
+    if (hasSchoolWorkspace) {
+        state.isPersonalWorkspace = false;
+
+        if (!session?.authenticated) {
+            const signedSession = await openAuthView(context, storageManager);
+            if (!signedSession?.authenticated) {
+                vscode.window.showWarningMessage('Please sign in to continue using School Project workspace.');
+                return session;
+            }
+            session = signedSession;
+        }
+
+        state.currentUserRole = session.role || 'None';
+        state.isConsentGiven = isTrackingConsentGranted(session.trackingConsent ?? state.isConsentGiven);
+        await updateAuthStatusBar(context);
+        updateTrackingUI(session.role);
+
+        await openStudentSyncView(context);
         return session;
     }
 
@@ -562,21 +631,82 @@ async function reconcileStudentWorkspaceState(
     if (silentCheck || hasPromptedUnrecognizedWorkspace) {
         return session;
     }
-    
-    hasPromptedUnrecognizedWorkspace = true;
-    const choice = await vscode.window.showInformationMessage(
-        'TBD Logger: Unrecognized Workspace. Is this a Personal Project or a School Assignment?',
-        { modal: true },
-        'School Project',
-        'Personal Project'
+
+    // Ensure login first for unrecognized workspace flow
+    let currentSession = getWorkspaceAuthSession(context);
+    if (!currentSession?.authenticated) {
+        const signedSession = await openAuthView(context, storageManager);
+        if (!signedSession?.authenticated) {
+            // If still not authenticated, do not show workspace type selection.
+            vscode.window.showWarningMessage('Please log in to TBD Logger first.');
+            return session;
+        }
+        currentSession = signedSession;
+    }
+
+    const panel = vscode.window.createWebviewPanel(
+        'workspaceTypeSelector',
+        'TBD Logger: Workspace Type',
+        vscode.ViewColumn.Active,
+        { enableScripts: true, retainContextWhenHidden: false }
     );
 
-    if (choice === 'Personal Project') {
+    const nonce = getNonce();
+    panel.webview.html = getWorkspaceTypeHtml(panel.webview, nonce);
+
+    const selectedType = await new Promise<string | undefined>((resolve) => {
+        const disposables: vscode.Disposable[] = [];
+
+        disposables.push(panel.webview.onDidReceiveMessage((message) => {
+            if (message?.type === 'workspaceType') {
+                resolve(message.value);
+                panel.dispose();
+            }
+        }));
+
+        disposables.push(panel.onDidDispose(() => {
+            resolve(undefined);
+            disposables.forEach((d) => d.dispose());
+        }));
+    });
+
+    if (selectedType === 'Personal Project') {
+        // User chose no tracking for this session only.
         state.isPersonalWorkspace = true;
-        await context.workspaceState.update(personalFlagKey, true);
-        vscode.window.showInformationMessage('TBD Logger UI and Tracking hidden for this personal workspace.');
-    } else if (choice === 'School Project') {
-        await vscode.commands.executeCommand('tbd-logger.openStudentSyncView');
+        await context.workspaceState.update(schoolFlagKey, false);
+        hasPromptedUnrecognizedWorkspace = true;
+        await updateAuthStatusBar(context);
+        vscode.window.showInformationMessage('Personal Project mode selected: tracking is disabled for this session.');
+    } else if (selectedType === 'School Project') {
+        // Persist school choice across workspace reloads.
+        await context.workspaceState.update(schoolFlagKey, true);
+
+        // Should already be authenticated above; if not, open login first.
+        let currentSession = getWorkspaceAuthSession(context);
+        if (!currentSession?.authenticated) {
+            const signedSession = await openAuthView(context, storageManager);
+            if (!signedSession?.authenticated) {
+                vscode.window.showWarningMessage('You need to log in before using a School Project workspace.');
+                return session;
+            }
+            currentSession = signedSession;
+        }
+
+        // Ensure we don't mark personal workspace in school mode.
+        state.isPersonalWorkspace = false;
+        hasPromptedUnrecognizedWorkspace = true;
+
+        if (currentSession) {
+            state.currentUserRole = currentSession.role || 'None';
+            state.isConsentGiven = isTrackingConsentGranted(currentSession.trackingConsent ?? state.isConsentGiven);
+            await updateAuthStatusBar(context);
+            updateTrackingUI(currentSession.role);
+        }
+
+        // Open the student sync UI for assignment linking.
+        await openStudentSyncView(context);
+
+        return currentSession || session;
     }
 
     return session;
@@ -594,6 +724,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // 👉 RULE 1 FIX: Every time VS Code boots up, wipe the old Session ID cache so a new one is forced!
     await context.workspaceState.update(SESSION_ID_KEY, undefined);
+
+    // Ensure user is signed in on IDE open
+    const initialSession = getWorkspaceAuthSession(context);
+    if (!initialSession?.authenticated) {
+        await openAuthView(context, storageManager);
+    }
 
     const statusBarItem = createStatusBar(context);
     const uiTimerDisposable = startUiTimer(statusBarItem);
@@ -817,6 +953,7 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
     }
 
     const startupDebugSession = getWorkspaceAuthSession(context);
+    const debugSession = startupDebugSession;
     const startupDebugAssignments = await (async () => {
         if (!startupDebugSession?.authenticated || startupDebugSession.role !== 'Student') {
             return [] as Array<{ className: string; assignmentName: string; workspaceRootPath?: string }>;
@@ -858,27 +995,26 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
 
     logStartupIdentity(context);
 
-    const session = startupDebugSession;
-    updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');
+    updateApiKeyStatus(!!debugSession?.authenticated && debugSession.role === 'Student');
     await updateDbStatusBar(context);
     await updateAuthStatusBar(context);
 
     // 3. Update the tracking UI based on role and validation results
-    updateTrackingUI(session?.role);
-    updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');
+    updateTrackingUI(debugSession?.role);
+    updateApiKeyStatus(!!debugSession?.authenticated && debugSession.role === 'Student');
     await updateAuthStatusBar(context);
 
     const CURRENT_POLICY_VERSION = 'v1.1'; 
 
-    if (session?.authenticated && session.role === 'Student' && !state.isPersonalWorkspace) {
-        const hasLinkedWorkspace = Number(session.workspaceLinkedClassId ?? 0) > 0 
-            && Number(session.workspaceLinkedAssignmentId ?? 0) > 0;
+    if (debugSession?.authenticated && debugSession.role === 'Student' && !state.isPersonalWorkspace) {
+        const hasLinkedWorkspace = Number(debugSession.workspaceLinkedClassId ?? 0) > 0 
+            && Number(debugSession.workspaceLinkedAssignmentId ?? 0) > 0;
 
         if (hasLinkedWorkspace) {
             const projectId = await ensureProject();
             if (projectId) {
                 const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
-                const startedSessionId = await startSession(session.authUserId, projectId, nextSessionNumber);
+                const startedSessionId = await startSession(debugSession.authUserId, projectId, nextSessionNumber);
                 if (startedSessionId) {
                     await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
                     void logEvent('session_start', {
@@ -891,9 +1027,9 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
     }
     
     // Consent Check Gate
-    if (session?.authenticated) {
-        if (session.role === 'Student' && !state.isPersonalWorkspace) {
-            const hasConsented = isTrackingConsentGranted(session.trackingConsent);
+    if (debugSession?.authenticated) {
+        if (debugSession.role === 'Student' && !state.isPersonalWorkspace) {
+            const hasConsented = isTrackingConsentGranted(debugSession.trackingConsent);
             state.isConsentGiven = hasConsented;
 
             if (!hasConsented) {

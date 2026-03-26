@@ -42,7 +42,10 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
         'syncDashboardView',
         'TBD: Sync Dashboard',
         vscode.ViewColumn.One,
-        { enableScripts: true }
+        {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'src', 'img')]
+        }
     );
 
     const activePanel = panel;
@@ -116,8 +119,12 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 
     updateApiKeyStatus(apiStatus === 'Online');
 
+    const logoImageUri = activePanel.webview.asWebviewUri(
+        vscode.Uri.joinPath(context.extensionUri, 'src', 'img', 'CloudSync.png')
+    ).toString();
+
     const render = () => {
-        activePanel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus);
+        activePanel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus, logoImageUri);
     };
 
     render();
@@ -261,7 +268,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     openingPanel = false;
 }
 
-function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
+function getDashboardHtml(session: any, assignment: any, apiStatus: string, logoImageUri: string) {
     const isOnline = apiStatus === 'Online';
     const statusColor = isOnline ? 'var(--success)' : 'var(--error)';
     const syncStatusText = isOnline ? 'Sync Online' : 'Sync Offline';
@@ -271,7 +278,9 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
     if (session.role === 'Teacher' || session.role === 'Admin') {
         mainContent = `
             <div class="header">
-                <span class="logo">🎛️</span>
+                <span class="logo">
+                    <img class="logo-image" src="${logoImageUri}" alt="" aria-hidden="true" />
+                </span>
                 <h1 class="title">System Health Dashboard</h1>
                 <div class="status-tag" style="background: ${statusColor}">API: ${apiStatus}</div>
             </div>
@@ -295,7 +304,9 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
 
         mainContent = `
             <div class="header">
-                <span class="logo">🛡️</span>
+                <span class="logo">
+                    <img class="logo-image" src="${logoImageUri}" alt="" aria-hidden="true" />
+                </span>
                 <h1 class="title">Sync Dashboard</h1>
                 <div class="status-tag" style="background: ${statusColor}">${syncStatusText}</div>
             </div>
@@ -317,8 +328,8 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
                         <div class="value">${assignment.workspaceRootPath || 'N/A'}</div>
                     </div>
                 </div>
-                <button id="forceSyncBtn" class="btn-sync">
-                    🔄 Manual Sync
+                <button id="forceSyncBtn" class="btn-sync" ${isOnline ? '' : 'disabled title="Manual sync is unavailable while the API is offline."'}>
+                    Manual Sync
                 </button>
             `;
         } else {
@@ -365,7 +376,14 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
         }
 
         .header { text-align: center; margin-bottom: 24px; }
-        .logo { font-size: 3rem; margin-bottom: 12px; display: block; }
+        .logo { margin-bottom: 12px; display: block; }
+        .logo-image {
+            width: 96px;
+            height: 96px;
+            display: block;
+            margin: 0 auto;
+            object-fit: contain;
+        }
         .title { font-size: 1.5rem; font-weight: 800; margin: 0; }
         
         .error-banner {
@@ -405,6 +423,7 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
             body { padding: 16px; }
             .card { padding: 24px; border-radius: 16px; }
             .title { font-size: 1.35rem; }
+            .logo-image { width: 76px; height: 76px; }
             .error-banner { margin-bottom: 18px; }
         }
     </style>
@@ -420,6 +439,9 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
         const forceBtn = document.getElementById('forceSyncBtn');
         if (forceBtn) {
             forceBtn.addEventListener('click', () => {
+                if (forceBtn.disabled) {
+                    return;
+                }
                 forceBtn.disabled = true;
                 forceBtn.innerText = '⌛ Syncing...';
                 vscode.postMessage({ command: 'forceSync' });
@@ -442,7 +464,7 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string) {
                 forceBtn.innerText = '✅ Sync Successful';
                 forceBtn.style.background = 'var(--success)';
                 setTimeout(() => { 
-                    forceBtn.innerText = '🔄 Manual Sync';
+                    forceBtn.innerText = 'Manual Sync';
                     forceBtn.style.background = 'var(--accent)';
                 }, 3000);
             } else if (message.command === 'syncError' && forceBtn) {

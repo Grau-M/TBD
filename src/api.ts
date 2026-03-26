@@ -1,4 +1,4 @@
-export const API_BASE = 'http://142.55.32.10';
+export const API_BASE = 'http://142.55.32.101';
 const API_KEY = 'supersecretkey123';
 
 function formatErrorBody(raw: string): string {

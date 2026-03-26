@@ -273,7 +273,24 @@
       if (!err) {
         return;
       }
+      err.classList.remove("account-error-banner", "account-offline-banner");
+      err.innerHTML = "";
       err.textContent = msg;
+      setVisible(err, true);
+    }
+
+    function showClassesOfflineBanner() {
+      const err = $("student-classes-error");
+      if (!err) {
+        return;
+      }
+      err.classList.add("account-error-banner", "account-offline-banner");
+      err.innerHTML = `
+        <div class="account-offline-banner" role="status" aria-live="polite">
+          <h3 class="account-offline-banner-title">Server unreachable</h3>
+          <p class="account-offline-banner-copy">The server could not be reached at this time. If you are enrolled in classes, they will be displayed shortly.</p>
+        </div>
+      `;
       setVisible(err, true);
     }
 
@@ -300,6 +317,10 @@
         lines.push(detail);
       }
       return lines.join("\n");
+    }
+
+    function getOfflineClassesMessage() {
+      return "Server unreachable\nThe server could not be reached at this time. If you are enrolled in classes, they will be displayed shortly.";
     }
 
     function escapeHtml(value) {
@@ -628,6 +649,55 @@
     }
 
     const data = window.__ACCOUNT_DATA__ || {};
+    const isApiUnavailable = !!data.apiUnavailable;
+
+    function setAccountInteractionState() {
+      const displayNameInput = $("account-display-name");
+      if (displayNameInput) {
+        displayNameInput.disabled = isApiUnavailable;
+        displayNameInput.style.cursor = isApiUnavailable ? "default" : "";
+      }
+
+      const consentCheckbox = $("account-tracking-consent");
+      if (consentCheckbox) {
+        consentCheckbox.disabled = isApiUnavailable;
+      }
+
+      const consentLabel = document.querySelector(".account-consent-label");
+      if (consentLabel) {
+        consentLabel.classList.toggle("account-control-disabled", isApiUnavailable);
+        consentLabel.style.cursor = isApiUnavailable ? "default" : "pointer";
+      }
+
+      const joinButton = $("btn-join-class");
+      if (joinButton) {
+        joinButton.disabled = isApiUnavailable;
+        joinButton.style.cursor = isApiUnavailable ? "default" : "";
+      }
+    }
+
+    function syncSaveButtonState() {
+      const save = $("btn-save-account");
+      if (!save) {
+        return;
+      }
+
+      if (isApiUnavailable) {
+        save.disabled = true;
+        save.setAttribute("aria-disabled", "true");
+        save.title = "API unreachable, try later.";
+        return;
+      }
+
+      save.disabled = false;
+      save.removeAttribute("aria-disabled");
+      save.title = "";
+    }
+
+    const apiWarning = $("account-api-warning");
+    if (apiWarning && data.apiUnavailable) {
+      apiWarning.classList.remove("hidden");
+    }
 
     if ($("account-display-name")) {
       $("account-display-name").value = data.displayName || "";
@@ -649,12 +719,17 @@
     if ($("account-email")) {
       $("account-email").value = data.email || "";
     }
+    setAccountInteractionState();
     setNavVisibility(data);
     applyThemePreference(data.themePreference);
+    syncSaveButtonState();
 
     $("nav-account")?.addEventListener("click", () => setActiveView("account"));
     $("nav-classes")?.addEventListener("click", () => setActiveView("classes"));
     $("btn-join-class")?.addEventListener("click", () => {
+      if (isApiUnavailable) {
+        return;
+      }
       clearMessages();
       if (state.joinPanelOpen) {
         closeJoinPanel();
@@ -687,6 +762,9 @@
 
     const saveBtn = $("btn-save-account");
     saveBtn?.addEventListener("click", () => {
+      if (isApiUnavailable) {
+        return;
+      }
       clearMessages();
       const displayName = ($("account-display-name")?.value || "").trim();
       const trackingConsent = $("account-tracking-consent")?.checked || false;
@@ -714,9 +792,9 @@
       const msg = event.data || {};
       switch (msg.command) {
         case "accountSaved": {
+          syncSaveButtonState();
           const save = $("btn-save-account");
-          if (save) {
-            save.disabled = false;
+          if (save && !isApiUnavailable) {
             save.textContent = "Save";
           }
           showSuccess("Your data has been successfully updated.");
@@ -735,9 +813,9 @@
           setVisible($("student-classes-empty"), state.classes.length === 0);
           setVisible($("student-assignments-loading"), false);
           renderSelectedClass();
+          syncSaveButtonState();
           const save = $("btn-save-account");
-          if (save) {
-            save.disabled = false;
+          if (save && !isApiUnavailable) {
             save.textContent = "Save";
           }
           const joinBtn = $("btn-join-class");
@@ -750,20 +828,35 @@
             submitJoinBtn.disabled = false;
             submitJoinBtn.textContent = "Submit";
           }
+          const isClassesView = state.activeView === "classes";
           const errorMessage = buildErrorMessage(
-            msg,
-            state.activeView === "classes"
-              ? "Unable to load classes."
-              : "Unable to update account info.",
-          );
-          if (state.activeView === "classes") {
-            showClassesError(errorMessage);
+                msg,
+                isClassesView
+                  ? "Unable to load classes."
+                  : "Unable to update account info.",
+              );
+          if (isClassesView) {
+            if (isApiUnavailable) {
+              const classesError = $("student-classes-error");
+              if (classesError) {
+                classesError.classList.remove("account-error-banner", "account-offline-banner");
+                classesError.innerHTML = "";
+                setVisible(classesError, false);
+              }
+            } else {
+              showClassesError(errorMessage);
+            }
           } else {
             showError(errorMessage);
           }
           break;
         }
         case "studentClassesData": {
+          const classesError = $("student-classes-error");
+          if (classesError) {
+            classesError.classList.remove("account-error-banner", "account-offline-banner");
+            classesError.innerHTML = "";
+          }
           renderStudentClasses(msg.data);
           break;
         }

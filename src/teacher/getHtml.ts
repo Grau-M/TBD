@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getThemePreference } from '../themePreference';
 
-export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext): string {
+export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContext, apiOnline = true): string {
   const nonce = getNonce();
   const themePreference = getThemePreference(context);
   // add a cache-busting query so updated static script is always loaded in development
@@ -46,9 +46,42 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     .tab-btn { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 500; transition: all 0.2s; border: 1px solid transparent; background: transparent; width: 100%; text-align: left; }
     .tab-btn:hover { background: rgba(125,125,125,0.05); color: var(--fg); }
     .tab-btn.active { background: var(--accent); color: white; border-color: var(--accent); box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+    .tab-btn:disabled { opacity: 0.38; cursor: not-allowed; filter: grayscale(1); box-shadow: none; }
+    .tab-btn:disabled.active { background: transparent; color: var(--muted); border-color: transparent; box-shadow: none; }
+    .tab-btn:disabled:hover { background: transparent; color: var(--muted); }
     .main-content { flex: 1; padding: 24px; overflow-y: auto; position: relative; min-width: 0; }
     .tab-pane { display: none; animation: fadeIn 0.2s ease-out; }
     .tab-pane.active { display: block; }
+    .connection-down-view {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 96px);
+      padding: 28px 0;
+    }
+    .connection-down-card {
+      max-width: 640px;
+      width: 100%;
+      text-align: center;
+      padding: 34px 28px;
+    }
+    .connection-down-icon {
+      font-size: 3rem;
+      margin-bottom: 14px;
+      display: block;
+    }
+    .connection-down-title {
+      margin: 0 0 10px;
+      font-size: 1.4rem;
+    }
+    .connection-down-copy {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     .spinner { width: 36px; height: 36px; border-radius: 50%; border: 4px solid rgba(0,0,0,0.08); border-top-color: var(--accent); animation: spin 1s linear infinite; margin: 12px auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -180,6 +213,22 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
         </div>
       </div>
 
+      <div id="connection-down-view" class="connection-down-view">
+        <div class="card connection-down-card">
+          <span class="connection-down-icon">☁️</span>
+          <h2 class="connection-down-title">Server unavailable</h2>
+          <p class="connection-down-copy">The connection to the server has been lost, try again later.</p>
+        </div>
+      </div>
+
+      <div id="connection-down-view" class="connection-down-view">
+        <div class="card connection-down-card">
+          <span class="connection-down-icon">☁️</span>
+          <h2 class="connection-down-title">Server unavailable</h2>
+          <p class="connection-down-copy">The connection to the server has been lost, try again later.</p>
+        </div>
+      </div>
+
       ${dashboardHtml}
       ${logsHtml}
       ${deletionsHtml}
@@ -191,6 +240,7 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
 
   <script nonce="${nonce}" src="${renderersUri}"></script>
   <script nonce="${nonce}">window.__TBD_THEME_PREFERENCE__ = '${themePreference}';</script>
+  <script nonce="${nonce}">window.__TBD_TEACHER_API_ONLINE__ = ${apiOnline ? 'true' : 'false'};</script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

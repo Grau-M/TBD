@@ -61,6 +61,29 @@
     const assignSortSelect = $("assignment-student-sort");
     const assignmentSummaryModal = $("assignment-summary-modal");
     const assignmentSummaryModalClose = $("assignment-summary-modal-close");
+    const connectionDownView = $("connection-down-view");
+    let isTeacherApiOnline = window.__TBD_TEACHER_API_ONLINE__ !== false;
+
+    function setTeacherConnectionState(isOnline) {
+      isTeacherApiOnline = !!isOnline;
+
+      document.querySelectorAll(".tab-btn").forEach((button) => {
+        button.disabled = !isTeacherApiOnline;
+        if (!isTeacherApiOnline) {
+          button.classList.remove("active");
+        }
+      });
+
+      if (connectionDownView) {
+        connectionDownView.style.display = isTeacherApiOnline ? "none" : "flex";
+      }
+
+      if (!isTeacherApiOnline) {
+        document.querySelectorAll(".tab-pane").forEach((pane) => {
+          pane.classList.remove("active");
+        });
+      }
+    }
 
     function closeAssignmentSummaryModal() {
       if (assignmentSummaryModalTimer) {
@@ -1734,6 +1757,9 @@
 
     // --- NAVIGATION ---
     function switchTab(tabName) {
+      if (!isTeacherApiOnline) {
+        return;
+      }
       document
         .querySelectorAll(".tab-pane")
         .forEach((el) => el.classList.remove("active"));
@@ -1762,6 +1788,10 @@
     }
 
     $("nav-dashboard")?.addEventListener("click", () => {
+      if (!isTeacherApiOnline) {
+        setTeacherConnectionState(false);
+        return;
+      }
       switchTab("dashboard");
       if (dashboardDataCache && dashboardDataCache.metrics) {
         UI.renderDashboard(dashboardDataCache, handlers);
@@ -1777,15 +1807,33 @@
       post("analyzeLogs");
     });
     $("nav-logs")?.addEventListener("click", () => {
+      if (!isTeacherApiOnline) {
+        setTeacherConnectionState(false);
+        return;
+      }
       switchTab("logs");
       post("listLogs");
     });
     $("nav-deletions")?.addEventListener("click", () => {
+      if (!isTeacherApiOnline) {
+        setTeacherConnectionState(false);
+        return;
+      }
       switchTab("deletions");
       post("getDeletions");
     });
-    $("nav-settings")?.addEventListener("click", () => switchTab("settings"));
+    $("nav-settings")?.addEventListener("click", () => {
+      if (!isTeacherApiOnline) {
+        setTeacherConnectionState(false);
+        return;
+      }
+      switchTab("settings");
+    });
     $("nav-class")?.addEventListener("click", () => {
+      if (!isTeacherApiOnline) {
+        setTeacherConnectionState(false);
+        return;
+      }
       switchTab("class");
       loadClasses();
     });
@@ -2328,6 +2376,12 @@
           break;
 
         case "error":
+          if (isConnectionLostError(msg.message)) {
+            isDatabaseReachable = false;
+            updateTopClassActionButton();
+            showConnectionLostState();
+            break;
+          }
           if (msg.message) {
             const lowerMsg = String(msg.message).toLowerCase();
             if (
@@ -2660,6 +2714,40 @@
       } else {
         el.style.borderColor = "var(--border)";
       }
+    }
+
+    function isConnectionLostError(message) {
+      const text = String(message || "").toLowerCase();
+      return /fetch failed|cannot connect|connection refused|network error|network|econnrefused|ehostunreach|socket hang up|timeout|offline|server has been lost|unable to connect|failed to connect|server unavailable/.test(
+        text,
+      );
+    }
+
+    function renderConnectionLostNotice() {
+      const noticeHtml = `
+        <div class="card" style="text-align:center; padding: 36px; margin-top: 16px;">
+          <h2 style="color: var(--muted); margin-bottom: 10px;">Connection Lost</h2>
+          <p class="meta" style="margin: 0; font-size: 1rem;">The connection to the server has been lost, try again later.</p>
+        </div>
+      `;
+
+      document
+        .querySelectorAll(".tab-pane")
+        .forEach((pane) => (pane.style.display = "none"));
+
+      if (connectionDownView) {
+        connectionDownView.innerHTML = noticeHtml;
+        connectionDownView.style.display = "flex";
+      }
+    }
+
+    function showConnectionLostState() {
+      setTeacherConnectionState(false);
+      if (status) {
+        status.textContent =
+          "The connection to the server has been lost, try again later.";
+      }
+      renderConnectionLostNotice();
     }
 
     function clearAssignmentComparisonSelection(options = {}) {
@@ -3121,7 +3209,6 @@
         const card = document.createElement("div");
         card.className = "card";
         card.style.cssText = "display:flex; flex-direction:column;";
-        card.style.marginBottom = "10px";
         card.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
             <div>
@@ -4491,11 +4578,16 @@
     });
 
     // --- STARTUP LOGIC ---
-    switchTab("dashboard");
-    showDashboardLoading();
-    post("clientReady");
-    post("analyzeLogs");
-    post("listLogs");
-    post("getSettings");
+    if (!isTeacherApiOnline) {
+      showConnectionLostState();
+    } else {
+      setTeacherConnectionState(true);
+      switchTab("dashboard");
+      showDashboardLoading();
+      post("clientReady");
+      post("analyzeLogs");
+      post("listLogs");
+      post("getSettings");
+    }
   });
 })();

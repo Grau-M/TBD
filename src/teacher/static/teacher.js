@@ -3692,7 +3692,7 @@
       view.style.display = "block";
       list.innerHTML = "";
 
-      showAssignmentSummaryModal(payload);
+  
 
       const currentStudent =
         currentAssignmentStudents.find(

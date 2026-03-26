@@ -3209,7 +3209,6 @@
         const card = document.createElement("div");
         card.className = "card";
         card.style.cssText = "display:flex; flex-direction:column;";
-        card.style.marginBottom = "10px";
         card.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
             <div>

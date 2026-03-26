@@ -1,6 +1,12 @@
 export const API_BASE = 'http://142.55.32.101';
 const API_KEY = 'supersecretkey123';
 
+interface ApiRequestOptions {
+  silent?: boolean;
+}
+
+let cachedHealthCheck: Promise<any> | null = null;
+
 function formatErrorBody(raw: string): string {
   const text = String(raw || '').trim();
   if (!text) {
@@ -62,10 +68,11 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
-async function apiRequest(path: string, init: RequestInit): Promise<any> {
+async function apiRequest(path: string, init: RequestInit, options?: ApiRequestOptions): Promise<any> {
   const authHeaders = await getAuthHeaders();
   const url = `${API_BASE}${path}`;
   const method = String(init.method || 'GET').toUpperCase();
+  const silent = options?.silent === true;
 
   try {
     const res = await fetch(url, {
@@ -78,7 +85,9 @@ async function apiRequest(path: string, init: RequestInit): Promise<any> {
 
     const raw = await res.text();
     if (!res.ok) {
-      console.error('[TBD API ERROR]', { method, url, status: res.status, responseBody: raw });
+      if (!silent) {
+        console.error('[TBD API ERROR]', { method, url, status: res.status, responseBody: raw });
+      }
       throw new ApiHttpError(path, res.status, raw);
     }
 
@@ -88,50 +97,63 @@ async function apiRequest(path: string, init: RequestInit): Promise<any> {
 
     try {
       const parsed = JSON.parse(raw);
-      console.log('[TBD API RESPONSE]', { method, url, response: parsed });
       return parsed;
     } catch {
-      console.log('[TBD API RESPONSE]', { method, url, response: { raw } });
       return { raw };
     }
   } catch (error) {
-    console.error('[TBD API FETCH ERROR]', { method, url, error });
+    if (!silent) {
+      console.error('[TBD API FETCH ERROR]', { method, url, error });
+    }
     throw error;
   }
 }
 
-export async function apiPost(path: string, body: any): Promise<any> {
+export async function apiPost(path: string, body: any, options?: ApiRequestOptions): Promise<any> {
   return apiRequest(path, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(body)
-  });
+  }, options);
 }
 
-export async function apiPut(path: string, body: any): Promise<any> {
+export async function apiPut(path: string, body: any, options?: ApiRequestOptions): Promise<any> {
   return apiRequest(path, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(body)
-  });
+  }, options);
 }
 
-export async function apiPatch(path: string, body: any): Promise<any> {
+export async function apiPatch(path: string, body: any, options?: ApiRequestOptions): Promise<any> {
   return apiRequest(path, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(body)
-  });
+  }, options);
 }
 
-export async function apiGet(path: string): Promise<any> {
+export async function apiGet(path: string, options?: ApiRequestOptions): Promise<any> {
+  if (path === '/health') {
+    if (!cachedHealthCheck) {
+      cachedHealthCheck = apiRequest(path, {
+        method: 'GET'
+      }, options).catch((error) => {
+        cachedHealthCheck = null;
+        throw error;
+      });
+    }
+
+    return cachedHealthCheck;
+  }
+
   return apiRequest(path, {
     method: 'GET'
-  });
+  }, options);
 }

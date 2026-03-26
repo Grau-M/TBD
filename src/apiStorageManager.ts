@@ -285,7 +285,7 @@ export class ApiStorageManager {
         for (const path of paths) {
             tried.push(path);
             try {
-                return await apiGet(path);
+                return await apiGet(path, { silent: true });
             } catch (error) {
                 if (error instanceof ApiHttpError && error.status === 404) {
                     lastError = error;
@@ -306,7 +306,7 @@ export class ApiStorageManager {
         for (const path of paths) {
             tried.push(path);
             try {
-                return await apiPost(path, body);
+                return await apiPost(path, body, { silent: true });
             } catch (error) {
                 if (error instanceof ApiHttpError && error.status === 404) {
                     lastError = error;
@@ -327,7 +327,7 @@ export class ApiStorageManager {
         for (const path of paths) {
             tried.push(path);
             try {
-                return await apiPut(path, body);
+                return await apiPut(path, body, { silent: true });
             } catch (error) {
                 if (error instanceof ApiHttpError && error.status === 404) {
                     lastError = error;
@@ -371,11 +371,17 @@ export class ApiStorageManager {
 
         const sessionId = this.context.workspaceState.get<number>('sessionId');
         if (!sessionId) {
-            throw new Error('Cannot flush logs without an active session id.');
+            return;
         }
 
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+        const flushedEvents: Array<{
+            eventType: string;
+            occurredAt: string;
+            eventId: number | undefined;
+            eventData: Record<string, unknown>;
+        }> = [];
 
         for (const event of _newEvents) {
             const response = await apiPost('/api/events', {
@@ -396,15 +402,36 @@ export class ApiStorageManager {
             });
 
             const eventId = response?.event?.Id ?? response?.event?.id ?? response?.id ?? response?.Id;
-            console.log(
-                `[TBD Logger] Pushed event to /api/events: ${event.eventType} @ ${event.time}` +
-                (eventId ? ` (event id: ${eventId})` : '')
-            );
+            flushedEvents.push({
+                eventType: event.eventType,
+                occurredAt: event.time,
+                eventId: Number.isFinite(Number(eventId)) ? Number(eventId) : undefined,
+                eventData: {
+                    time: event.time,
+                    flightTime: event.flightTime,
+                    fileEdit: event.fileEdit,
+                    fileView: event.fileView,
+                    possibleAiDetection: event.possibleAiDetection,
+                    fileFocusCount: event.fileFocusCount,
+                    pasteCharCount: event.pasteCharCount,
+                    StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined
+                }
+            });
         }
 
         this.syncStatus.lastSyncedAt = new Date().toISOString();
         this.syncStatus.state = 'synced';
-        console.log(`[TBD Logger] Flush complete: ${_newEvents.length} event(s) pushed to /api/events.`);
+
+        console.groupCollapsed(`[TBD Logger] Logs pushed to /api/events: ${_newEvents.length} event(s)`);
+        for (const event of flushedEvents) {
+            console.groupCollapsed(
+                `${event.eventType} @ ${event.occurredAt}` +
+                (event.eventId ? ` (event id: ${event.eventId})` : '')
+            );
+            console.log('payload', event.eventData);
+            console.groupEnd();
+        }
+        console.groupEnd();
     }
 
     isOnline(): boolean {

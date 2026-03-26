@@ -207,6 +207,22 @@ function formatAssignmentDebugLines(items: Array<{ className: string; assignment
     }).join('\n');
 }
 
+function logStartupIdentity(context: vscode.ExtensionContext): void {
+    const session = getWorkspaceAuthSession(context);
+    const sessionInfo = getSessionInfo();
+    const displayName = session?.displayName || sessionInfo.user;
+    const hasLinkedWorkspace = Boolean(
+        state.activeCourse ||
+        state.activeAssignment ||
+        (Number(session?.workspaceLinkedClassId ?? 0) > 0 && Number(session?.workspaceLinkedAssignmentId ?? 0) > 0)
+    );
+    const assignmentSummary = hasLinkedWorkspace
+        ? `[${state.activeCourse || 'Unknown Class'} | ${state.activeAssignment || 'Unknown Assignment'}]`
+        : 'Not yet connected to a workspace.';
+
+    console.log(`[TBD LOGGER] Display name: ${displayName} | ${assignmentSummary}`);
+}
+
 async function showStartupWorkspaceDebugPopup(
     session: WorkspaceAuthSession | undefined,
     workspaceRoot: string,
@@ -591,7 +607,6 @@ export async function activate(context: vscode.ExtensionContext) {
         const currentSession = getWorkspaceAuthSession(context); 
         const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
         const workspaceName = vscode.workspace.name || 'Unknown Workspace';
-            const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin'));
         const classId = Number(currentSession?.workspaceLinkedClassId ?? 0);
         const assignmentId = Number(currentSession?.workspaceLinkedAssignmentId ?? 0);
         const userId = Number(currentSession?.authUserId ?? 0);
@@ -829,6 +844,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const wRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
     await showStartupWorkspaceDebugPopup(startupDebugSession, wRoot, startupAssignmentInfo, startupDebugAssignments);
+
+    logStartupIdentity(context);
 
     const session = startupDebugSession;
     updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');

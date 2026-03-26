@@ -270,6 +270,14 @@ export function getAccountHtml(
       padding: 9px 12px;
       font-size: 0.95rem;
     }
+    input[type="text"]:disabled,
+    input[type="checkbox"]:disabled,
+    .account-consent-label.account-control-disabled {
+      cursor: default;
+    }
+    .account-consent-label.account-control-disabled {
+      opacity: 0.8;
+    }
     .custom-dropdown {
       position: relative;
     }
@@ -379,10 +387,11 @@ export function getAccountHtml(
       padding: 12px 18px;
       min-width: 160px;
     }
-    .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary:disabled { opacity: 0.6; cursor: default; }
 
     .account-api-warning {
       margin-top: 18px;
+      margin-bottom: 20px;
     }
 
     .account-api-warning-card {
@@ -648,6 +657,34 @@ export function getAccountHtml(
     }
     .account-error { background: rgba(220,38,38,0.1); color: var(--error); }
     .account-success { background: rgba(22,163,74,0.12); color: var(--success); }
+    .account-error.account-error-banner {
+      background: transparent;
+      color: var(--fg);
+      padding: 0;
+      margin-bottom: 0;
+      white-space: normal;
+    }
+    .account-offline-banner {
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: linear-gradient(180deg, rgba(127,29,29,0.22), rgba(127,29,29,0.16));
+      border: 1px solid rgba(239,68,68,0.16);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    .account-offline-banner-title {
+      margin: 0 0 4px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fca5a5;
+    }
+    .account-offline-banner-copy {
+      margin: 0;
+      color: #f8b4b4;
+      line-height: 1.45;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     @media (max-width: 1150px) {
       .dashboard-shell,
       .classes-layout {

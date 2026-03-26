@@ -207,6 +207,22 @@ function formatAssignmentDebugLines(items: Array<{ className: string; assignment
     }).join('\n');
 }
 
+function logStartupIdentity(context: vscode.ExtensionContext): void {
+    const session = getWorkspaceAuthSession(context);
+    const sessionInfo = getSessionInfo();
+    const displayName = session?.displayName || sessionInfo.user;
+    const hasLinkedWorkspace = Boolean(
+        state.activeCourse ||
+        state.activeAssignment ||
+        (Number(session?.workspaceLinkedClassId ?? 0) > 0 && Number(session?.workspaceLinkedAssignmentId ?? 0) > 0)
+    );
+    const assignmentSummary = hasLinkedWorkspace
+        ? `[${state.activeCourse || 'Unknown Class'} | ${state.activeAssignment || 'Unknown Assignment'}]`
+        : 'Not yet connected to a workspace.';
+
+    console.log(`[TBD LOGGER] Display name: ${displayName} | ${assignmentSummary}`);
+}
+
 async function showStartupWorkspaceDebugPopup(
     session: WorkspaceAuthSession | undefined,
     workspaceRoot: string,
@@ -509,6 +525,14 @@ async function reconcileStudentWorkspaceState(
         session.workspaceLinkedAssignmentId = assignmentInfo.assignmentId;
         session.studentWorkspaceAssignmentId = assignmentInfo.studentWorkspaceAssignmentId; 
         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+        await (storageManager as any).syncStudentWorkspaceLinkRecord({
+            studentId: session.authUserId,
+            studentWorkspaceFullPath: workspaceRoot,
+            studentWorkspaceName: vscode.workspace.name || vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+            classId: assignmentInfo.classId,
+            classAssignmentId: assignmentInfo.assignmentId,
+            showNotification: false
+        });
         return session;
     }
 
@@ -524,6 +548,14 @@ async function reconcileStudentWorkspaceState(
         session.workspaceLinkedAssignmentId = hydrated.assignmentId;
         session.studentWorkspaceAssignmentId = hydrated.studentWorkspaceAssignmentId; 
         await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+        await (storageManager as any).syncStudentWorkspaceLinkRecord({
+            studentId: session.authUserId,
+            studentWorkspaceFullPath: workspaceRoot,
+            studentWorkspaceName: vscode.workspace.name || vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+            classId: hydrated.classId,
+            classAssignmentId: hydrated.assignmentId,
+            showNotification: false
+        });
         return session;
     }
 
@@ -575,7 +607,6 @@ export async function activate(context: vscode.ExtensionContext) {
         const currentSession = getWorkspaceAuthSession(context); 
         const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
         const workspaceName = vscode.workspace.name || 'Unknown Workspace';
-            const shouldShowLock = !!(session?.authenticated && (session.role === 'Teacher' || session.role === 'Admin'));
         const classId = Number(currentSession?.workspaceLinkedClassId ?? 0);
         const assignmentId = Number(currentSession?.workspaceLinkedAssignmentId ?? 0);
         const userId = Number(currentSession?.authUserId ?? 0);
@@ -749,6 +780,42 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
 
     await bootStudentSession(false);
 
+    const startupStudentSession = getWorkspaceAuthSession(context);
+    if (startupStudentSession?.authenticated && startupStudentSession.role === 'Student') {
+        const startupLinkTimer = setTimeout(() => {
+            void (async () => {
+                const currentSession = getWorkspaceAuthSession(context);
+                if (!currentSession?.authenticated || currentSession.role !== 'Student') {
+                    return;
+                }
+
+                const startupWorkspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+                if (!startupWorkspaceRoot) {
+                    return;
+                }
+
+                const classId = Number(currentSession.workspaceLinkedClassId ?? 0);
+                const assignmentId = Number(currentSession.workspaceLinkedAssignmentId ?? 0);
+                if (!classId || !assignmentId) {
+                    return;
+                }
+
+                await (storageManager as any).syncStudentWorkspaceLinkRecord({
+                    studentId: currentSession.authUserId,
+                    studentWorkspaceFullPath: startupWorkspaceRoot,
+                    studentWorkspaceName: vscode.workspace.name || vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+                    classId,
+                    classAssignmentId: assignmentId,
+                    className: state.activeCourse || undefined,
+                    classAssignmentName: state.activeAssignment || undefined,
+                    showNotification: true
+                });
+            })();
+        }, 10_000);
+
+        context.subscriptions.push({ dispose: () => clearTimeout(startupLinkTimer) });
+    }
+
     const startupDebugSession = getWorkspaceAuthSession(context);
     const startupDebugAssignments = await (async () => {
         if (!startupDebugSession?.authenticated || startupDebugSession.role !== 'Student') {
@@ -788,6 +855,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
 
     const wRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
     await showStartupWorkspaceDebugPopup(startupDebugSession, wRoot, startupAssignmentInfo, startupDebugAssignments);
+
+    logStartupIdentity(context);
 
     const session = startupDebugSession;
     updateApiKeyStatus(!!session?.authenticated && session.role === 'Student');

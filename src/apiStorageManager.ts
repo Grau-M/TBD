@@ -13,6 +13,17 @@ interface ApiSyncStatus {
 
 export type UserRole = 'Student' | 'Teacher' | 'Admin';
 
+interface StudentWorkspaceLinkRecord {
+    studentId: number | null;
+    studentWorkspaceFullPath: string | null;
+    studentWorkspaceName: string | null;
+    classId: number | null;
+    classAssignmentId: number | null;
+    className: string | null;
+    classAssignmentName: string | null;
+    recordIdentifier: string | null;
+}
+
 export class ApiStorageManager {
     private context: vscode.ExtensionContext | null = null;
     private syncStatus: ApiSyncStatus = {
@@ -171,13 +182,198 @@ export class ApiStorageManager {
         return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
     }
 
+    private getStudentWorkspaceLinkContainerUri(): vscode.Uri | undefined {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return undefined;
+        }
+
+        return vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'workspace');
+    }
+
+    private getStudentWorkspaceLinkFileUri(): vscode.Uri | undefined {
+        const containerUri = this.getStudentWorkspaceLinkContainerUri();
+        if (!containerUri) {
+            return undefined;
+        }
+
+        return vscode.Uri.joinPath(containerUri, 'studentWorkspaceLink.json');
+    }
+
+    private createEmptyStudentWorkspaceLinkRecord(): StudentWorkspaceLinkRecord {
+        return {
+            studentId: null,
+            studentWorkspaceFullPath: null,
+            studentWorkspaceName: null,
+            classId: null,
+            classAssignmentId: null,
+            className: null,
+            classAssignmentName: null,
+            recordIdentifier: null
+        };
+    }
+
+    private normalizeStudentWorkspaceLinkRecord(input: {
+        studentId?: number;
+        studentWorkspaceFullPath?: string;
+        studentWorkspaceName?: string;
+        classId?: number;
+        classAssignmentId?: number;
+        className?: string;
+        classAssignmentName?: string;
+        recordIdentifier?: string;
+    }): StudentWorkspaceLinkRecord {
+        const studentId = this.parsePositiveInteger(input.studentId) ?? null;
+        const studentWorkspaceFullPath = String(input.studentWorkspaceFullPath || '').trim() || null;
+        const studentWorkspaceName = String(input.studentWorkspaceName || '').trim() || null;
+        const classId = this.parsePositiveInteger(input.classId) ?? null;
+        const classAssignmentId = this.parsePositiveInteger(input.classAssignmentId) ?? null;
+        const className = String(input.className || '').trim() || null;
+        const classAssignmentName = String(input.classAssignmentName || '').trim() || null;
+        const recordIdentifier = String(input.recordIdentifier || '').trim() || (
+            studentId !== null &&
+            studentWorkspaceFullPath !== null &&
+            studentWorkspaceName !== null &&
+            classId !== null &&
+            classAssignmentId !== null &&
+            className !== null &&
+            classAssignmentName !== null
+        )
+            ? `${studentId}|${studentWorkspaceFullPath}|${studentWorkspaceName}|${classId}|${classAssignmentId}|${className}|${classAssignmentName}`
+            : null;
+
+        return {
+            studentId,
+            studentWorkspaceFullPath,
+            studentWorkspaceName,
+            classId,
+            classAssignmentId,
+            className,
+            classAssignmentName,
+            recordIdentifier
+        };
+    }
+
+    private isCompleteStudentWorkspaceLinkRecord(record: StudentWorkspaceLinkRecord): boolean {
+        return [
+            record.studentId,
+            record.studentWorkspaceFullPath,
+            record.studentWorkspaceName,
+            record.classId,
+            record.classAssignmentId,
+            record.className,
+            record.classAssignmentName,
+            record.recordIdentifier
+        ].every((value) => value !== null && String(value).trim().length > 0);
+    }
+
+    private async readStudentWorkspaceLinkRecord(): Promise<StudentWorkspaceLinkRecord | null> {
+        const fileUri = this.getStudentWorkspaceLinkFileUri();
+        if (!fileUri) {
+            return null;
+        }
+
+        try {
+            const raw = await vscode.workspace.fs.readFile(fileUri);
+            const parsed = JSON.parse(Buffer.from(raw).toString('utf8'));
+            if (!parsed || typeof parsed !== 'object') {
+                return null;
+            }
+
+            return this.normalizeStudentWorkspaceLinkRecord({
+                studentId: parsed.studentId,
+                studentWorkspaceFullPath: parsed.studentWorkspaceFullPath,
+                studentWorkspaceName: parsed.studentWorkspaceName,
+                classId: parsed.classId,
+                classAssignmentId: parsed.classAssignmentId,
+                className: parsed.className,
+                classAssignmentName: parsed.classAssignmentName,
+                recordIdentifier: parsed.recordIdentifier
+            });
+        } catch {
+            return null;
+        }
+    }
+
+    private async ensureStudentWorkspaceLinkFile(): Promise<void> {
+        const fileUri = this.getStudentWorkspaceLinkFileUri();
+        const containerUri = this.getStudentWorkspaceLinkContainerUri();
+        if (!fileUri || !containerUri) {
+            return;
+        }
+
+        await vscode.workspace.fs.createDirectory(containerUri);
+
+        try {
+            await vscode.workspace.fs.stat(fileUri);
+        } catch {
+            const initialRecord = this.createEmptyStudentWorkspaceLinkRecord();
+            await vscode.workspace.fs.writeFile(fileUri, Buffer.from(JSON.stringify(initialRecord, null, 2), 'utf8'));
+        }
+    }
+
+    private async writeStudentWorkspaceLinkFile(record: StudentWorkspaceLinkRecord, showNotification = false): Promise<void> {
+        const fileUri = this.getStudentWorkspaceLinkFileUri();
+        const containerUri = this.getStudentWorkspaceLinkContainerUri();
+        if (!fileUri || !containerUri) {
+            return;
+        }
+
+        const existingRecord = await this.readStudentWorkspaceLinkRecord();
+        if (
+            existingRecord &&
+            existingRecord.recordIdentifier &&
+            record.recordIdentifier &&
+            existingRecord.recordIdentifier === record.recordIdentifier &&
+            this.isCompleteStudentWorkspaceLinkRecord(existingRecord) &&
+            this.isCompleteStudentWorkspaceLinkRecord(record)
+        ) {
+            return;
+        }
+
+        await vscode.workspace.fs.createDirectory(containerUri);
+        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(JSON.stringify(record, null, 2), 'utf8'));
+    }
+
+    async syncStudentWorkspaceLinkRecord(input: {
+        studentId?: number;
+        studentWorkspaceFullPath?: string;
+        studentWorkspaceName?: string;
+        classId?: number;
+        classAssignmentId?: number;
+        className?: string;
+        classAssignmentName?: string;
+        showNotification?: boolean;
+    }): Promise<void> {
+        const record = this.normalizeStudentWorkspaceLinkRecord({
+            studentId: input.studentId,
+            studentWorkspaceFullPath: input.studentWorkspaceFullPath,
+            studentWorkspaceName: input.studentWorkspaceName,
+            classId: input.classId,
+            classAssignmentId: input.classAssignmentId,
+            className: input.className,
+            classAssignmentName: input.classAssignmentName
+        });
+
+        await this.writeStudentWorkspaceLinkFile(record, false);
+    }
+
+    private async getStudentWorkspaceLinkRecord(): Promise<StudentWorkspaceLinkRecord | null> {
+        const record = await this.readStudentWorkspaceLinkRecord();
+        if (!record || !this.isCompleteStudentWorkspaceLinkRecord(record)) {
+            return null;
+        }
+
+        return record;
+    }
+
     private async apiGetFirst(paths: string[]): Promise<any> {
         let lastError: unknown;
         const tried: string[] = [];
         for (const path of paths) {
             tried.push(path);
             try {
-                return await apiGet(path);
+                return await apiGet(path, { silent: true });
             } catch (error) {
                 if (error instanceof ApiHttpError && error.status === 404) {
                     lastError = error;
@@ -198,7 +394,7 @@ export class ApiStorageManager {
         for (const path of paths) {
             tried.push(path);
             try {
-                return await apiPost(path, body);
+                return await apiPost(path, body, { silent: true });
             } catch (error) {
                 if (error instanceof ApiHttpError && error.status === 404) {
                     lastError = error;
@@ -219,7 +415,7 @@ export class ApiStorageManager {
         for (const path of paths) {
             tried.push(path);
             try {
-                return await apiPut(path, body);
+                return await apiPut(path, body, { silent: true });
             } catch (error) {
                 if (error instanceof ApiHttpError && error.status === 404) {
                     lastError = error;
@@ -238,10 +434,30 @@ export class ApiStorageManager {
         this.context = context;
         this.syncStatus.state = 'synced';
         this.syncStatus.lastError = null;
+           
+        try {
+            await this.ensureStudentWorkspaceLinkFile();
+        } catch {
+            // Ignore hidden file bootstrap failures.
+        }
+
+        try {
+            const config = vscode.workspace.getConfiguration();
+            const filesExclude = config.get<any>('files.exclude') || {};
+            filesExclude['.vscode/workspace'] = true;
+            filesExclude['.vscode/workspace/**'] = true;
+            await config.update('files.exclude', filesExclude, vscode.ConfigurationTarget.Workspace);
+        } catch {
+            // Ignore inability to update workspace explorer rules.
+        }
+         // Automatically trigger a sync on startup to check for offline files
+        void this.flush([]);
     }
 
     async flush(_newEvents: StandardEvent[]): Promise<void> {
-        if (!this.context) throw new Error('Storage manager is not initialized.');
+        if (!this.context) {
+            throw new Error('Storage manager is not initialized.');
+        }
 
         // 1. Get current session info (This will be null if they started offline!)
         let currentSessionId = this.context.workspaceState.get<number>('sessionId') || null;
@@ -251,11 +467,16 @@ export class ApiStorageManager {
         const userId = Number(session?.authUserId ?? 0);
         const projectId = Number(session?.workspaceLinkedClassId ?? 0); // Fallback for project ID mapping
 
+        // Teammate's Addition: Fetch the link record for extra backend metadata
+        const linkRecord = await this.getStudentWorkspaceLinkRecord();
+
         // 2. Format new events, tagging them with the current session state
         const newPayloads = _newEvents.map(event => ({
             sessionId: currentSessionId, // Could be null if DB was down at startup
             eventType: event.eventType,
             occurredAt: event.time || new Date().toISOString(),
+            
+            // Your Flat Columns for PostgreSQL
             flightTimeMs: event.flightTime ? Number(event.flightTime) : null,
             fileEdit: event.fileEdit || null,
             fileView: event.fileView || null,
@@ -265,7 +486,19 @@ export class ApiStorageManager {
             windowFocused: event.windowFocused !== undefined ? event.windowFocused : true,
             workspaceName: vscode.workspace.name || null,
             studentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : null,
-            possibleAiDetection: event.possibleAiDetection || null
+            possibleAiDetection: event.possibleAiDetection || null,
+
+            // Teammate's Fallback JSON metadata for tracking
+            eventData: {
+                studentId: linkRecord?.studentId ?? undefined,
+                studentWorkspaceFullPath: linkRecord?.studentWorkspaceFullPath ?? undefined,
+                studentWorkspaceName: linkRecord?.studentWorkspaceName ?? undefined,
+                classId: linkRecord?.classId ?? undefined,
+                classAssignmentId: linkRecord?.classAssignmentId ?? undefined,
+                className: linkRecord?.className ?? undefined,
+                classAssignmentName: linkRecord?.classAssignmentName ?? undefined,
+                recordIdentifier: linkRecord?.recordIdentifier ?? undefined
+            }
         }));
 
         // 3. Load the existing offline queue from .vscode/logs/tbd_offline_queue.enc
@@ -277,10 +510,18 @@ export class ApiStorageManager {
 
         // 5. Try to push everything in the queue to the API
         const remainingQueue: any[] = [];
-        let isOffline = false;
+        const flushedEvents: Array<{ // Array to hold teammate's UI logs
+            eventType: string;
+            occurredAt: string;
+            eventId: number | undefined;
+            eventData: Record<string, unknown>;
+        }> = [];
 
-        for (let i = 0; i < offlineQueue.length; i++) {
-            const payload = offlineQueue[i];
+        let isOffline = false;
+        //Keep track of the session we generate so we don't spam the API
+        let generatedOfflineSessionId: number | null = null;
+
+        for (const payload of offlineQueue) {
             
             // If the API drops mid-upload, stop making network calls and cache the rest
             if (isOffline) {
@@ -291,31 +532,44 @@ export class ApiStorageManager {
             try {
                 // SCENARIO 1: They started offline and need a new Session ID generated
                 if (!payload.sessionId) {
-                    // Call your Express backend to create a new session natively
-                    const newSession = await apiPost('/api/sessions', {
-                        userId: userId,
-                        projectId: projectId,
-                        sessionNumber: Math.floor(Date.now() / 1000), // Generate a fallback session number
-                        startedAt: payload.occurredAt,
-                        studentWorkspaceAssignmentId: studentWorkspaceAssignmentId
-                    });
-
-                    // Save the new session ID so subsequent events use it
-                    currentSessionId = newSession.Id || newSession.id || newSession.SessionId;
-                    await this.context.workspaceState.update('sessionId', currentSessionId);
                     
-                    // Attach the new ID to the payload
-                    payload.sessionId = currentSessionId;
-                    console.log(`[TBD Logger] Recovered from offline start. Generated new Session ID: ${currentSessionId}`);
+                    // If we ALREADY generated a session for this batch, reuse it!
+                    if (generatedOfflineSessionId) {
+                        payload.sessionId = generatedOfflineSessionId;
+                    } else {
+                        // Otherwise, create a new one natively
+                        const newSession = await apiPost('/api/sessions', {
+                            userId: userId,
+                            projectId: projectId,
+                            // Use Date.now() without dividing by 1000 to ensure uniqueness in milliseconds
+                           sessionNumber: Math.floor(Date.now() / 1000) - 1700000000 + Math.floor(Math.random() * 10000), 
+                            startedAt: payload.occurredAt,
+                            studentWorkspaceAssignmentId: studentWorkspaceAssignmentId
+                        });
+
+                        // Save the new session ID
+                        currentSessionId = newSession.Id || newSession.id || newSession.SessionId;
+                        generatedOfflineSessionId = currentSessionId;
+                        await this.context.workspaceState.update('sessionId', currentSessionId);
+                        
+                        payload.sessionId = currentSessionId;
+                        console.log(`[TBD Logger] Recovered from offline start. Generated new Session ID: ${currentSessionId}`);
+                    }
                 }
 
-                // SCENARIO 2: Upload the event (handles both existing sessions and newly generated ones)
-                await apiPost('/api/events', payload);
-                console.log(`[TBD Logger] Pushed event to DB: ${payload.eventType}`);
+                // SCENARIO 2: Upload the event
+                const response = await apiPost('/api/events', payload, { silent: true });
                 
+                const eventId = response?.event?.Id ?? response?.event?.id ?? response?.id ?? response?.Id;
+                flushedEvents.push({
+                    eventType: payload.eventType,
+                    occurredAt: payload.occurredAt,
+                    eventId: Number.isFinite(Number(eventId)) ? Number(eventId) : undefined,
+                    eventData: payload
+                });
+
             } catch (error) {
-                // Network failed. Flag as offline and push back into the remaining queue
-                console.warn('[TBD Logger] API is offline. Queuing event locally.');
+                console.warn('[TBD Logger] API is offline or database rejected event. Queuing event locally.', error);
                 isOffline = true;
                 remainingQueue.push(payload);
                 this.syncStatus.state = 'offline';
@@ -323,14 +577,13 @@ export class ApiStorageManager {
             }
         }
 
-        // 6. Save the remaining queue back to the encrypted file in .vscode/logs/
-        // (If the queue is empty, this function automatically deletes the .enc file)
+        // 6. Save the remaining queue back to the encrypted file
         try {
             await this.writeQueue(remainingQueue);
             this.syncStatus.pendingQueueCount = remainingQueue.length;
-        } catch (e) {
-            console.error('[TBD Logger] Failed to write offline queue to disk!', e);
-            throw e; 
+        } catch (error) {
+            console.error('[TBD Logger] Failed to write offline queue to disk!', error);
+            throw error; 
         }
 
         // 7. Resolve status
@@ -338,6 +591,20 @@ export class ApiStorageManager {
             this.syncStatus.lastSyncedAt = new Date().toISOString();
             this.syncStatus.state = 'synced';
             this.syncStatus.lastError = null;
+        }
+
+        // 8. Teammate's Beautiful Console Output Grouping
+        if (flushedEvents.length > 0) {
+            console.groupCollapsed(`[TBD Logger] Logs pushed to /api/events: ${flushedEvents.length} event(s)`);
+            for (const event of flushedEvents) {
+                console.groupCollapsed(
+                    `${event.eventType} @ ${event.occurredAt}` +
+                    (event.eventId ? ` (event id: ${event.eventId})` : '')
+                );
+                console.log('payload', event.eventData);
+                console.groupEnd();
+            }
+            console.groupEnd();
         }
     }
 
@@ -788,6 +1055,17 @@ export class ApiStorageManager {
             WorkspaceFoldersJson: String(input?.workspaceFoldersJson ?? input?.WorkspaceFoldersJson ?? '[]')
         });
 
+        await this.writeStudentWorkspaceLinkFile(
+            this.normalizeStudentWorkspaceLinkRecord({
+                studentId: Number(input?.studentAuthUserId ?? input?.StudentAuthUserId ?? 0),
+                studentWorkspaceFullPath: workspaceRootPath,
+                studentWorkspaceName: workspaceName || vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+                classId,
+                classAssignmentId
+            }),
+            true
+        );
+
         return result?.link ?? result?.data ?? result;
     }
 
@@ -812,6 +1090,17 @@ export class ApiStorageManager {
             });
 
             if (result && (result.classId || result.ClassId)) {
+                await this.writeStudentWorkspaceLinkFile(
+                    this.normalizeStudentWorkspaceLinkRecord({
+                        studentId: _authUserId,
+                        studentWorkspaceFullPath: workspaceRoot,
+                        studentWorkspaceName: vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+                        classId: Number(result.classId || result.ClassId),
+                        classAssignmentId: Number(result.assignmentId || result.AssignmentId)
+                    }),
+                    false
+                );
+
                 return {
                     classId: Number(result.classId || result.ClassId),
                     assignmentId: Number(result.assignmentId || result.AssignmentId),
@@ -830,6 +1119,17 @@ export class ApiStorageManager {
         if (!classId || !assignmentId) {
             return null;
         }
+
+        await this.writeStudentWorkspaceLinkFile(
+            this.normalizeStudentWorkspaceLinkRecord({
+                studentId: _authUserId,
+                studentWorkspaceFullPath: workspaceRoot,
+                studentWorkspaceName: vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+                classId,
+                classAssignmentId: assignmentId
+            }),
+            false
+        );
 
         return {
             classId,

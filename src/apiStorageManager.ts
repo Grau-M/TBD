@@ -458,15 +458,24 @@ export class ApiStorageManager {
         if (!this.context) {
             throw new Error('Storage manager is not initialized.');
         }
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const userId = Number(session?.authUserId ?? 0);
+        const role = String(session?.role ?? '').toLowerCase();
 
+        // 1. HARD STOP: Do not process offline queues or live events for Teachers or anonymous users
+        if (!userId || userId === 0 || role === 'teacher' || role === 'admin') {
+            // Optional: Clear the incoming events buffer so they don't pile up in memory
+            return; 
+        }
+
+        
         // 1. Get current session info (This will be null if they started offline!)
         let currentSessionId = this.context.workspaceState.get<number>('sessionId') || null;
-        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         
         const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
-        const userId = Number(session?.authUserId ?? 0);
         const projectId = Number(session?.workspaceLinkedClassId ?? 0); // Fallback for project ID mapping
 
+        
         // Teammate's Addition: Fetch the link record for extra backend metadata
         const linkRecord = await this.getStudentWorkspaceLinkRecord();
 

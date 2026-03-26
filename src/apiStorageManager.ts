@@ -302,7 +302,43 @@ export class ApiStorageManager {
         const rows = await this.listAssignmentStudentSessions(classId, assignId, studentId, teacherId);
         const sessionEvents = rows.filter((r: any) => Number(r?.SessionId ?? r?.sessionId) === targetSessionId);
 
-        let logText = '';
+        if (sessionEvents.length === 0) {
+            return '';
+        }
+
+        // 1. Generate the Legacy "sessionHeader" so the Logs tab triggers the beautiful UI
+        const firstEvent = sessionEvents[0];
+        const studentName = String(firstEvent?.StudentName || 'Student');
+        const startTime = firstEvent?.StartedAt || firstEvent?.OccurredAt || firstEvent?.occurredAt || new Date().toISOString();
+        
+        // Find workspace name from event data if possible
+        let workspaceName = 'Unknown Workspace';
+        for (const row of sessionEvents) {
+            let ed = row?.EventData ?? row?.eventData ?? {};
+            if (typeof ed === 'string') { try { ed = JSON.parse(ed); } catch(e) {} }
+            if (ed.workspaceName) {
+                workspaceName = ed.workspaceName;
+                break;
+            }
+        }
+
+        const header = {
+            sessionHeader: {
+                sessionNumber: targetSessionId,
+                startedBy: studentName,
+                project: workspaceName,
+                startTime: startTime,
+                metadata: {
+                    vscodeVersion: "Cloud Sync",
+                    extensionVersion: "Live API"
+                }
+            }
+        };
+
+        // Add the header as the first line
+        let logText = JSON.stringify(header) + '\n';
+
+        // 2. Output each event as a flat JSON string, exactly like local logs did
         for (const row of sessionEvents) {
             let eventData = row?.EventData ?? row?.eventData ?? {};
             if (typeof eventData === 'string') {
@@ -314,6 +350,7 @@ export class ApiStorageManager {
                 time: eventData.time || row?.OccurredAt || row?.occurredAt,
                 eventType: row?.EventType || row?.eventType,
             };
+            
             logText += JSON.stringify(merged) + '\n';
         }
         

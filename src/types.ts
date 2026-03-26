@@ -16,4 +16,5 @@ export interface StandardEvent {
     possibleAiDetection?: string;
     fileFocusCount?: string;
     pasteCharCount?: number;
+    windowFocused?: boolean;
 }

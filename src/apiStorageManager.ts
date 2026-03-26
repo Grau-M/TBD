@@ -12,6 +12,17 @@ interface ApiSyncStatus {
 
 export type UserRole = 'Student' | 'Teacher' | 'Admin';
 
+interface StudentWorkspaceLinkRecord {
+    studentId: number | null;
+    studentWorkspaceFullPath: string | null;
+    studentWorkspaceName: string | null;
+    classId: number | null;
+    classAssignmentId: number | null;
+    className: string | null;
+    classAssignmentName: string | null;
+    recordIdentifier: string | null;
+}
+
 export class ApiStorageManager {
     private context: vscode.ExtensionContext | null = null;
     private syncStatus: ApiSyncStatus = {
@@ -92,6 +103,182 @@ export class ApiStorageManager {
         return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
     }
 
+    private getStudentWorkspaceLinkContainerUri(): vscode.Uri | undefined {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return undefined;
+        }
+
+        return vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'workspace');
+    }
+
+    private getStudentWorkspaceLinkFileUri(): vscode.Uri | undefined {
+        const containerUri = this.getStudentWorkspaceLinkContainerUri();
+        if (!containerUri) {
+            return undefined;
+        }
+
+        return vscode.Uri.joinPath(containerUri, 'studentWorkspaceLink.json');
+    }
+
+    private createEmptyStudentWorkspaceLinkRecord(): StudentWorkspaceLinkRecord {
+        return {
+            studentId: null,
+            studentWorkspaceFullPath: null,
+            studentWorkspaceName: null,
+            classId: null,
+            classAssignmentId: null,
+            className: null,
+            classAssignmentName: null,
+            recordIdentifier: null
+        };
+    }
+
+    private normalizeStudentWorkspaceLinkRecord(input: {
+        studentId?: number;
+        studentWorkspaceFullPath?: string;
+        studentWorkspaceName?: string;
+        classId?: number;
+        classAssignmentId?: number;
+        className?: string;
+        classAssignmentName?: string;
+        recordIdentifier?: string;
+    }): StudentWorkspaceLinkRecord {
+        const studentId = this.parsePositiveInteger(input.studentId) ?? null;
+        const studentWorkspaceFullPath = String(input.studentWorkspaceFullPath || '').trim() || null;
+        const studentWorkspaceName = String(input.studentWorkspaceName || '').trim() || null;
+        const classId = this.parsePositiveInteger(input.classId) ?? null;
+        const classAssignmentId = this.parsePositiveInteger(input.classAssignmentId) ?? null;
+        const className = String(input.className || '').trim() || null;
+        const classAssignmentName = String(input.classAssignmentName || '').trim() || null;
+        const recordIdentifier = String(input.recordIdentifier || '').trim() || (
+            studentId !== null &&
+            studentWorkspaceFullPath !== null &&
+            studentWorkspaceName !== null &&
+            classId !== null &&
+            classAssignmentId !== null &&
+            className !== null &&
+            classAssignmentName !== null
+        )
+            ? `${studentId}|${studentWorkspaceFullPath}|${studentWorkspaceName}|${classId}|${classAssignmentId}|${className}|${classAssignmentName}`
+            : null;
+
+        return {
+            studentId,
+            studentWorkspaceFullPath,
+            studentWorkspaceName,
+            classId,
+            classAssignmentId,
+            className,
+            classAssignmentName,
+            recordIdentifier
+        };
+    }
+
+    private isCompleteStudentWorkspaceLinkRecord(record: StudentWorkspaceLinkRecord): boolean {
+        return [
+            record.studentId,
+            record.studentWorkspaceFullPath,
+            record.studentWorkspaceName,
+            record.classId,
+            record.classAssignmentId,
+            record.className,
+            record.classAssignmentName,
+            record.recordIdentifier
+        ].every((value) => value !== null && String(value).trim().length > 0);
+    }
+
+    private async readStudentWorkspaceLinkRecord(): Promise<StudentWorkspaceLinkRecord | null> {
+        const fileUri = this.getStudentWorkspaceLinkFileUri();
+        if (!fileUri) {
+            return null;
+        }
+
+        try {
+            const raw = await vscode.workspace.fs.readFile(fileUri);
+            const parsed = JSON.parse(Buffer.from(raw).toString('utf8'));
+            if (!parsed || typeof parsed !== 'object') {
+                return null;
+            }
+
+            return this.normalizeStudentWorkspaceLinkRecord({
+                studentId: parsed.studentId,
+                studentWorkspaceFullPath: parsed.studentWorkspaceFullPath,
+                studentWorkspaceName: parsed.studentWorkspaceName,
+                classId: parsed.classId,
+                classAssignmentId: parsed.classAssignmentId,
+                className: parsed.className,
+                classAssignmentName: parsed.classAssignmentName,
+                recordIdentifier: parsed.recordIdentifier
+            });
+        } catch {
+            return null;
+        }
+    }
+
+    private async ensureStudentWorkspaceLinkFile(): Promise<void> {
+        const fileUri = this.getStudentWorkspaceLinkFileUri();
+        const containerUri = this.getStudentWorkspaceLinkContainerUri();
+        if (!fileUri || !containerUri) {
+            return;
+        }
+
+        await vscode.workspace.fs.createDirectory(containerUri);
+
+        try {
+            await vscode.workspace.fs.stat(fileUri);
+        } catch {
+            const initialRecord = this.createEmptyStudentWorkspaceLinkRecord();
+            await vscode.workspace.fs.writeFile(fileUri, Buffer.from(JSON.stringify(initialRecord, null, 2), 'utf8'));
+        }
+    }
+
+    private async writeStudentWorkspaceLinkFile(record: StudentWorkspaceLinkRecord, showNotification = false): Promise<void> {
+        const fileUri = this.getStudentWorkspaceLinkFileUri();
+        const containerUri = this.getStudentWorkspaceLinkContainerUri();
+        if (!fileUri || !containerUri) {
+            return;
+        }
+
+        const existingRecord = await this.readStudentWorkspaceLinkRecord();
+        if (
+            existingRecord &&
+            existingRecord.recordIdentifier &&
+            record.recordIdentifier &&
+            existingRecord.recordIdentifier === record.recordIdentifier &&
+            this.isCompleteStudentWorkspaceLinkRecord(existingRecord) &&
+            this.isCompleteStudentWorkspaceLinkRecord(record)
+        ) {
+            return;
+        }
+
+        await vscode.workspace.fs.createDirectory(containerUri);
+        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(JSON.stringify(record, null, 2), 'utf8'));
+    }
+
+    async syncStudentWorkspaceLinkRecord(input: {
+        studentId?: number;
+        studentWorkspaceFullPath?: string;
+        studentWorkspaceName?: string;
+        classId?: number;
+        classAssignmentId?: number;
+        className?: string;
+        classAssignmentName?: string;
+        showNotification?: boolean;
+    }): Promise<void> {
+        const record = this.normalizeStudentWorkspaceLinkRecord({
+            studentId: input.studentId,
+            studentWorkspaceFullPath: input.studentWorkspaceFullPath,
+            studentWorkspaceName: input.studentWorkspaceName,
+            classId: input.classId,
+            classAssignmentId: input.classAssignmentId,
+            className: input.className,
+            classAssignmentName: input.classAssignmentName
+        });
+
+        await this.writeStudentWorkspaceLinkFile(record, false);
+    }
+
     private async apiGetFirst(paths: string[]): Promise<any> {
         let lastError: unknown;
         const tried: string[] = [];
@@ -159,6 +346,22 @@ export class ApiStorageManager {
         this.context = context;
         this.syncStatus.state = 'synced';
         this.syncStatus.lastError = null;
+
+        try {
+            await this.ensureStudentWorkspaceLinkFile();
+        } catch {
+            // Ignore hidden file bootstrap failures.
+        }
+
+        try {
+            const config = vscode.workspace.getConfiguration();
+            const filesExclude = config.get<any>('files.exclude') || {};
+            filesExclude['.vscode/workspace'] = true;
+            filesExclude['.vscode/workspace/**'] = true;
+            await config.update('files.exclude', filesExclude, vscode.ConfigurationTarget.Workspace);
+        } catch {
+            // Ignore inability to update workspace explorer rules.
+        }
     }
 
     async flush(_newEvents: StandardEvent[]): Promise<void> {
@@ -661,6 +864,17 @@ export class ApiStorageManager {
             WorkspaceFoldersJson: String(input?.workspaceFoldersJson ?? input?.WorkspaceFoldersJson ?? '[]')
         });
 
+        await this.writeStudentWorkspaceLinkFile(
+            this.normalizeStudentWorkspaceLinkRecord({
+                studentId: Number(input?.studentAuthUserId ?? input?.StudentAuthUserId ?? 0),
+                studentWorkspaceFullPath: workspaceRootPath,
+                studentWorkspaceName: workspaceName || vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+                classId,
+                classAssignmentId
+            }),
+            true
+        );
+
         return result?.link ?? result?.data ?? result;
     }
 
@@ -686,6 +900,17 @@ export class ApiStorageManager {
             });
 
             if (result && (result.classId || result.ClassId)) {
+                await this.writeStudentWorkspaceLinkFile(
+                    this.normalizeStudentWorkspaceLinkRecord({
+                        studentId: _authUserId,
+                        studentWorkspaceFullPath: workspaceRoot,
+                        studentWorkspaceName: vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+                        classId: Number(result.classId || result.ClassId),
+                        classAssignmentId: Number(result.assignmentId || result.AssignmentId)
+                    }),
+                    false
+                );
+
                 return {
                     classId: Number(result.classId || result.ClassId),
                     assignmentId: Number(result.assignmentId || result.AssignmentId),
@@ -705,6 +930,17 @@ export class ApiStorageManager {
         if (!classId || !assignmentId) {
             return null;
         }
+
+        await this.writeStudentWorkspaceLinkFile(
+            this.normalizeStudentWorkspaceLinkRecord({
+                studentId: _authUserId,
+                studentWorkspaceFullPath: workspaceRoot,
+                studentWorkspaceName: vscode.workspace.workspaceFolders?.[0]?.name || undefined,
+                classId,
+                classAssignmentId: assignmentId
+            }),
+            false
+        );
 
         return {
             classId,

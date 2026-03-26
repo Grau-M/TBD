@@ -228,8 +228,12 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 
                 state.activeCourse = selectedClass.label;
                 state.activeAssignment = selectedAssignment.label;
+                state.isSessionActive = true;
+                state.currentUserRole = session.role || 'Student';
                 state.isApiOnline = apiStatus === 'Online';
                 updateApiKeyStatus(apiStatus === 'Online');
+
+                await vscode.commands.executeCommand('tbd-logger.refreshStatusBar');
 
                 vscode.window.showInformationMessage(`Successfully linked workspace to ${selectedAssignment.label}.`);
                 

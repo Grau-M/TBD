@@ -210,6 +210,10 @@ export async function openAccountView(
                         accountPanel?.webview.postMessage({ command: 'studentClassesData', data: classes });
                         break;
                     }
+                    case 'refreshStatusBar': {
+                        await vscode.commands.executeCommand('tbd-logger.refreshStatusBar');
+                        break;
+                    }
                     case 'loadStudentClassAssignments': {
                         const currentSession = context.workspaceState.get<WorkspaceAuthSession>(WORKSPACE_AUTH_KEY);
                         if (!currentSession?.authenticated || currentSession.role !== 'Student') {

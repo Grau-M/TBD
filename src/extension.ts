@@ -43,7 +43,9 @@ function installRuntimeWarningFilter(): void {
 
         if (
             message.includes('The `punycode` module is deprecated') ||
-            message.includes('SQLite is an experimental feature')
+            message.includes('SQLite is an experimental feature') ||
+            message.includes('DEP0040') ||
+            message.includes('ExperimentalWarning')
         ) {
             return;
         }
@@ -51,6 +53,8 @@ function installRuntimeWarningFilter(): void {
         return originalEmitWarning(warning as any, ...args as any);
     }) as typeof process.emitWarning;
 }
+
+installRuntimeWarningFilter();
 
 const SESSION_ID_KEY = 'sessionId';
 const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
@@ -548,7 +552,7 @@ async function reconcileStudentWorkspaceState(
         await updateAuthStatusBar(context);
         updateTrackingUI(session.role);
 
-        await openStudentSyncView(context);
+        // don't automatically open sync view on login in subsequent sessions
         return session;
     }
 
@@ -1216,6 +1220,12 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
     }));
 
     updateAuthStatusBar(context);
+
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.refreshStatusBar', async () => {
+        await updateDbStatusBar(context);
+        await updateAuthStatusBar(context);
+        updateTrackingUI(getWorkspaceAuthSession(context)?.role || 'None');
+    }));
 
     context.subscriptions.push(createEditListener());
     context.subscriptions.push(createFocusListener());

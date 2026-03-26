@@ -38,6 +38,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
         return;
     }
 
+    // 1. OPEN THE PANEL INSTANTLY
     panel = vscode.window.createWebviewPanel(
         'syncDashboardView',
         'TBD: Sync Dashboard',
@@ -51,7 +52,12 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     const activePanel = panel;
     registerWebviewPanel(activePanel);
 
+    // 2. INJECT LOADING HTML INSTANTLY
+    activePanel.webview.html = getLoadingHtml('TBD: Sync Dashboard');
+
     let apiStatus = 'Offline';
+    
+    // 3. START SLOW NETWORK REQUESTS
     try {
         const health = await apiGet('/health');
         apiStatus = health?.status ? 'Online' : 'Offline';
@@ -67,7 +73,6 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     let assignmentInfo: any = null;
 
     // --- ROBUST DATABASE-FIRST WORKSPACE CHECK ---
-    // Instead of relying purely on local memory, we ask the database if this exact folder is linked.
     if (session.role === 'Student' && workspaceRoot) {
         try {
             const classes = await (storageManager as any).listStudentClasses(session.authUserId);
@@ -75,7 +80,6 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 for (const c of classes) {
                     const assignments = await (storageManager as any).listStudentAssignmentsForClass(session.authUserId, c.id);
                     if (assignments) {
-                        // Find an assignment where the saved path matches the current workspace path
                         const linked = assignments.find((a: any) => 
                             a.workspaceRootPath && 
                             vscode.Uri.file(a.workspaceRootPath).fsPath === vscode.Uri.file(workspaceRoot).fsPath
@@ -93,7 +97,6 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                             state.activeCourse = assignmentInfo.courseName;
                             state.activeAssignment = assignmentInfo.assignmentName;
                             
-                            // Heal the local session state so other parts of the extension know it's linked
                             session.workspaceLinkedClassId = c.id;
                             session.workspaceLinkedAssignmentId = linked.assignmentId;
                             await context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
@@ -106,7 +109,6 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
             console.warn("[TBD Logger] Failed to fetch assignments from DB for sync view", e);
         }
 
-        // Fallback to local memory if DB check failed (e.g., offline)
         if (!assignmentInfo) {
             assignmentInfo = await (storageManager as any).validateAssignmentLink(session.authUserId, workspaceRoot);
         }
@@ -124,6 +126,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     ).toString();
 
     const render = () => {
+        // 4. SWAP TO REAL UI ONCE READY
         activePanel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus, logoImageUri);
     };
 
@@ -221,7 +224,6 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                     });
                 });
 
-                // UPDATE LOCAL SESSION STATE SO THE EXTENSION REMEMBERS THE LINK
                 session.workspaceLinkedClassId = selectedClass.classId;
                 session.workspaceLinkedAssignmentId = selectedAssignment.assignmentId;
                 await context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
@@ -237,7 +239,6 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 
                 vscode.window.showInformationMessage(`Successfully linked workspace to ${selectedAssignment.label}.`);
                 
-                // Inject the names directly into the UI state so they display correctly right away
                 assignmentInfo = {
                     classId: selectedClass.classId,
                     courseName: selectedClass.label,
@@ -370,6 +371,12 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string, logo
             background: var(--bg); color: var(--fg);
             font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
             margin: 0; padding: 24px; display: flex; align-items: center; justify-content: center; min-height: 100vh;
+            animation: fadeIn 0.4s ease forwards;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .card {
@@ -483,4 +490,49 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string, logo
     </script>
 </body>
 </html>`;
+}
+
+function getLoadingHtml(title: string): string {
+    return `<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+        <style>
+            body {
+                font-family: var(--vscode-font-family);
+                background-color: var(--vscode-editor-background);
+                color: var(--vscode-editor-foreground);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+            .spinner {
+                width: 40px;
+                height: 40px;
+                border: 4px solid var(--vscode-activityBar-inactiveForeground);
+                border-top: 4px solid var(--vscode-button-background);
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin-bottom: 20px;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            .loading-text {
+                font-size: 1.2em;
+                color: var(--vscode-descriptionForeground);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="spinner"></div>
+        <div class="loading-text">Connecting to TBD Server...</div>
+    </body>
+    </html>`;
 }

@@ -346,6 +346,15 @@ export class ApiStorageManager {
         await this.writeStudentWorkspaceLinkFile(record, false);
     }
 
+    private async getStudentWorkspaceLinkRecord(): Promise<StudentWorkspaceLinkRecord | null> {
+        const record = await this.readStudentWorkspaceLinkRecord();
+        if (!record || !this.isCompleteStudentWorkspaceLinkRecord(record)) {
+            return null;
+        }
+
+        return record;
+    }
+
     private async apiGetFirst(paths: string[]): Promise<any> {
         let lastError: unknown;
         const tried: string[] = [];
@@ -443,11 +452,11 @@ export class ApiStorageManager {
 
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+        const linkRecord = await this.getStudentWorkspaceLinkRecord();
         const payloads = _newEvents.map((event) => ({
             sessionId,
             eventType: event.eventType,
             occurredAt: event.time,
-            StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
             eventData: {
                 time: event.time,
                 flightTime: event.flightTime,
@@ -456,7 +465,15 @@ export class ApiStorageManager {
                 possibleAiDetection: event.possibleAiDetection,
                 fileFocusCount: event.fileFocusCount,
                 pasteCharCount: event.pasteCharCount,
-                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined
+                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
+                studentId: linkRecord?.studentId ?? undefined,
+                studentWorkspaceFullPath: linkRecord?.studentWorkspaceFullPath ?? undefined,
+                studentWorkspaceName: linkRecord?.studentWorkspaceName ?? undefined,
+                classId: linkRecord?.classId ?? undefined,
+                classAssignmentId: linkRecord?.classAssignmentId ?? undefined,
+                className: linkRecord?.className ?? undefined,
+                classAssignmentName: linkRecord?.classAssignmentName ?? undefined,
+                recordIdentifier: linkRecord?.recordIdentifier ?? undefined
             }
         }));
 

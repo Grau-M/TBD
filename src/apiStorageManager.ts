@@ -66,7 +66,9 @@ export class ApiStorageManager {
 
     private decrypt(buffer: Uint8Array): string {
         const buf = Buffer.from(buffer);
-        if (buf.length < this.IV_LENGTH) return '[]';
+        if (buf.length < this.IV_LENGTH) {
+            return '[]';
+        }
         const iv = buf.subarray(0, this.IV_LENGTH);
         const content = buf.subarray(this.IV_LENGTH);
         const decipher = crypto.createDecipheriv(this.ALGORITHM, this.KEY, iv);
@@ -76,7 +78,9 @@ export class ApiStorageManager {
 
     private async readQueue(): Promise<any[]> {
         const uri = this.getQueueUri();
-        if (!uri) return [];
+        if (!uri) {
+            return [];
+        }
         try {
             const data = await vscode.workspace.fs.readFile(uri);
             const jsonStr = this.decrypt(data);
@@ -89,7 +93,9 @@ export class ApiStorageManager {
 
    private async writeQueue(events: any[]): Promise<void> {
         const uri = this.getQueueUri();
-        if (!uri) return;
+        if (!uri) {
+            return;
+        }
         
         try {
             // Ensure the .vscode/logs directory exists before attempting to write
@@ -101,7 +107,11 @@ export class ApiStorageManager {
 
         if (events.length === 0) {
             // Clear file if the queue successfully emptied (synced to cloud)
-            try { await vscode.workspace.fs.delete(uri); } catch (e) {}
+            try {
+                await vscode.workspace.fs.delete(uri);
+            } catch (e) {
+                // ignore delete errors
+            }
             return;
         }
 
@@ -641,10 +651,14 @@ export class ApiStorageManager {
     }
 
    async listLogFiles(): Promise<Array<{ label: string; uri: vscode.Uri }>> {
-        if (!this.context) return [];
+        if (!this.context) {
+            return [];
+        }
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const teacherId = Number(session?.authUserId || 0);
-        if (!teacherId) return [];
+        if (!teacherId) {
+            return [];
+        }
 
         const classes = await this.listTeacherClasses(teacherId);
         const logs: Array<{ label: string; uri: vscode.Uri }> = [];
@@ -660,7 +674,9 @@ export class ApiStorageManager {
                             const uniqueSessionIds = new Set<number>();
                             for (const row of sessionsAndEvents) {
                                 const sid = Number(row?.SessionId ?? row?.sessionId);
-                                if (sid > 0) uniqueSessionIds.add(sid);
+                                if (sid > 0) {
+                                    uniqueSessionIds.add(sid);
+                                }
                             }
 
                             for (const sid of uniqueSessionIds) {
@@ -762,10 +778,14 @@ export class ApiStorageManager {
     }
 
    async retrieveHiddenLogContent(_passwordAttempt: string): Promise<string> {
-        if (!this.context) return '{"deletions":[]}';
+        if (!this.context) {
+            return '{"deletions":[]}';
+        }
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const teacherId = Number(session?.authUserId || 0);
-        if (!teacherId) return '{"deletions":[]}';
+        if (!teacherId) {
+            return '{"deletions":[]}';
+        }
 
         const classes = await this.listTeacherClasses(teacherId);
         const deletions: any[] = [];

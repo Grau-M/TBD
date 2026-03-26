@@ -12,6 +12,7 @@ type AssignmentComparisonSelection = {
         startedAt: string;
         ideUser: string;
         workspaceName: string;
+        
     }>;
 };
 
@@ -256,15 +257,18 @@ export async function handleAnalyzeLogs(panel: vscode.WebviewPanel, password: st
         totalLogs: files.length, totalEvents: 0, pasteCount: 0, deleteCount: 0, keystrokeCount: 0, 
         pasteLengths: [], partialCount: 0, perFile: [], 
         aiCount: 0, aiPasteCount: 0, aiPasteLengths: [], aiFlagCount: 0, aiDeleteCount: 0, flaggedCount: 0,
-        totalWallTime: 0, totalActiveTime: 0, unmonitoredAlertCount: 0, unmonitoredAlerts: []
+        totalWallTime: 0, totalActiveTime: 0, unmonitoredAlertCount: 0, unmonitoredAlerts: [],
+        isDatabaseReachable: true
     };
 
     try {
         const alerts = await storageManager.listRecentUnmonitoredWorkAlerts(20);
         aggregate.unmonitoredAlertCount = alerts.length;
         aggregate.unmonitoredAlerts = alerts;
+        aggregate.isDatabaseReachable = true;
     } catch {
         // Keep dashboard usable when alert lookup is unavailable.
+        aggregate.isDatabaseReachable = false;
     }
 
     for (const f of files) {

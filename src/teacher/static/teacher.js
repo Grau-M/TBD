@@ -11,6 +11,7 @@
 
   // Application State
   let logNamesCache = [];
+  let isDatabaseReachable = true;
   const defaults = {
     inactivity: 5,
     flight: 50,
@@ -2082,6 +2083,11 @@
 
         case "dashboardData":
           dashboardDataCache = msg.data || null;
+          // NEW: Read the ping result from the dashboard sync logic
+          if (msg.data && typeof msg.data.isDatabaseReachable !== "undefined") {
+            isDatabaseReachable = msg.data.isDatabaseReachable;
+            updateTopClassActionButton();
+          }
           UI.renderDashboard(msg.data, handlers);
           if ($("dashboard-log-name")) {
             $("dashboard-log-name").textContent = "Viewing: All logs";
@@ -2371,8 +2377,23 @@
 
         case "error":
           if (isConnectionLostError(msg.message)) {
+            isDatabaseReachable = false;
+            updateTopClassActionButton();
             showConnectionLostState();
             break;
+          }
+          if (msg.message) {
+            const lowerMsg = String(msg.message).toLowerCase();
+            if (
+              lowerMsg.includes("fetch") ||
+              lowerMsg.includes("econnrefused") ||
+              lowerMsg.includes("network") ||
+              lowerMsg.includes("api") ||
+              lowerMsg.includes("failed with status")
+            ) {
+              isDatabaseReachable = false;
+              updateTopClassActionButton();
+            }
           }
           if ($("btn-submit-class")) {
             $("btn-submit-class").disabled = false;
@@ -2446,6 +2467,8 @@
 
         case "classList":
           {
+            isDatabaseReachable = true;
+            updateTopClassActionButton();
             const classes = Array.isArray(msg.data)
               ? msg.data
               : Array.isArray(msg.data?.classes)
@@ -3053,6 +3076,20 @@
       }
 
       btn.textContent = "+ New Class";
+      if (!isDatabaseReachable) {
+        btn.disabled = true;
+        btn.title = "the database api cannot be connected";
+        btn.style.opacity = "0.5";
+        btn.style.cursor = "not-allowed";
+        // This prevents the click event from even firing on the element
+        btn.style.pointerEvents = "none";
+      } else {
+        btn.disabled = false;
+        btn.title = "";
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+        btn.style.pointerEvents = "auto";
+      }
     }
 
     function updateClassPrimaryActionButton() {
@@ -4279,6 +4316,9 @@
         updateTopClassActionButton();
         updateClassTabHeading();
         loadClasses();
+        return;
+      }
+      if (!isDatabaseReachable) {
         return;
       }
 

@@ -12,6 +12,8 @@ export interface AccountViewData {
     canViewClasses: boolean;
   themePreference: 'system' | 'light' | 'dark';
   trackingConsent?: boolean;
+  apiUnavailable?: boolean;
+  apiUnavailableMessage?: string;
 }
 
 export function getAccountHtml(
@@ -378,6 +380,39 @@ export function getAccountHtml(
       min-width: 160px;
     }
     .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .account-api-warning {
+      margin-top: 18px;
+    }
+
+    .account-api-warning-card {
+      border-radius: 22px;
+      padding: 20px 22px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, var(--accent) 8%), var(--surface));
+      box-shadow: var(--shadow);
+    }
+
+    .account-api-warning-eyebrow {
+      margin: 0 0 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .account-api-warning-title {
+      margin: 0 0 8px;
+      font-size: 1.1rem;
+    }
+
+    .account-api-warning-copy {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
 
     .join-class-panel {
       margin-bottom: 18px;

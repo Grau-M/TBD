@@ -54,6 +54,8 @@ export async function openAccountView(
     }
 
     let session = storedSession;
+    let apiUnavailable = false;
+    const apiUnavailableMessage = 'The server could not be reached, so cached details are shown for now. Please try again later.';
 
     // Always try to refresh account identity from API, but fall back to the cached session
     // so the dashboard can still open when the backend is temporarily unreachable.
@@ -72,7 +74,7 @@ export async function openAccountView(
             vscode.window.showWarningMessage('Unable to refresh account information from the database. Showing cached account details instead.');
         }
     } catch (error: any) {
-        vscode.window.showWarningMessage(`Unable to refresh account information from API: ${String(error?.message || error)}. Showing cached details instead.`);
+        apiUnavailable = true;
     }
 
     const reopenedPanel = accountPanel;
@@ -105,7 +107,9 @@ export async function openAccountView(
             workspaceName: details.workspaceName,
             canViewClasses: session.role === 'Student',
             themePreference: getThemePreference(context),
-            trackingConsent: session.trackingConsent // Ensure getAccountHtml has this passed
+            trackingConsent: session.trackingConsent,
+            apiUnavailable,
+            apiUnavailableMessage
         });
 
         accountPanel.onDidDispose(() => {

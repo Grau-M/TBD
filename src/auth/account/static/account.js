@@ -628,6 +628,35 @@
     }
 
     const data = window.__ACCOUNT_DATA__ || {};
+    const isApiUnavailable = !!data.apiUnavailable;
+
+    function syncSaveButtonState() {
+      const save = $("btn-save-account");
+      if (!save) {
+        return;
+      }
+
+      if (isApiUnavailable) {
+        save.disabled = true;
+        save.setAttribute("aria-disabled", "true");
+        save.title = "API unreachable, try later.";
+        return;
+      }
+
+      save.disabled = false;
+      save.removeAttribute("aria-disabled");
+      save.title = "";
+    }
+
+    const apiWarning = $("account-api-warning");
+    if (apiWarning && data.apiUnavailable) {
+      const warningCopy = apiWarning.querySelector(".account-api-warning-copy");
+      if (warningCopy) {
+        warningCopy.textContent =
+          "The server could not be reached, so cached details are shown for now. Please try again later.";
+      }
+      apiWarning.classList.remove("hidden");
+    }
 
     if ($("account-display-name")) {
       $("account-display-name").value = data.displayName || "";
@@ -651,6 +680,7 @@
     }
     setNavVisibility(data);
     applyThemePreference(data.themePreference);
+    syncSaveButtonState();
 
     $("nav-account")?.addEventListener("click", () => setActiveView("account"));
     $("nav-classes")?.addEventListener("click", () => setActiveView("classes"));
@@ -687,6 +717,9 @@
 
     const saveBtn = $("btn-save-account");
     saveBtn?.addEventListener("click", () => {
+      if (isApiUnavailable) {
+        return;
+      }
       clearMessages();
       const displayName = ($("account-display-name")?.value || "").trim();
       const trackingConsent = $("account-tracking-consent")?.checked || false;
@@ -714,9 +747,9 @@
       const msg = event.data || {};
       switch (msg.command) {
         case "accountSaved": {
+          syncSaveButtonState();
           const save = $("btn-save-account");
-          if (save) {
-            save.disabled = false;
+          if (save && !isApiUnavailable) {
             save.textContent = "Save";
           }
           showSuccess("Your data has been successfully updated.");
@@ -735,9 +768,9 @@
           setVisible($("student-classes-empty"), state.classes.length === 0);
           setVisible($("student-assignments-loading"), false);
           renderSelectedClass();
+          syncSaveButtonState();
           const save = $("btn-save-account");
-          if (save) {
-            save.disabled = false;
+          if (save && !isApiUnavailable) {
             save.textContent = "Save";
           }
           const joinBtn = $("btn-join-class");

@@ -12,6 +12,8 @@
       selectedClassId: null,
       classes: [],
       assignmentsByClassId: Object.create(null),
+      joinPanelOpen: false,
+      joinOutsideHandler: null,
     };
 
     function post(command, payload) {
@@ -25,6 +27,53 @@
         return;
       }
       el.classList.toggle("hidden", !show);
+    }
+
+    function setJoinPanelOpen(isOpen) {
+      const panel = $("join-class-panel");
+      const input = $("join-class-input");
+      const open = !!isOpen;
+      state.joinPanelOpen = open;
+      setVisible(panel, open);
+      panel?.setAttribute("aria-hidden", String(!open));
+      if (open) {
+        window.requestAnimationFrame(() => {
+          input?.focus();
+          if (input && typeof input.select === "function") {
+            input.select();
+          }
+        });
+        return;
+      }
+      if (input) {
+        input.value = "";
+      }
+      const joinError = $("student-classes-error");
+      if (joinError) {
+        joinError.textContent = "";
+        setVisible(joinError, false);
+      }
+    }
+
+    function closeJoinPanel() {
+      setJoinPanelOpen(false);
+    }
+
+    function submitJoinCode() {
+      const joinInput = $("join-class-input");
+      const joinCode = String(joinInput?.value || "").trim();
+      if (!joinCode) {
+        showClassesError("Enter a class join code.");
+        joinInput?.focus();
+        return;
+      }
+      clearMessages();
+      const joinBtn = $("btn-submit-join-class");
+      if (joinBtn) {
+        joinBtn.disabled = true;
+        joinBtn.textContent = "Joining...";
+      }
+      post("joinStudentClass", { joinCode });
     }
 
     function normalizeThemePreference(value) {
@@ -46,6 +95,137 @@
           window.matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.classList.toggle("dark", !!shouldUseDark);
     }
+
+    const themeDropdown = $("account-theme-dropdown");
+    const themeTrigger = $("account-theme-trigger");
+    const themeMenu = $("account-theme-menu");
+    const themeInput = $("account-theme-preference");
+    const themeLabel = $("account-theme-label");
+
+    function themeOptions() {
+      return Array.from(themeMenu?.querySelectorAll(".custom-dropdown-option") || []);
+    }
+
+    function setThemePreference(value) {
+      const normalized = normalizeThemePreference(value);
+      if (themeInput) {
+        themeInput.value = normalized;
+      }
+      if (themeLabel) {
+        themeLabel.textContent = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+      }
+      if (themeMenu) {
+        themeMenu.querySelectorAll(".custom-dropdown-option").forEach((option) => {
+          option.setAttribute("aria-selected", String(option.dataset.value === normalized));
+        });
+      }
+    }
+
+    function setThemeMenuOpen(isOpen) {
+      if (themeTrigger) {
+        themeTrigger.classList.toggle("open", isOpen);
+        themeTrigger.setAttribute("aria-expanded", String(isOpen));
+      }
+      if (themeMenu) {
+        themeMenu.classList.toggle("hidden", !isOpen);
+      }
+    }
+
+    function focusThemeOption(index) {
+      const options = themeOptions();
+      if (!options.length) {
+        return;
+      }
+      const normalizedIndex = (index + options.length) % options.length;
+      options[normalizedIndex].focus();
+    }
+
+    function openThemeMenu(focusSelected = false) {
+      setThemeMenuOpen(true);
+      if (!focusSelected) {
+        return;
+      }
+      window.requestAnimationFrame(() => {
+        const options = themeOptions();
+        const selectedIndex = options.findIndex((option) => option.getAttribute("aria-selected") === "true");
+        (options[selectedIndex >= 0 ? selectedIndex : 0] || themeTrigger)?.focus();
+      });
+    }
+
+    themeTrigger?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const isOpen = themeTrigger.classList.contains("open");
+      if (isOpen) {
+        setThemeMenuOpen(false);
+        return;
+      }
+      openThemeMenu(true);
+    });
+
+    themeMenu?.querySelectorAll(".custom-dropdown-option").forEach((option) => {
+      option.addEventListener("click", () => {
+        setThemePreference(option.dataset.value || "system");
+        setThemeMenuOpen(false);
+        themeTrigger?.focus();
+      });
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!themeDropdown || !themeTrigger || !themeMenu) {
+        return;
+      }
+      if (!themeDropdown.contains(event.target)) {
+        setThemeMenuOpen(false);
+      }
+    });
+
+    themeTrigger?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        const isOpen = themeTrigger.classList.contains("open");
+        if (isOpen) {
+          setThemeMenuOpen(false);
+        } else {
+          openThemeMenu(true);
+        }
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        openThemeMenu(true);
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        openThemeMenu(true);
+      }
+      if (event.key === "Escape") {
+        setThemeMenuOpen(false);
+      }
+    });
+
+    themeMenu?.addEventListener("keydown", (event) => {
+      const currentIndex = themeOptions().findIndex((option) => option === document.activeElement);
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusThemeOption(currentIndex + 1);
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusThemeOption(currentIndex - 1);
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        focusThemeOption(0);
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        focusThemeOption(themeOptions().length - 1);
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setThemeMenuOpen(false);
+        themeTrigger?.focus();
+      }
+    });
 
     function clearMessages() {
       const err = $("account-error");
@@ -465,11 +645,7 @@
         $("account-tracking-consent").checked = !!data.trackingConsent;
       }
     }
-    if ($("account-theme-preference")) {
-      $("account-theme-preference").value = normalizeThemePreference(
-        data.themePreference,
-      );
-    }
+    setThemePreference(data.themePreference);
     if ($("account-email")) {
       $("account-email").value = data.email || "";
     }
@@ -480,13 +656,33 @@
     $("nav-classes")?.addEventListener("click", () => setActiveView("classes"));
     $("btn-join-class")?.addEventListener("click", () => {
       clearMessages();
-      const joinBtn = $("btn-join-class");
-      if (joinBtn) {
-        joinBtn.disabled = true;
-        joinBtn.textContent = "Joining...";
+      if (state.joinPanelOpen) {
+        closeJoinPanel();
+        return;
       }
-      post("joinStudentClass");
+      setJoinPanelOpen(true);
     });
+
+    $("btn-submit-join-class")?.addEventListener("click", submitJoinCode);
+    $("btn-close-join-class")?.addEventListener("click", closeJoinPanel);
+
+    $("join-class-input")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitJoinCode();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeJoinPanel();
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.joinPanelOpen) {
+        closeJoinPanel();
+      }
+    });
+
     setActiveView("account");
 
     const saveBtn = $("btn-save-account");
@@ -527,6 +723,7 @@
           break;
         }
         case "themePreferenceApplied": {
+          setThemePreference(msg.themePreference);
           applyThemePreference(msg.themePreference);
           break;
         }
@@ -547,6 +744,11 @@
           if (joinBtn) {
             joinBtn.disabled = false;
             joinBtn.textContent = "Join Class";
+          }
+          const submitJoinBtn = $("btn-submit-join-class");
+          if (submitJoinBtn) {
+            submitJoinBtn.disabled = false;
+            submitJoinBtn.textContent = "Submit";
           }
           const errorMessage = buildErrorMessage(
             msg,
@@ -666,14 +868,22 @@
           break;
         }
         case "studentClassJoinResult": {
-          const joinBtn = $("btn-join-class");
-          if (joinBtn) {
-            joinBtn.disabled = false;
-            joinBtn.textContent = "Join Class";
+          const submitJoinBtn = $("btn-submit-join-class");
+          if (submitJoinBtn) {
+            submitJoinBtn.disabled = false;
+            submitJoinBtn.textContent = "Submit";
           }
           if (msg.joined) {
             state.classesLoaded = false;
-            showClassesSuccess("Class added successfully.");
+            closeJoinPanel();
+            if (msg.message) {
+              showClassesSuccess(msg.message);
+            } else {
+              showClassesSuccess("Class added successfully.");
+            }
+          } else if (msg.message) {
+            showClassesError(msg.message);
+            setJoinPanelOpen(true);
           }
           break;
         }

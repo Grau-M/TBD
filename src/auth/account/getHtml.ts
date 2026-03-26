@@ -88,6 +88,15 @@ export function getAccountHtml(
       gap: 24px;
       align-items: start;
     }
+    .dashboard-shell,
+    .dashboard-sidebar,
+    .account-card,
+    .classes-shell,
+    .class-detail-card,
+    .class-list-card,
+    .assignment-card {
+      min-width: 0;
+    }
 
     .dashboard-sidebar,
     .account-card,
@@ -164,12 +173,16 @@ export function getAccountHtml(
     .assignment-card-copy,
     .page-subtitle,
     .class-detail-meta,
-    .assignment-meta {
+    .assignment-meta,
+    .account-subtitle,
+    .sidebar-copy {
       display: block;
       margin-top: 4px;
       color: var(--muted);
       font-size: 0.9rem;
       line-height: 1.45;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .sidebar-nav-btn:hover,
@@ -255,6 +268,81 @@ export function getAccountHtml(
       padding: 9px 12px;
       font-size: 0.95rem;
     }
+    .custom-dropdown {
+      position: relative;
+    }
+    .custom-dropdown-trigger {
+      width: 100%;
+      min-height: 42px;
+      border-radius: 14px;
+      border: 1.5px solid var(--border);
+      background: var(--surface-strong);
+      color: var(--fg);
+      padding: 9px 12px;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    }
+    .custom-dropdown-trigger:hover {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border) 55%);
+    }
+    .custom-dropdown-trigger.open {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+    }
+    .custom-dropdown-trigger:focus,
+    .custom-dropdown-trigger:focus-visible {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+    }
+    .custom-dropdown-chevron {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    .custom-dropdown-trigger.open .custom-dropdown-chevron {
+      transform: rotate(180deg);
+    }
+    .custom-dropdown-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 8px);
+      z-index: 20;
+      padding: 10px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 95%, white 5%), var(--surface));
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 36px rgba(15,23,42,0.18);
+    }
+    .custom-dropdown-option {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--fg);
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: background 0.18s ease, transform 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .custom-dropdown-option:hover,
+    .custom-dropdown-option[aria-selected="true"] {
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 82%, white 18%));
+      color: #fff;
+      box-shadow: 0 8px 16px rgba(15,118,110,0.18);
+    }
+    .custom-dropdown-option + .custom-dropdown-option {
+      margin-top: 4px;
+    }
     input:focus {
       outline: none;
       border-color: var(--accent);
@@ -291,6 +379,80 @@ export function getAccountHtml(
     }
     .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+    .join-class-panel {
+      margin-bottom: 18px;
+    }
+
+    .join-class-panel-card {
+      border-radius: 22px;
+      padding: 22px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 94%, var(--accent) 6%), var(--surface));
+      box-shadow: 0 16px 36px rgba(15,23,42,0.12);
+    }
+
+    .join-class-panel-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .join-class-eyebrow {
+      margin: 0 0 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .join-class-title {
+      margin: 0;
+      font-size: 1.2rem;
+    }
+
+    .join-class-copy,
+    .join-class-hint {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .join-class-copy {
+      margin-bottom: 16px;
+    }
+
+    .join-class-hint {
+      margin-top: 10px;
+      font-size: 0.88rem;
+    }
+
+    .join-class-close {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      width: 36px;
+      height: 36px;
+      background: var(--surface-strong);
+      color: var(--fg);
+      cursor: pointer;
+      flex-shrink: 0;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    .join-class-input-group {
+      margin-bottom: 0;
+    }
+
+    .join-class-actions {
+      margin-top: 14px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
     .classes-layout {
       display: grid;
       grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
@@ -302,6 +464,7 @@ export function getAccountHtml(
     .class-detail-card {
       border-radius: 20px;
       padding: 20px;
+      min-width: 0;
     }
 
     .class-list {
@@ -392,6 +555,16 @@ export function getAccountHtml(
     .assignment-card {
       border-radius: 18px;
       padding: 18px;
+      min-width: 0;
+    }
+
+    .assignment-meta div,
+    .assignment-meta strong,
+    .class-detail-meta,
+    .value {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      min-width: 0;
     }
 
     .assignment-card.past-due {
@@ -440,7 +613,7 @@ export function getAccountHtml(
     }
     .account-error { background: rgba(220,38,38,0.1); color: var(--error); }
     .account-success { background: rgba(22,163,74,0.12); color: var(--success); }
-    @media (max-width: 980px) {
+    @media (max-width: 1150px) {
       .dashboard-shell,
       .classes-layout {
         grid-template-columns: 1fr;
@@ -457,12 +630,17 @@ export function getAccountHtml(
       .classes-shell,
       .dashboard-sidebar,
       .class-list-card,
-      .class-detail-card { padding: 20px; border-radius: 18px; }
+      .class-detail-card,
+      .join-class-panel-card { padding: 20px; border-radius: 18px; }
       .grid-2 { grid-template-columns: 1fr; }
       .actions { justify-content: stretch; }
       .btn-primary { width: 100%; }
       .account-header,
       .page-header { flex-direction: column; }
+      .dashboard-shell,
+      .classes-layout { gap: 16px; }
+      .assignment-card,
+      .class-list-btn { padding: 14px; }
     }
   </style>
 </head>

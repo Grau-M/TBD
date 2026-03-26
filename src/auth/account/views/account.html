@@ -83,12 +83,31 @@
             </label>
           </div>
           <div class="form-group">
-            <label for="account-theme-preference">Theme</label>
-            <select id="account-theme-preference">
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+            <label>Theme</label>
+            <div class="custom-dropdown account-theme-dropdown" id="account-theme-dropdown">
+              <input type="hidden" id="account-theme-preference" value="system" />
+              <button
+                type="button"
+                id="account-theme-trigger"
+                class="custom-dropdown-trigger"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-controls="account-theme-menu"
+              >
+                <span id="account-theme-label">System</span>
+                <span class="custom-dropdown-chevron">⌄</span>
+              </button>
+              <div
+                id="account-theme-menu"
+                class="custom-dropdown-menu hidden"
+                role="listbox"
+                aria-label="Theme preference"
+              >
+                <button type="button" class="custom-dropdown-option" data-value="system" aria-selected="true">System</button>
+                <button type="button" class="custom-dropdown-option" data-value="light" aria-selected="false">Light</button>
+                <button type="button" class="custom-dropdown-option" data-value="dark" aria-selected="false">Dark</button>
+              </div>
+            </div>
           </div>
 
           <div id="account-error" class="account-error hidden"></div>
@@ -113,6 +132,33 @@
             <button id="btn-join-class" class="btn-secondary" type="button">
               Join Class
             </button>
+          </div>
+
+          <div id="join-class-panel" class="join-class-panel hidden" aria-hidden="true">
+            <div class="join-class-panel-card" role="dialog" aria-label="Enter class join code">
+              <div class="join-class-panel-header">
+                <div>
+                  <p class="join-class-eyebrow">Enter the class join code</p>
+                  <h3 class="join-class-title">Join a class</h3>
+                </div>
+                <button id="btn-close-join-class" class="join-class-close" type="button" aria-label="Close join class panel">×</button>
+              </div>
+              <p class="join-class-copy">Type the code your teacher shared, then press Enter to join.</p>
+              <div class="form-group join-class-input-group">
+                <label for="join-class-input">Join code</label>
+                <input
+                  type="text"
+                  id="join-class-input"
+                  placeholder="Enter the class join code"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="join-class-actions">
+                <button id="btn-submit-join-class" class="btn-primary" type="button">Submit</button>
+              </div>
+              <p class="join-class-hint">Press Enter to submit, or Esc / X to close this panel.</p>
+            </div>
           </div>
 
           <div id="student-classes-status" class="account-success hidden"></div>

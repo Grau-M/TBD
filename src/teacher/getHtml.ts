@@ -41,25 +41,25 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     }
 
     body { background: var(--bg); color: var(--fg); height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-    .app-container { display: flex; height: 100%; max-width: none; margin: 0; width: 100%; box-sizing: border-box; }
-    .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+    .app-container { display: flex; height: 100%; max-width: none; margin: 0; width: 100%; box-sizing: border-box; min-width: 0; }
+    .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
     .tab-btn { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 500; transition: all 0.2s; border: 1px solid transparent; background: transparent; width: 100%; text-align: left; }
     .tab-btn:hover { background: rgba(125,125,125,0.05); color: var(--fg); }
     .tab-btn.active { background: var(--accent); color: white; border-color: var(--accent); box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
-    .main-content { flex: 1; padding: 24px; overflow-y: auto; position: relative; }
+    .main-content { flex: 1; padding: 24px; overflow-y: auto; position: relative; min-width: 0; }
     .tab-pane { display: none; animation: fadeIn 0.2s ease-out; }
     .tab-pane.active { display: block; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     .spinner { width: 36px; height: 36px; border-radius: 50%; border: 4px solid rgba(0,0,0,0.08); border-top-color: var(--accent); animation: spin 1s linear infinite; margin: 12px auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px var(--card-shadow); }
-    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px var(--card-shadow); min-width: 0; }
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; min-width: 0; gap: 12px; }
     .top-nav { width: 100%; }
     h1 { font-size: 1.5rem; font-weight: 700; color: var(--fg); margin: 0; }
     h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--fg); }
     .form-group { margin-bottom: 16px; position: relative; }
     label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9rem; color: var(--muted); }
-    input[type="text"], input[type="number"], input[type="date"], input[type="time"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; min-height: 42px; }
+    input[type="text"], input[type="number"], input[type="date"], input[type="time"], select { width: 100%; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font-size: 0.95rem; min-height: 42px; min-width: 0; }
     input[type="date"] {
       color-scheme: dark light;
       cursor: pointer;
@@ -110,15 +110,15 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     .search-container .clear-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 0.95rem; padding: 4px; }
     .search-meta { display:flex; gap:8px; align-items:center; font-size:0.95rem; color:var(--muted); }
     .search-meta #log-count { color: var(--muted); font-weight:600; }
-    .dropdown-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 8px 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-height: 250px; overflow-y: auto; z-index: 50; display: none; margin-top: 4px; }
+    .dropdown-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 8px 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-height: 250px; overflow-y: auto; z-index: 50; display: none; margin-top: 4px; min-width: 0; }
     .dropdown-list.show { display: block; }
-    .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 0.9rem; color: var(--fg); }
+    .dropdown-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 0.9rem; color: var(--fg); overflow-wrap: anywhere; word-break: break-word; }
     .dropdown-item:last-child { border-bottom: none; }
     .dropdown-item:hover { background: rgba(125,125,125,0.05); color: var(--accent); }
-    .event { background: rgba(125,125,125,0.03); padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid var(--border); }
+    .event { background: rgba(125,125,125,0.03); padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid var(--border); min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
     .event.paste { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
     .event.fast { border-left-color: #8b5cf6; background: rgba(139, 92, 246, 0.05); }
-    .meta { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+    .meta { color: var(--muted); font-size: 0.85rem; margin-top: 4px; overflow-wrap: anywhere; word-break: break-word; }
     .btn { padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; transition: transform 0.1s; }
     .btn:active { transform: scale(0.98); }
     .btn-primary { background: var(--accent); color: white; }
@@ -160,6 +160,11 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
       .card { padding: 12px !important; }
     }
     pre { white-space: pre-wrap; word-break: break-word; overflow-x: auto; }
+    @media (max-width: 700px) {
+      .main-content { padding: 16px; }
+      .card { padding: 16px; }
+      .header-row { flex-direction: column; align-items: stretch; }
+    }
   </style>
 </head>
 <body>

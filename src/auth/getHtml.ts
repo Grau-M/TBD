@@ -83,6 +83,7 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
         0 26px 70px rgba(0, 0, 0, 0.24),
         inset 0 1px 0 rgba(255, 255, 255, 0.06);
       backdrop-filter: blur(18px) saturate(140%);
+      min-width: 0;
     }
 
     .auth-card::before {
@@ -450,6 +451,8 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       font-size: 0.9rem;
       margin: 0;
       line-height: 1.5;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .custom-modal {
@@ -502,6 +505,8 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       color: var(--muted);
       line-height: 1.55;
       font-size: 0.94rem;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .custom-modal-actions {
       display: flex;
@@ -529,6 +534,37 @@ export function getAuthHtml(webview: vscode.Webview, context: vscode.ExtensionCo
       box-shadow: 0 12px 24px rgba(59, 130, 246, 0.22);
     }
     .custom-modal-btn:hover { transform: translateY(-1px); }
+
+    @media (max-width: 520px) {
+      body {
+        padding: 16px;
+      }
+
+      .auth-card {
+        padding: 34px 22px 28px;
+        border-radius: 24px;
+      }
+
+      .auth-title {
+        font-size: 1.55rem;
+      }
+
+      .auth-tabs {
+        gap: 4px;
+        padding: 4px;
+      }
+
+      .auth-tab-btn {
+        padding: 9px 10px;
+        font-size: 0.92rem;
+      }
+
+      .auth-oauth-btn,
+      .auth-submit-btn,
+      .custom-modal-btn {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>

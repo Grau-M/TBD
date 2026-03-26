@@ -553,12 +553,17 @@ export class ApiStorageManager {
         if (!joinCode.trim()) {
             return undefined;
         }
+
+        const encoded = encodeURIComponent(joinCode.trim());
+        
         const result = await this.apiGetFirst([
-            `/api/classes/join-code/${encodeURIComponent(joinCode.trim())}`,
-            `/api/class/join-code/${encodeURIComponent(joinCode.trim())}`,
-            `/api/classes/by-join-code?joinCode=${encodeURIComponent(joinCode.trim())}`,
-            `/api/classes/join-code?joinCode=${encodeURIComponent(joinCode.trim())}`,
-            `/api/class-activities/by-join-code?joinCode=${encodeURIComponent(joinCode.trim())}`
+            `/api/classes/join-code/${encoded}`,
+            `/api/class/join-code/${encoded}`
+            // `/api/classes/join-code/${encodeURIComponent(joinCode.trim())}`,
+            // `/api/class/join-code/${encodeURIComponent(joinCode.trim())}`,
+            // `/api/classes/by-join-code?joinCode=${encodeURIComponent(joinCode.trim())}`,
+            // `/api/classes/join-code?joinCode=${encodeURIComponent(joinCode.trim())}`,
+            // `/api/class-activities/by-join-code?joinCode=${encodeURIComponent(joinCode.trim())}`
         ]);
         const cls = result?.class ?? result?.data ?? result;
         if (!cls) {

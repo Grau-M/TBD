@@ -551,7 +551,7 @@ export class ApiStorageManager {
                             userId: userId,
                             projectId: projectId,
                             // Use Date.now() without dividing by 1000 to ensure uniqueness in milliseconds
-                           sessionNumber: Math.floor(Date.now() / 1000) - 1700000000 + Math.floor(Math.random() * 10000), 
+                            sessionNumber: 0, 
                             startedAt: payload.occurredAt,
                             studentWorkspaceAssignmentId: studentWorkspaceAssignmentId
                         });

@@ -552,7 +552,7 @@ async function reconcileStudentWorkspaceState(
         await updateAuthStatusBar(context);
         updateTrackingUI(session.role);
 
-        await openStudentSyncView(context);
+        // don't automatically open sync view on login in subsequent sessions
         return session;
     }
 
@@ -1220,6 +1220,12 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
     }));
 
     updateAuthStatusBar(context);
+
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.refreshStatusBar', async () => {
+        await updateDbStatusBar(context);
+        await updateAuthStatusBar(context);
+        updateTrackingUI(getWorkspaceAuthSession(context)?.role || 'None');
+    }));
 
     context.subscriptions.push(createEditListener());
     context.subscriptions.push(createFocusListener());

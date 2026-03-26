@@ -45,9 +45,16 @@ export class ApiStorageManager {
     }
 
     private getQueueUri(): vscode.Uri | null {
-        if (!this.context) return null;
-        // Store inside the workspace global storage for persistence across reloads
-        return vscode.Uri.joinPath(this.context.globalStorageUri, 'tbd_offline_queue.enc');
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            // Fallback to global storage if no workspace is active
+            return this.context ? vscode.Uri.joinPath(this.context.globalStorageUri, 'tbd_offline_queue.enc') : null;
+        }
+        
+        // Target the active workspace's .vscode/logs directory
+        const workspaceRoot = workspaceFolders[0].uri;
+        return vscode.Uri.joinPath(workspaceRoot, '.vscode', 'logs', 'tbd_offline_queue.enc');
     }
 
     private encrypt(text: string): Buffer {
@@ -80,20 +87,25 @@ export class ApiStorageManager {
         }
     }
 
-    private async writeQueue(events: any[]): Promise<void> {
+   private async writeQueue(events: any[]): Promise<void> {
         const uri = this.getQueueUri();
         if (!uri) return;
         
         try {
-            await vscode.workspace.fs.createDirectory(this.context!.globalStorageUri);
-        } catch (e) {}
+            // Ensure the .vscode/logs directory exists before attempting to write
+            const logsDir = vscode.Uri.joinPath(uri, '..');
+            await vscode.workspace.fs.createDirectory(logsDir);
+        } catch (e) {
+            console.warn('[TBD Logger] Could not create .vscode/logs directory', e);
+        }
 
         if (events.length === 0) {
-            // Clear file if queue is empty
+            // Clear file if the queue successfully emptied (synced to cloud)
             try { await vscode.workspace.fs.delete(uri); } catch (e) {}
             return;
         }
 
+        // Encrypt and write the offline events to the workspace logs folder
         const data = this.encrypt(JSON.stringify(events));
         await vscode.workspace.fs.writeFile(uri, data);
     }
@@ -422,7 +434,7 @@ export class ApiStorageManager {
         this.context = context;
         this.syncStatus.state = 'synced';
         this.syncStatus.lastError = null;
-
+           
         try {
             await this.ensureStudentWorkspaceLinkFile();
         } catch {
@@ -438,6 +450,8 @@ export class ApiStorageManager {
         } catch {
             // Ignore inability to update workspace explorer rules.
         }
+         // Automatically trigger a sync on startup to check for offline files
+        void this.flush([]);
     }
 
     async flush(_newEvents: StandardEvent[]): Promise<void> {
@@ -445,27 +459,37 @@ export class ApiStorageManager {
             throw new Error('Storage manager is not initialized.');
         }
 
-        const sessionId = this.context.workspaceState.get<number>('sessionId');
-        if (!sessionId) {
-            return;
-        }
-
+        // 1. Get current session info (This will be null if they started offline!)
+        let currentSessionId = this.context.workspaceState.get<number>('sessionId') || null;
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        
         const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+        const userId = Number(session?.authUserId ?? 0);
+        const projectId = Number(session?.workspaceLinkedClassId ?? 0); // Fallback for project ID mapping
+
+        // Teammate's Addition: Fetch the link record for extra backend metadata
         const linkRecord = await this.getStudentWorkspaceLinkRecord();
-        const payloads = _newEvents.map((event) => ({
-            sessionId,
+
+        // 2. Format new events, tagging them with the current session state
+        const newPayloads = _newEvents.map(event => ({
+            sessionId: currentSessionId, // Could be null if DB was down at startup
             eventType: event.eventType,
-            occurredAt: event.time,
+            occurredAt: event.time || new Date().toISOString(),
+            
+            // Your Flat Columns for PostgreSQL
+            flightTimeMs: event.flightTime ? Number(event.flightTime) : null,
+            fileEdit: event.fileEdit || null,
+            fileView: event.fileView || null,
+            fileFocusCount: event.fileFocusCount || null,
+            charsAdded: event.charsAdded || null,
+            pasteCharCount: event.pasteCharCount || null,
+            windowFocused: event.windowFocused !== undefined ? event.windowFocused : true,
+            workspaceName: vscode.workspace.name || null,
+            studentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : null,
+            possibleAiDetection: event.possibleAiDetection || null,
+
+            // Teammate's Fallback JSON metadata for tracking
             eventData: {
-                time: event.time,
-                flightTime: event.flightTime,
-                fileEdit: event.fileEdit,
-                fileView: event.fileView,
-                possibleAiDetection: event.possibleAiDetection,
-                fileFocusCount: event.fileFocusCount,
-                pasteCharCount: event.pasteCharCount,
-                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : undefined,
                 studentId: linkRecord?.studentId ?? undefined,
                 studentWorkspaceFullPath: linkRecord?.studentWorkspaceFullPath ?? undefined,
                 studentWorkspaceName: linkRecord?.studentWorkspaceName ?? undefined,
@@ -477,12 +501,16 @@ export class ApiStorageManager {
             }
         }));
 
-        const offlineQueue = await this.readQueue();
-        offlineQueue.push(...payloads);
+        // 3. Load the existing offline queue from .vscode/logs/tbd_offline_queue.enc
+        let offlineQueue = await this.readQueue();
+        
+        // 4. Add new events to the back of the queue
+        offlineQueue.push(...newPayloads);
         this.syncStatus.pendingQueueCount = offlineQueue.length;
 
+        // 5. Try to push everything in the queue to the API
         const remainingQueue: any[] = [];
-        const flushedEvents: Array<{
+        const flushedEvents: Array<{ // Array to hold teammate's UI logs
             eventType: string;
             occurredAt: string;
             eventId: number | undefined;
@@ -490,24 +518,58 @@ export class ApiStorageManager {
         }> = [];
 
         let isOffline = false;
+        //Keep track of the session we generate so we don't spam the API
+        let generatedOfflineSessionId: number | null = null;
 
         for (const payload of offlineQueue) {
+            
+            // If the API drops mid-upload, stop making network calls and cache the rest
             if (isOffline) {
                 remainingQueue.push(payload);
                 continue;
             }
 
             try {
+                // SCENARIO 1: They started offline and need a new Session ID generated
+                if (!payload.sessionId) {
+                    
+                    // If we ALREADY generated a session for this batch, reuse it!
+                    if (generatedOfflineSessionId) {
+                        payload.sessionId = generatedOfflineSessionId;
+                    } else {
+                        // Otherwise, create a new one natively
+                        const newSession = await apiPost('/api/sessions', {
+                            userId: userId,
+                            projectId: projectId,
+                            // Use Date.now() without dividing by 1000 to ensure uniqueness in milliseconds
+                           sessionNumber: Math.floor(Date.now() / 1000) - 1700000000 + Math.floor(Math.random() * 10000), 
+                            startedAt: payload.occurredAt,
+                            studentWorkspaceAssignmentId: studentWorkspaceAssignmentId
+                        });
+
+                        // Save the new session ID
+                        currentSessionId = newSession.Id || newSession.id || newSession.SessionId;
+                        generatedOfflineSessionId = currentSessionId;
+                        await this.context.workspaceState.update('sessionId', currentSessionId);
+                        
+                        payload.sessionId = currentSessionId;
+                        console.log(`[TBD Logger] Recovered from offline start. Generated new Session ID: ${currentSessionId}`);
+                    }
+                }
+
+                // SCENARIO 2: Upload the event
                 const response = await apiPost('/api/events', payload, { silent: true });
+                
                 const eventId = response?.event?.Id ?? response?.event?.id ?? response?.id ?? response?.Id;
                 flushedEvents.push({
                     eventType: payload.eventType,
                     occurredAt: payload.occurredAt,
                     eventId: Number.isFinite(Number(eventId)) ? Number(eventId) : undefined,
-                    eventData: payload.eventData
+                    eventData: payload
                 });
+
             } catch (error) {
-                console.warn('[TBD Logger] API is offline or failed. Queuing remaining events to encrypted disk storage.');
+                console.warn('[TBD Logger] API is offline or database rejected event. Queuing event locally.', error);
                 isOffline = true;
                 remainingQueue.push(payload);
                 this.syncStatus.state = 'offline';
@@ -515,20 +577,23 @@ export class ApiStorageManager {
             }
         }
 
+        // 6. Save the remaining queue back to the encrypted file
         try {
             await this.writeQueue(remainingQueue);
             this.syncStatus.pendingQueueCount = remainingQueue.length;
         } catch (error) {
             console.error('[TBD Logger] Failed to write offline queue to disk!', error);
-            throw error;
+            throw error; 
         }
 
+        // 7. Resolve status
         if (!isOffline) {
             this.syncStatus.lastSyncedAt = new Date().toISOString();
             this.syncStatus.state = 'synced';
             this.syncStatus.lastError = null;
         }
 
+        // 8. Teammate's Beautiful Console Output Grouping
         if (flushedEvents.length > 0) {
             console.groupCollapsed(`[TBD Logger] Logs pushed to /api/events: ${flushedEvents.length} event(s)`);
             for (const event of flushedEvents) {

@@ -19,7 +19,7 @@
     flagAiEvents: true,
   };
   let currentSettings = { ...defaults };
-  let currentTab = "dashboard";
+  let currentTab = "class";
   let requestedDashboardFile = null;
   let expandedFile = null;
   let currentLogFilename = null;
@@ -455,6 +455,36 @@
       { key: "sat", label: "Sat" },
       { key: "sun", label: "Sun" },
     ];
+
+    function initMeetingDayKeyboardSupport() {
+      meetingDays.forEach((day) => {
+        const checkbox = $("class-day-" + day.key);
+        if (!checkbox) {
+          return;
+        }
+
+        // Highlight the pill when the checkbox gets keyboard focus
+        const label = checkbox.closest("label");
+        checkbox.addEventListener("focus", () => {
+          if (label) {
+            label.classList.add("focused");
+          }
+        });
+        checkbox.addEventListener("blur", () => {
+          if (label) {
+            label.classList.remove("focused");
+          }
+        });
+
+        // Allow Enter key to toggle, and keep Space key default behavior.
+        checkbox.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            checkbox.checked = !checkbox.checked;
+          }
+        });
+      });
+    }
 
     function clearMeetingScheduleInputs() {
       meetingDays.forEach((day) => {
@@ -1714,6 +1744,7 @@
 
     installDatePickerBehavior();
     installTimePickerOnlyBehavior();
+    initMeetingDayKeyboardSupport();
 
     // Make post available globally for note handlers + student summary button
     window.postTeacherMessage = post;
@@ -1837,7 +1868,14 @@
       switchTab("class");
       loadClasses();
     });
-    $("btn-goto-logs")?.addEventListener("click", () => switchTab("logs"));
+    $("btn-goto-logs")?.addEventListener("click", () => {
+      if (!isTeacherApiOnline) {
+        setTeacherConnectionState(false);
+        return;
+      }
+      switchTab("logs");
+      post("listLogs");
+    });
 
     $("close-log")?.addEventListener("click", () => {
       if ($("logs-viewer-container")) {
@@ -3207,23 +3245,25 @@
 
       classesToRender.forEach((cls) => {
         const card = document.createElement("div");
-        card.className = "card";
-        card.style.cssText = "display:flex; flex-direction:column;";
+        card.className = "card class-card";
+        card.style.cssText = "height:100%; min-height:280px;";
         card.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <div class="class-row">
             <div>
-              <div style="font-weight:700; font-size:1rem;">${cls.courseName}</div>
-              <div class="meta">${cls.courseCode} &bull; ${cls.teacherName}</div>
+              <div style="font-weight:700; font-size:1.1rem;">${cls.courseName}</div>
+              <div class="meta" style="margin-top: 2px;">${cls.courseCode} • ${cls.teacherName}</div>
             </div>
             <div style="background:var(--accent); color:white; padding:4px 12px; border-radius:6px; font-size:0.8rem; font-weight:700; white-space:nowrap; letter-spacing:0.05em;">${cls.joinCode}</div>
           </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.88rem;">
-            <div><span style="color:var(--muted);">Meeting:</span> ${formatMeetingTimeDisplay(cls.meetingTime)}</div>
-            <div><span style="color:var(--muted);">Start:</span> ${formatClassDateDisplay(cls.startDate)}</div>
-            <div></div>
-            <div><span style="color:var(--muted);">End:</span> ${formatClassDateDisplay(cls.endDate)}</div>
+          <div class="class-meta-grid">
+            <div class="label">Meeting</div>
+            <div>${formatMeetingTimeDisplay(cls.meetingTime)}</div>
+            <div class="label">Start</div>
+            <div>${formatClassDateDisplay(cls.startDate)}</div>
+            <div class="label">End</div>
+            <div>${formatClassDateDisplay(cls.endDate)}</div>
           </div>
-          <div style="display:flex; gap:8px; margin-top:2px;">
+          <div style="display:flex; gap:8px; margin-top:12px;">
             <button class="btn btn-primary class-open-btn" style="padding:6px 10px;">Open Class</button>
             <button class="btn btn-secondary class-edit-btn" style="padding:6px 10px;">Edit</button>
           </div>
@@ -4582,11 +4622,9 @@
       showConnectionLostState();
     } else {
       setTeacherConnectionState(true);
-      switchTab("dashboard");
-      showDashboardLoading();
+      switchTab("class");
+      loadClasses();
       post("clientReady");
-      post("analyzeLogs");
-      post("listLogs");
       post("getSettings");
     }
   });

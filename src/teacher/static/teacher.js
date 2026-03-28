@@ -4643,7 +4643,7 @@
       return events;
     }
 
-    // Completely revamped UI/UX for Session Logs
+    // Completely revamped UI/UX for Session Logs (Now with Timeline Support)
     function renderAssignmentSessionLog(payload) {
       const title = $("assignment-session-log-title");
       const content = $("assignment-session-log-content");
@@ -4655,7 +4655,7 @@
 
       title.textContent = payload.filename || "Session Log";
 
-      // Reset inline styles from the HTML that forced monospace
+      // Reset inline styles
       content.style.whiteSpace = "normal";
       content.style.fontFamily = "inherit";
       content.style.background = "transparent";
@@ -4673,131 +4673,193 @@
       const events = parseLogText(text);
 
       if (events.length === 0) {
-        // Fallback if parsing fails
         content.innerHTML = `<pre style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); overflow-x: auto;">${text}</pre>`;
-      } else {
-        const container = document.createElement("div");
-        container.style.cssText =
-          "display: flex; flex-direction: column; gap: 8px;";
+        view.style.display = "block";
+        return;
+      }
 
-        events.forEach((evt) => {
-          const card = document.createElement("div");
-          card.style.cssText =
-            "background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;";
+      // --- NEW: UI TOGGLE CONTROLS ---
+      const controlsDiv = document.createElement("div");
+      controlsDiv.style.cssText = "display: flex; gap: 8px; margin-bottom: 16px;";
+      controlsDiv.innerHTML = `
+        <button id="btn-view-list" class="btn btn-primary">📋 Event List</button>
+        <button id="btn-view-timeline" class="btn btn-secondary">⏱️ Visual Timeline</button>
+      `;
+      content.appendChild(controlsDiv);
 
-          // --- HEADER ROW ---
-          const header = document.createElement("div");
-          header.style.cssText =
-            "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 4px;";
+      // --- CONTAINERS ---
+      const listContainer = document.createElement("div");
+      listContainer.id = "session-list-container";
+      listContainer.style.display = "flex";
+      listContainer.style.flexDirection = "column";
+      listContainer.style.gap = "8px";
 
-          // Event type badge color logic
-          const typeBadge = document.createElement("span");
-          let badgeColor = "var(--fg)";
-          let badgeBg = "var(--bg)";
-          const eType = (evt.eventType || "").toLowerCase();
+      const timelineContainer = document.createElement("div");
+      timelineContainer.id = "session-timeline-container";
+      timelineContainer.style.display = "none"; // Hidden by default
+      timelineContainer.style.flexDirection = "column";
+      timelineContainer.style.gap = "12px";
 
-          if (eType.includes("paste")) {
-            badgeColor = "#ef4444";
-            badgeBg = "rgba(239, 68, 68, 0.1)";
-          } // Red
-          else if (
-            eType.includes("input") ||
-            eType.includes("edit") ||
-            eType.includes("replace")
-          ) {
-            badgeColor = "#3b82f6";
-            badgeBg = "rgba(59, 130, 246, 0.1)";
-          } // Blue
-          else if (eType.includes("focus") || eType.includes("window")) {
-            badgeColor = "#10b981";
-            badgeBg = "rgba(16, 185, 129, 0.1)";
-          } // Green
-          else if (eType.includes("save")) {
-            badgeColor = "#8b5cf6";
-            badgeBg = "rgba(139, 92, 246, 0.1)";
-          } // Purple
-          else if (eType.includes("start") || eType.includes("end")) {
-            badgeColor = "#f59e0b";
-            badgeBg = "rgba(245, 158, 11, 0.1)";
-          } // Orange
+      content.appendChild(listContainer);
+      content.appendChild(timelineContainer);
 
-          typeBadge.style.cssText = `font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;`;
-          typeBadge.textContent = evt.eventType || "Unknown Event";
+      // Toggle Logic
+      controlsDiv.querySelector("#btn-view-list").addEventListener("click", (e) => {
+        e.target.className = "btn btn-primary";
+        controlsDiv.querySelector("#btn-view-timeline").className = "btn btn-secondary";
+        listContainer.style.display = "flex";
+        timelineContainer.style.display = "none";
+      });
 
-          const timeSpan = document.createElement("span");
-          timeSpan.style.cssText = "font-size: 0.8rem; color: var(--muted);";
-          timeSpan.innerHTML = `<strong>Session ${evt.session}</strong> &bull; Row ${evt.row} &bull; ${evt.timestamp}`;
+      controlsDiv.querySelector("#btn-view-timeline").addEventListener("click", (e) => {
+        e.target.className = "btn btn-primary";
+        controlsDiv.querySelector("#btn-view-list").className = "btn btn-secondary";
+        listContainer.style.display = "none";
+        timelineContainer.style.display = "flex";
+      });
 
-          header.appendChild(typeBadge);
-          header.appendChild(timeSpan);
-          card.appendChild(header);
+      // --- TIMELINE DATA PROCESSING ---
+      // We process the timeline chunks here based on time gaps > 5 minutes
+      const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; 
+      const periods = [];
+      let currentPeriod = null;
 
-          // --- BODY ROW ---
-          const body = document.createElement("div");
-          body.style.cssText = "font-size: 0.9rem; line-height: 1.4;";
+      const parseEventTime = (timeStr) => {
+        if (!timeStr) return null;
+        // Strip trailing timezone codes if present, then pass to Date
+        const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
+        const d = new Date(cleanStr);
+        return isNaN(d.getTime()) ? null : d.getTime();
+      };
 
-          if (evt.data) {
-            const items = [];
-            if (evt.data.file) {
-              items.push(
-                `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
-              );
-            }
-            if (evt.data.fileView && evt.data.fileView !== evt.data.file) {
-              items.push(
-                `<span style="color: var(--muted)">View:</span> <strong>${evt.data.fileView}</strong>`,
-              );
-            }
-            if (evt.data.charsAdded !== undefined) {
-              items.push(
-                `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
-              );
-            }
-            if (evt.data.pasteCharCount !== undefined) {
-              items.push(
-                `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
-              );
-            }
-            if (evt.data.flightTime !== undefined) {
-              items.push(
-                `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
-              );
-            }
-            if (evt.data.focused !== undefined) {
-              items.push(
-                `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
-              );
-            }
-            if (evt.data.workspaceName) {
-              items.push(
-                `<span style="color: var(--muted)">Workspace:</span> <strong>${evt.data.workspaceName}</strong>`,
-              );
-            }
+      events.forEach((evt) => {
+        const ts = parseEventTime(evt.timestamp);
+        if (!ts) return;
 
-            // Highlight AI or Interruption Notes
-            if (evt.data.possibleAiDetection) {
-              items.push(
-                `<div style="margin-top: 8px; width: 100%; padding: 8px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 4px 4px 0;"><strong>Note:</strong> ${evt.data.possibleAiDetection}</div>`,
-              );
-            }
-
-            if (items.length > 0) {
-              body.innerHTML = items.join(
-                ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
-              );
+        if (!currentPeriod) {
+            currentPeriod = { startTime: ts, endTime: ts, events: [evt], eventCount: 1 };
+        } else {
+            const gap = ts - currentPeriod.endTime;
+            if (gap > INACTIVITY_THRESHOLD_MS) {
+                // Gap is too big, close current period and start a new one
+                periods.push(currentPeriod);
+                currentPeriod = { startTime: ts, endTime: ts, events: [evt], eventCount: 1 };
             } else {
-              body.innerHTML = `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson}</code>`;
+                // Extend current period
+                currentPeriod.endTime = ts;
+                currentPeriod.events.push(evt);
+                currentPeriod.eventCount++;
             }
-          } else {
-            body.innerHTML = `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson || "(Empty Data)"}</code>`;
+        }
+      });
+      if (currentPeriod) periods.push(currentPeriod);
+
+      // -> Next step: We will draw the `periods` into the `timelineContainer` here!
+      // --- TIMELINE RENDERING ---
+      timelineContainer.innerHTML = ""; // Clear the placeholder
+
+      if (periods.length === 0) {
+        timelineContainer.innerHTML = `<div class="meta" style="padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px;">No significant work periods found to build a timeline.</div>`;
+      } else {
+        const formatTime = (ts) => {
+          return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        };
+
+        periods.forEach((p, index) => {
+          const durMs = p.endTime - p.startTime;
+          
+          // 1. Draw the Work Period Block
+          const block = document.createElement("div");
+          block.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+          
+          const durationText = durMs < 60000 ? "< 1m" : window.TeacherUI.formatDuration(durMs);
+          
+          block.innerHTML = `
+            <div style="display: flex; justify-content: space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);">
+              <div>
+                <strong style="font-size: 1.1rem;">Work Period ${index + 1}</strong>
+                <div class="meta" style="margin-top: 4px;">${formatTime(p.startTime)} &rarr; ${formatTime(p.endTime)}</div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-weight: bold; color: var(--fg);">${durationText}</div>
+                <div class="meta">${p.eventCount} logged events</div>
+              </div>
+            </div>
+          `;
+          timelineContainer.appendChild(block);
+
+          // 2. Draw the Gap (if this isn't the last period)
+          if (index < periods.length - 1) {
+            const gapMs = periods[index + 1].startTime - p.endTime;
+            const gapDiv = document.createElement("div");
+            
+            // Highlight massive gaps (e.g., > 4 hours) in an amber color
+            if (gapMs > 4 * 60 * 60 * 1000) {
+              gapDiv.className = "meta";
+              gapDiv.style.cssText = "text-align: center; padding: 6px 0; color: #f59e0b;";
+              gapDiv.innerHTML = `⟐ <strong>Significant Gap: ${window.TeacherUI.formatDuration(gapMs)}</strong> ⟐`;
+            } else {
+              gapDiv.className = "meta";
+              gapDiv.style.cssText = "text-align: center; padding: 6px 0;";
+              gapDiv.innerHTML = `&darr; Gap: ${window.TeacherUI.formatDuration(gapMs)} &darr;`;
+            }
+            timelineContainer.appendChild(gapDiv);
+          }
+        });
+      }
+
+      // --- LIST VIEW RENDERING (Existing Logic) ---
+      events.forEach((evt) => {
+        const card = document.createElement("div");
+        card.style.cssText = "background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;";
+
+        const header = document.createElement("div");
+        header.style.cssText = "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 4px;";
+
+        const typeBadge = document.createElement("span");
+        let badgeColor = "var(--fg)", badgeBg = "var(--bg)";
+        const eType = (evt.eventType || "").toLowerCase();
+
+        if (eType.includes("paste")) { badgeColor = "#ef4444"; badgeBg = "rgba(239, 68, 68, 0.1)"; } 
+        else if (eType.includes("input") || eType.includes("edit") || eType.includes("replace")) { badgeColor = "#3b82f6"; badgeBg = "rgba(59, 130, 246, 0.1)"; } 
+        else if (eType.includes("focus") || eType.includes("window")) { badgeColor = "#10b981"; badgeBg = "rgba(16, 185, 129, 0.1)"; } 
+        else if (eType.includes("save")) { badgeColor = "#8b5cf6"; badgeBg = "rgba(139, 92, 246, 0.1)"; } 
+        else if (eType.includes("start") || eType.includes("end")) { badgeColor = "#f59e0b"; badgeBg = "rgba(245, 158, 11, 0.1)"; }
+
+        typeBadge.style.cssText = `font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;`;
+        typeBadge.textContent = evt.eventType || "Unknown Event";
+
+        const timeSpan = document.createElement("span");
+        timeSpan.style.cssText = "font-size: 0.8rem; color: var(--muted);";
+        timeSpan.innerHTML = `<strong>Session ${evt.session}</strong> &bull; Row ${evt.row} &bull; ${evt.timestamp}`;
+
+        header.appendChild(typeBadge);
+        header.appendChild(timeSpan);
+        card.appendChild(header);
+
+        const body = document.createElement("div");
+        body.style.cssText = "font-size: 0.9rem; line-height: 1.4;";
+
+        if (evt.data) {
+          const items = [];
+          if (evt.data.file) items.push(`<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`);
+          if (evt.data.charsAdded !== undefined) items.push(`<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`);
+          if (evt.data.pasteCharCount !== undefined) items.push(`<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`);
+          if (evt.data.flightTime !== undefined) items.push(`<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`);
+          if (evt.data.focused !== undefined) items.push(`<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`);
+
+          if (evt.data.possibleAiDetection) {
+            items.push(`<div style="margin-top: 8px; width: 100%; padding: 8px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 4px 4px 0;"><strong>Note:</strong> ${evt.data.possibleAiDetection}</div>`);
           }
 
-          card.appendChild(body);
-          container.appendChild(card);
-        });
+          body.innerHTML = items.length > 0 ? items.join(' <span style="color: var(--border); margin: 0 6px;">|</span> ') : `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson}</code>`;
+        } else {
+          body.innerHTML = `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson || "(Empty Data)"}</code>`;
+        }
 
-        content.appendChild(container);
-      }
+        card.appendChild(body);
+        listContainer.appendChild(card);
+      });
 
       view.style.display = "block";
     }

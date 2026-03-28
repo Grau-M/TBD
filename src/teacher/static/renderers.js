@@ -1058,8 +1058,12 @@ window.TeacherUI = {
 
             if (ts && text) {
               const notePayload = { timestamp: ts, text };
-              if (sessionEventId > 0) notePayload.sessionEventId = sessionEventId;
-              if (sessionId > 0) notePayload.sessionId = sessionId;
+              if (sessionEventId > 0) {
+                notePayload.sessionEventId = sessionEventId;
+              }
+              if (sessionId > 0) {
+                notePayload.sessionId = sessionId;
+              }
               allNotes.push(notePayload);
             }
           });

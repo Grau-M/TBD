@@ -881,7 +881,7 @@ export class ApiStorageManager {
         return Number.isFinite(id) && id > 0 ? id : 0;
     }
 
-    async saveLogNotes(_passwordAttempt: string, filename: string, notes: Array<{ sessionEventId?: number; sessionId?: number; timestamp?: string; text: string }>): Promise<void> {
+    async saveLogNotes(_passwordAttempt: string, filename: string, notes: Array<{ id?: number; Id?: number; sessionEventId?: number; sessionId?: number; timestamp?: string; text: string }>): Promise<void> {
         const teacherAuthUserId = this.getCurrentTeacherId();
         const sessionId = this.parseSessionIdFromFilename(filename);
 
@@ -907,6 +907,7 @@ export class ApiStorageManager {
                 continue;
             }
 
+            const noteId = Number(note?.id ?? note?.Id ?? 0);
             const payload: Record<string, any> = {
                 teacherAuthUserId,
                 noteText,
@@ -924,20 +925,49 @@ export class ApiStorageManager {
                 payload.timestamp = note.timestamp;
             }
 
-            try {
-                console.log('[TBD Logger] saveLogNotes final payload', { payload, finalSessionId, sessionEventId });
+            const attemptPut = async (path: string): Promise<boolean> => {
+                try {
+                    await apiPut(path, payload, { silent: true });
+                    return true;
+                } catch (putError) {
+                    return false;
+                }
+            };
+
+            const attemptPost = async (): Promise<void> => {
                 try {
                     await apiPost('/api/notes/instructor-notes', payload, { silent: true });
-                    console.log('[TBD Logger] saveLogNotes API successful', { sessionEventId, finalSessionId, noteText });
+                    console.log('[TBD Logger] saveLogNotes API successful (POST primary)', { sessionEventId, finalSessionId, noteText });
                 } catch (primaryError) {
                     console.warn('[TBD Logger] Primary saveLogNotes endpoint failed, trying fallback /api/instructor-notes', primaryError);
-                    try {
-                        await apiPost('/api/instructor-notes', payload, { silent: true });
-                        console.log('[TBD Logger] saveLogNotes API (fallback) successful', { sessionEventId, finalSessionId, noteText });
-                    } catch (fallbackError) {
-                        console.warn('[TBD Logger] Fallback saveLogNotes API failed', fallbackError);
-                        throw fallbackError;
+                    await apiPost('/api/instructor-notes', payload, { silent: true });
+                    console.log('[TBD Logger] saveLogNotes API (fallback) successful (POST)', { sessionEventId, finalSessionId, noteText });
+                }
+            };
+
+            try {
+                console.log('[TBD Logger] saveLogNotes final payload', { payload, finalSessionId, sessionEventId, noteId });
+
+                let saved = false;
+
+                // Try direct PUT upsert via core endpoint (new backend expected behavior)
+                saved = await attemptPut('/api/notes/instructor-notes');
+
+                if (!saved) {
+                    saved = await attemptPut('/api/instructor-notes');
+                }
+
+                // Legacy: if id is known, try explicit PUT by id first for backward compatibility
+                if (!saved && noteId > 0) {
+                    saved = await attemptPut(`/api/notes/instructor-notes/${noteId}`);
+                    if (!saved) {
+                        saved = await attemptPut(`/api/instructor-notes/${noteId}`);
                     }
+                }
+
+                // If still not saved, fall back to POST route
+                if (!saved) {
+                    await attemptPost();
                 }
             } catch (err) {
                 console.warn('[TBD Logger] Failed to save instructor note:', err);

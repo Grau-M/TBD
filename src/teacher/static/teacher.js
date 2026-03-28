@@ -2329,6 +2329,12 @@
               const rowNumber = rowNumberMatch ? rowNumberMatch[1] : '(row # unknown)';
 
               if (row) {
+                // Persist API note id so updates can use PUT when saving.
+                const apiNoteId = Number(note?.Id ?? note?.id ?? 0);
+                if (apiNoteId > 0) {
+                  row.dataset.noteId = String(apiNoteId);
+                }
+
                 // Insert a visible note text indicator into the row body
                 let noteLabel = row.querySelector('.loaded-note-text');
                 if (!noteLabel) {
@@ -4129,7 +4135,9 @@
       };
 
       const formatSessionDate = (value) => {
-        if (!value) return "Unknown time";
+        if (!value) {
+          return "Unknown time";
+        }
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime())
           ? String(value)
@@ -4194,8 +4202,12 @@
       }
 
       // Hide the parent view (student list)
-      if (workView) workView.style.display = "none";
-      if (logView) logView.style.display = "none";
+      if (workView) {
+        workView.style.display = "none";
+      }
+      if (logView) {
+        logView.style.display = "none";
+      }
 
       studentView.style.display = "block";
       title.textContent = `${studentName} - Session Logs`;
@@ -4289,34 +4301,41 @@
 
         // --- Build Body Variables ---
         const items = [];
-        if (eventData.file)
+        if (eventData.file) {
           items.push(
             `<span style="color: var(--muted)">File:</span> <strong>${eventData.file}</strong>`,
           );
-        if (eventData.fileView && eventData.fileView !== eventData.file)
+        }
+        if (eventData.fileView && eventData.fileView !== eventData.file) {
           items.push(
             `<span style="color: var(--muted)">View:</span> <strong>${eventData.fileView}</strong>`,
           );
-        if (eventData.charsAdded !== undefined)
+        }
+        if (eventData.charsAdded !== undefined) {
           items.push(
             `<span style="color: var(--muted)">Chars Added:</span> <strong>${eventData.charsAdded}</strong>`,
           );
-        if (eventData.pasteCharCount !== undefined)
+        }
+        if (eventData.pasteCharCount !== undefined) {
           items.push(
             `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${eventData.pasteCharCount}</strong>`,
           );
-        if (eventData.flightTime !== undefined)
+        }
+        if (eventData.flightTime !== undefined) {
           items.push(
             `<span style="color: var(--muted)">Flight Time:</span> <strong>${eventData.flightTime}ms</strong>`,
           );
-        if (eventData.focused !== undefined)
+        }
+        if (eventData.focused !== undefined) {
           items.push(
             `<span style="color: var(--muted)">Window Focused:</span> <strong>${eventData.focused}</strong>`,
           );
-        if (eventData.workspaceName)
+        }
+        if (eventData.workspaceName) {
           items.push(
             `<span style="color: var(--muted)">Workspace:</span> <strong>${eventData.workspaceName}</strong>`,
           );
+        }
 
         let noteHtml = "";
         if (eventData.possibleAiDetection) {
@@ -4400,7 +4419,9 @@
         }
 
         noteToggle?.addEventListener('click', () => {
-          if (!noteArea) return;
+          if (!noteArea) {
+            return;
+          }
           const isVisible = noteArea.style.display !== 'none';
           noteArea.style.display = isVisible ? 'none' : 'block';
           if (!isVisible) {
@@ -4409,13 +4430,19 @@
         });
 
         noteCancel?.addEventListener('click', () => {
-          if (!noteArea) return;
-          if (noteTextarea) noteTextarea.value = '';
+          if (!noteArea) {
+            return;
+          }
+          if (noteTextarea) {
+            noteTextarea.value = '';
+          }
           noteArea.style.display = 'none';
         });
 
         noteSave?.addEventListener('click', () => {
-          if (!noteArea || !noteTextarea || !noteToggle) return;
+          if (!noteArea || !noteTextarea || !noteToggle) {
+            return;
+          }
           const text = String(noteTextarea.value || '').trim();
           if (!text) {
             alert('Please type a note before saving.');
@@ -4424,11 +4451,13 @@
 
           const targetEventId = Number(row.dataset.sessionEventId || 0);
           const rowSessionId = Number(row.dataset.sessionId || currentSessionId || 0);
+          const rowNoteId = Number(row.dataset.noteId || 0);
           const payloadNote = { text };
           const effectiveSessionId = rowSessionId > 0 ? rowSessionId : Number(currentSessionId || 0);
 
-          if (targetEventId) payloadNote.sessionEventId = targetEventId;
-          if (effectiveSessionId > 0) payloadNote.sessionId = effectiveSessionId;
+          if (targetEventId) { payloadNote.sessionEventId = targetEventId; }
+          if (effectiveSessionId > 0) { payloadNote.sessionId = effectiveSessionId; }
+          if (rowNoteId > 0) { payloadNote.id = rowNoteId; }
 
           if (window.postTeacherMessage) {
             window.postTeacherMessage('saveLogNotes', {
@@ -4442,6 +4471,16 @@
           if (targetEventId) {
             window.__TBD_SESSION_NOTE_MAP__[targetEventId] = text;
           }
+
+          // immediate visual note indicator in row
+          let noteLabel = row.querySelector('.loaded-note-text');
+          if (!noteLabel) {
+            noteLabel = document.createElement('div');
+            noteLabel.className = 'loaded-note-text';
+            noteLabel.style.cssText = 'margin-top:6px;padding:6px;border-left:3px solid #4ade80;background:rgba(34,197,94,0.1);color:#9ae6b4;font-size:0.85rem;border-radius:4px;';
+            row.appendChild(noteLabel);
+          }
+          noteLabel.textContent = `Teacher note: ${text}`;
 
           noteArea.style.display = 'none';
           noteToggle.dataset.hasNote = 'true';
@@ -4469,7 +4508,9 @@
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (!line) continue;
+        if (!line) {
+          continue;
+        }
 
         // parse line like "SESSION_START Session 3 - Mar 22, 2026, 05:50:05 PM"
         const sessionLineMatch = line.match(/^([A-Z_]+)?\s*Session\s+(\d+)\s*-\s*(.*)$/i);
@@ -4662,34 +4703,41 @@
 
           if (evt.data) {
             const items = [];
-            if (evt.data.file)
+            if (evt.data.file) {
               items.push(
                 `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
               );
-            if (evt.data.fileView && evt.data.fileView !== evt.data.file)
+            }
+            if (evt.data.fileView && evt.data.fileView !== evt.data.file) {
               items.push(
                 `<span style="color: var(--muted)">View:</span> <strong>${evt.data.fileView}</strong>`,
               );
-            if (evt.data.charsAdded !== undefined)
+            }
+            if (evt.data.charsAdded !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
               );
-            if (evt.data.pasteCharCount !== undefined)
+            }
+            if (evt.data.pasteCharCount !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
               );
-            if (evt.data.flightTime !== undefined)
+            }
+            if (evt.data.flightTime !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
               );
-            if (evt.data.focused !== undefined)
+            }
+            if (evt.data.focused !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
               );
-            if (evt.data.workspaceName)
+            }
+            if (evt.data.workspaceName) {
               items.push(
                 `<span style="color: var(--muted)">Workspace:</span> <strong>${evt.data.workspaceName}</strong>`,
               );
+            }
 
             // Highlight AI or Interruption Notes
             if (evt.data.possibleAiDetection) {

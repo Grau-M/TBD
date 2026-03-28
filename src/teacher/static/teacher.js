@@ -4105,7 +4105,7 @@
 
       studentView.style.display = "block";
 
-      // Inject the Title and Filtering Controls beside each other
+      // Inject the Title and Filtering Controls
       let controls = $("assignment-student-sessions-controls");
       if (!controls) {
         controls = document.createElement("div");
@@ -4114,7 +4114,7 @@
           "display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; background: var(--surface); padding: 12px; border-radius: 8px; border: 1px solid var(--border);";
 
         controls.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px; margin-right:auto;">
+            <div style="display:flex; align-items:center; gap:8px; margin-right:auto; width: 100%;">
                 <h2 id="dynamic-student-title" style="margin:0; color:var(--accent);"></h2>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
@@ -4144,6 +4144,10 @@
                     <option value="time-asc">Time (Oldest -> Newest)</option>
                 </select>
             </div>
+            <div style="display:flex; align-items:center; gap:8px; width: 100%; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 12px;">
+                <button id="btn-db-view-list" class="btn btn-primary">📋 Event List</button>
+                <button id="btn-db-view-timeline" class="btn btn-secondary">⏱️ Visual Timeline</button>
+            </div>
         `;
         list.parentNode.insertBefore(controls, list);
       }
@@ -4154,7 +4158,32 @@
       if (dynamicTitle)
         dynamicTitle.textContent = `${studentName} - Session Logs`;
 
-      list.innerHTML = "";
+      // Set up Dual Containers inside the main list area
+      list.innerHTML = `
+        <div id="db-session-list-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        <div id="db-session-timeline-container" style="display: none; flex-direction: column; gap: 12px;"></div>
+      `;
+      
+      const listContainer = document.getElementById("db-session-list-container");
+      const timelineContainer = document.getElementById("db-session-timeline-container");
+
+      // Toggle Logic
+      const btnViewList = document.getElementById("btn-db-view-list");
+      const btnViewTimeline = document.getElementById("btn-db-view-timeline");
+
+      btnViewList.onclick = (e) => {
+        e.target.className = "btn btn-primary";
+        btnViewTimeline.className = "btn btn-secondary";
+        listContainer.style.display = "flex";
+        timelineContainer.style.display = "none";
+      };
+
+      btnViewTimeline.onclick = (e) => {
+        e.target.className = "btn btn-primary";
+        btnViewList.className = "btn btn-secondary";
+        listContainer.style.display = "none";
+        timelineContainer.style.display = "flex";
+      };
 
       if (!sessions.length) {
         empty.style.display = "block";
@@ -4164,83 +4193,29 @@
 
       // 1. Process all events
       const processedEvents = sessions.map((s, index) => {
-        const sessionId = normalizeSessionValue(
-          s,
-          ["SessionId", "sessionId", "id", "Id"],
-          "Unknown",
-        );
-        const occurredAt = normalizeSessionValue(
-          s,
-          [
-            "OccurredAt",
-            "occurredAt",
-            "timestamp",
-            "Timestamp",
-            "createdAt",
-            "CreatedAt",
-          ],
-          "",
-        );
-        const eventType = normalizeSessionValue(
-          s,
-          ["EventType", "eventType", "type", "Type"],
-          "Unknown event",
-        );
+        const sessionId = normalizeSessionValue(s, ["SessionId", "sessionId", "id", "Id"], "Unknown");
+        const occurredAt = normalizeSessionValue(s, ["OccurredAt", "occurredAt", "timestamp", "Timestamp", "createdAt", "CreatedAt"], "");
+        const eventType = normalizeSessionValue(s, ["EventType", "eventType", "type", "Type"], "Unknown event");
 
         let parsedData = {};
         const rawDataStr = s?.EventData ?? s?.eventData;
         if (typeof rawDataStr === "string") {
-          try {
-            parsedData = JSON.parse(rawDataStr);
-          } catch (e) {}
+          try { parsedData = JSON.parse(rawDataStr); } catch (e) {}
         } else if (typeof rawDataStr === "object" && rawDataStr !== null) {
           parsedData = rawDataStr;
         }
 
-        // Merge the main session object with the parsed event data to ensure we never miss a field
         const eventData = { ...s, ...parsedData };
-
         const eType = String(eventType).toLowerCase();
-        let badgeColor = "var(--fg)";
-        let badgeBg = "var(--bg)";
+        let badgeColor = "var(--fg)", badgeBg = "var(--bg)";
 
-        if (eType.includes("paste")) {
-          badgeColor = "#ef4444";
-          badgeBg = "rgba(239, 68, 68, 0.12)";
-        } else if (
-          eType.includes("input") ||
-          eType.includes("edit") ||
-          eType.includes("replace") ||
-          eType.includes("delete")
-        ) {
-          badgeColor = "#3b82f6";
-          badgeBg = "rgba(59, 130, 246, 0.12)";
-        } else if (
-          eType.includes("focus") ||
-          eType.includes("window") ||
-          eType.includes("active_editor") ||
-          eType.includes("change")
-        ) {
-          badgeColor = "#10b981";
-          badgeBg = "rgba(16, 185, 129, 0.12)";
-        } else if (eType.includes("save")) {
-          badgeColor = "#8b5cf6";
-          badgeBg = "rgba(139, 92, 246, 0.12)";
-        } else if (eType.includes("start") || eType.includes("end")) {
-          badgeColor = "#f59e0b";
-          badgeBg = "rgba(245, 158, 11, 0.12)";
-        }
+        if (eType.includes("paste")) { badgeColor = "#ef4444"; badgeBg = "rgba(239, 68, 68, 0.12)"; } 
+        else if (eType.includes("input") || eType.includes("edit") || eType.includes("replace") || eType.includes("delete")) { badgeColor = "#3b82f6"; badgeBg = "rgba(59, 130, 246, 0.12)"; } 
+        else if (eType.includes("focus") || eType.includes("window") || eType.includes("active_editor") || eType.includes("change")) { badgeColor = "#10b981"; badgeBg = "rgba(16, 185, 129, 0.12)"; } 
+        else if (eType.includes("save")) { badgeColor = "#8b5cf6"; badgeBg = "rgba(139, 92, 246, 0.12)"; } 
+        else if (eType.includes("start") || eType.includes("end")) { badgeColor = "#f59e0b"; badgeBg = "rgba(245, 158, 11, 0.12)"; }
 
-        return {
-          index,
-          sessionId,
-          occurredAt,
-          eventType,
-          eType,
-          eventData,
-          badgeColor,
-          badgeBg,
-        };
+        return { index, sessionId, occurredAt, eventType, eType, eventData, badgeColor, badgeBg, timestampMs: new Date(occurredAt).getTime() };
       });
 
       // 2. Populate the Session Dropdown dynamically
@@ -4248,13 +4223,9 @@
       const filterEventTypeEl = $("filter-event-type");
       const sortOrderEl = $("sort-order");
 
-      const uniqueSessionIds = [
-        ...new Set(processedEvents.map((e) => e.sessionId)),
-      ]
-        .filter((id) => id !== "Unknown")
-        .sort((a, b) => Number(b) - Number(a));
-
+      const uniqueSessionIds = [...new Set(processedEvents.map((e) => e.sessionId))].filter((id) => id !== "Unknown").sort((a, b) => Number(b) - Number(a));
       const currentSessionSelection = filterSessionEl.value;
+      
       filterSessionEl.innerHTML = `<option value="all">All Sessions</option>`;
       uniqueSessionIds.forEach((id) => {
         const opt = document.createElement("option");
@@ -4262,49 +4233,44 @@
         opt.textContent = `Session ${id}`;
         filterSessionEl.appendChild(opt);
       });
-      // Maintain selection state if valid
-      if (
-        uniqueSessionIds.includes(currentSessionSelection) ||
-        currentSessionSelection === "all"
-      ) {
+      
+      if (uniqueSessionIds.includes(currentSessionSelection) || currentSessionSelection === "all") {
         filterSessionEl.value = currentSessionSelection;
       } else {
         filterSessionEl.value = "all";
       }
 
+      const formatDurationHelper = (ms) => {
+          if (!ms || ms < 0) return "0s";
+          const totalSeconds = Math.floor(ms / 1000);
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          if (hours > 0) return `${hours}h ${minutes}m`;
+          if (minutes > 0) return `${minutes}m`;
+          return `< 1m`;
+      };
+
       // 3. Render and Filter Function
       const renderList = () => {
-        list.innerHTML = "";
+        listContainer.innerHTML = "";
+        timelineContainer.innerHTML = "";
         let filtered = processedEvents;
 
         const sessionVal = filterSessionEl.value;
         const eventVal = filterEventTypeEl.value;
         const sortVal = sortOrderEl.value;
 
-        // Apply Session Filter
         if (sessionVal !== "all") {
           filtered = filtered.filter((e) => String(e.sessionId) === sessionVal);
         }
 
-        // Apply Event Type Filter
         if (eventVal !== "all") {
           filtered = filtered.filter((e) => {
             const t = e.eType;
-            if (eventVal === "input")
-              return t.includes("input") && !t.includes("ai");
-            if (eventVal === "replace")
-              return t.includes("replace") && !t.includes("ai");
-            if (eventVal === "delete")
-              return (
-                (t.includes("delete") || t.includes("backspace")) &&
-                !t.includes("ai")
-              );
-            if (eventVal === "ai-input")
-              return (
-                t.includes("ai-input") ||
-                t.includes("ai-insert") ||
-                (t.includes("ai") && t.includes("input"))
-              );
+            if (eventVal === "input") return t.includes("input") && !t.includes("ai");
+            if (eventVal === "replace") return t.includes("replace") && !t.includes("ai");
+            if (eventVal === "delete") return ((t.includes("delete") || t.includes("backspace")) && !t.includes("ai"));
+            if (eventVal === "ai-input") return (t.includes("ai-input") || t.includes("ai-insert") || (t.includes("ai") && t.includes("input")));
             if (eventVal === "ai-replace") return t.includes("ai-replace");
             if (eventVal === "ai-delete") return t.includes("ai-delete");
             return true;
@@ -4318,138 +4284,145 @@
         }
         empty.style.display = "none";
 
-        // Apply Sort
-        filtered.sort((a, b) => {
-          const timeA = new Date(a.occurredAt).getTime() || 0;
-          const timeB = new Date(b.occurredAt).getTime() || 0;
-          const sessionA = Number(a.sessionId) || 0;
-          const sessionB = Number(b.sessionId) || 0;
+        // Generate TIMELINE View (Requires Chronological order)
+        const chronologicalEvents = [...filtered].sort((a, b) => a.timestampMs - b.timestampMs);
+        const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; 
+        const periods = [];
+        let currentPeriod = null;
 
+        chronologicalEvents.forEach((evt) => {
+            if (!evt.timestampMs || isNaN(evt.timestampMs)) return;
+            if (!currentPeriod) {
+                currentPeriod = { startTime: evt.timestampMs, endTime: evt.timestampMs, events: [evt], eventCount: 1 };
+            } else {
+                const gap = evt.timestampMs - currentPeriod.endTime;
+                if (gap > INACTIVITY_THRESHOLD_MS) {
+                    periods.push(currentPeriod);
+                    currentPeriod = { startTime: evt.timestampMs, endTime: evt.timestampMs, events: [evt], eventCount: 1 };
+                } else {
+                    currentPeriod.endTime = evt.timestampMs;
+                    currentPeriod.events.push(evt);
+                    currentPeriod.eventCount++;
+                }
+            }
+        });
+        if (currentPeriod) periods.push(currentPeriod);
+
+        if (periods.length === 0) {
+            timelineContainer.innerHTML = `<div class="meta" style="padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px;">No significant work periods found.</div>`;
+        } else {
+            // NEW: Formatter that includes the specific Date AND Time (e.g. "Mar 28, 04:14 PM")
+            const formatDateTime = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            
+            periods.forEach((p, index) => {
+              const durMs = p.endTime - p.startTime;
+              const block = document.createElement("div");
+              block.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
+              const durationText = durMs < 60000 ? "< 1m" : formatDurationHelper(durMs);
+              
+              // NEW: Extract all unique session IDs involved in this specific work period
+              const sessionsList = [...new Set(p.events.map(e => e.sessionId))].filter(id => id !== 'Unknown').join(", ");
+              const sessionBadge = sessionsList ? `<span class="meta" style="margin-left: 12px; padding: 2px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem;">Session(s): ${sessionsList}</span>` : '';
+
+              block.innerHTML = `
+                <div style="display: flex; justify-content: space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);">
+                  <div>
+                    <div style="display: flex; align-items: center;">
+                        <strong style="font-size: 1.1rem;">Work Period ${index + 1}</strong>
+                        ${sessionBadge}
+                    </div>
+                    <div class="meta" style="margin-top: 6px; font-size: 0.9rem;">${formatDateTime(p.startTime)} &rarr; ${formatDateTime(p.endTime)}</div>
+                  </div>
+                  <div style="text-align: right;">
+                    <div style="font-weight: bold; color: var(--fg);">${durationText}</div>
+                    <div class="meta" style="margin-top: 4px;">${p.eventCount} logged events</div>
+                  </div>
+                </div>
+              `;
+              timelineContainer.appendChild(block);
+
+              if (index < periods.length - 1) {
+                const gapMs = periods[index + 1].startTime - p.endTime;
+                const gapDiv = document.createElement("div");
+                
+                // NEW: Calculate specific start/end dates for the gap
+                const gapStart = formatDateTime(p.endTime);
+                const gapEnd = formatDateTime(periods[index + 1].startTime);
+                
+                if (gapMs > 4 * 60 * 60 * 1000) {
+                  gapDiv.className = "meta";
+                  gapDiv.style.cssText = "text-align: center; padding: 8px 0; color: #f59e0b; background: rgba(245, 158, 11, 0.05); border-radius: 4px; margin: 4px 0;";
+                  gapDiv.innerHTML = `⟐ <strong>Significant Gap</strong> (${formatDurationHelper(gapMs)})<br/><span style="font-size: 0.85rem; display: inline-block; margin-top: 4px;">${gapStart} &rarr; ${gapEnd}</span> ⟐`;
+                } else {
+                  gapDiv.className = "meta";
+                  gapDiv.style.cssText = "text-align: center; padding: 6px 0;";
+                  gapDiv.innerHTML = `&darr; Gap: ${formatDurationHelper(gapMs)}<br/><span style="font-size: 0.85rem; display: inline-block; margin-top: 4px;">${gapStart} &rarr; ${gapEnd}</span> &darr;`;
+                }
+                timelineContainer.appendChild(gapDiv);
+              }
+            });
+        }
+
+        // Apply Sort for LIST View
+        filtered.sort((a, b) => {
           if (sortVal === "session-desc") {
-            if (sessionA !== sessionB) return sessionB - sessionA;
-            return timeB - timeA;
+            if (a.sessionId !== b.sessionId) return Number(b.sessionId) - Number(a.sessionId);
+            return b.timestampMs - a.timestampMs;
           }
           if (sortVal === "session-asc") {
-            if (sessionA !== sessionB) return sessionA - sessionB;
-            return timeA - timeB;
+            if (a.sessionId !== b.sessionId) return Number(a.sessionId) - Number(b.sessionId);
+            return a.timestampMs - b.timestampMs;
           }
-          if (sortVal === "time-desc") {
-            return timeB - timeA;
-          }
-          if (sortVal === "time-asc") {
-            return timeA - timeB;
-          }
+          if (sortVal === "time-desc") return b.timestampMs - a.timestampMs;
+          if (sortVal === "time-asc") return a.timestampMs - b.timestampMs;
           return 0;
         });
 
-        // Group by Session (to create the visual headers)
+        // Group by Session for LIST view
         const groups = new Map();
         filtered.forEach((e) => {
           if (!groups.has(e.sessionId)) groups.set(e.sessionId, []);
           groups.get(e.sessionId).push(e);
         });
 
-        // Build the HTML Groupings
+        // Build the HTML Groupings for LIST view
         groups.forEach((groupEvents, sid) => {
-          // Visual header for each session
           const sep = document.createElement("div");
-          sep.style.cssText =
-            "margin: 20px 0 10px 0; padding-bottom: 8px; border-bottom: 2px solid var(--accent); display:flex; justify-content:space-between; align-items:flex-end;";
+          sep.style.cssText = "margin: 20px 0 10px 0; padding-bottom: 8px; border-bottom: 2px solid var(--accent); display:flex; justify-content:space-between; align-items:flex-end;";
           sep.innerHTML = `<h3 style="margin:0; color:var(--accent); font-size: 1.25rem;">Session ${sid}</h3><span class="meta" style="font-weight:bold;">${groupEvents.length} events</span>`;
-          list.appendChild(sep);
+          listContainer.appendChild(sep);
 
-          // Populate the events for this session
           groupEvents.forEach((e) => {
             const row = document.createElement("div");
             row.className = "card";
-            row.style.cssText =
-              "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
+            row.style.cssText = "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
 
             const items = [];
             const ed = e.eventData;
 
-            // 1. View / File
-            const viewStr =
-              ed.View ??
-              ed.view ??
-              ed.fileView ??
-              ed.FileView ??
-              ed.file ??
-              ed.File ??
-              ed.fileName;
-            if (viewStr !== undefined && viewStr !== null && viewStr !== "") {
-              items.push(
-                `<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`,
-              );
-            }
+            const viewStr = ed.View ?? ed.view ?? ed.fileView ?? ed.FileView ?? ed.file ?? ed.File ?? ed.fileName;
+            if (viewStr) items.push(`<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`);
 
-            // 2. Chars Changed
-            const charsChanged =
-              ed.CharsChanged ??
-              ed.charsChanged ??
-              ed.CharsAdded ??
-              ed.charsAdded ??
-              ed.Length ??
-              ed.length ??
-              ed.pasteCharCount;
-            if (charsChanged !== undefined && charsChanged !== null) {
-              items.push(
-                `<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`,
-              );
-            }
+            const charsChanged = ed.CharsChanged ?? ed.charsChanged ?? ed.CharsAdded ?? ed.charsAdded ?? ed.Length ?? ed.length ?? ed.pasteCharCount;
+            if (charsChanged !== undefined && charsChanged !== null) items.push(`<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`);
 
-            // 3. Flight Time
             const flightTime = ed.FlightTime ?? ed.flightTime;
             if (flightTime !== undefined && flightTime !== null) {
-              const ftStr = String(flightTime).endsWith("ms")
-                ? flightTime
-                : `${flightTime}ms`;
-              items.push(
-                `<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`,
-              );
+              const ftStr = String(flightTime).endsWith("ms") ? flightTime : `${flightTime}ms`;
+              items.push(`<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`);
             }
 
-            // 4. Window Focused
-            const windowFocused =
-              ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
-            if (windowFocused !== undefined && windowFocused !== null) {
-              items.push(
-                `<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`,
-              );
-            }
+            const windowFocused = ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
+            if (windowFocused !== undefined && windowFocused !== null) items.push(`<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`);
 
-            // 5. Workspace
-            const workspace =
-              ed.WorkspaceName ??
-              ed.workspaceName ??
-              ed.Workspace ??
-              ed.workspace;
-            if (
-              workspace !== undefined &&
-              workspace !== null &&
-              workspace !== ""
-            ) {
-              items.push(
-                `<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`,
-              );
-            }
+            const workspace = ed.WorkspaceName ?? ed.workspaceName ?? ed.Workspace ?? ed.workspace;
+            if (workspace) items.push(`<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`);
 
-            // Note/AI Warning
             let noteHtml = "";
-            if (ed.possibleAiDetection) {
-              noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;
-            }
+            if (ed.possibleAiDetection) noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;
 
-            // Ensure the row number matches the backend row (or fallbacks to visual index)
             const rowNum = ed.Row ?? ed.row ?? e.index + 1;
-
-            // Construct Body
-            let bodyHtml =
-              items.length > 0
-                ? items.join(
-                    ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
-                  )
-                : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${JSON.stringify(ed)}</code>`;
+            let bodyHtml = items.length > 0 ? items.join(' <span style="color: var(--border); margin: 0 6px;">|</span> ') : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${JSON.stringify(ed)}</code>`;
 
             row.innerHTML = `
                   <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
@@ -4464,20 +4437,18 @@
                     ${noteHtml}
                   </div>
                 `;
-
-            list.appendChild(row);
+            listContainer.appendChild(row);
           });
         });
       };
 
-      // Bind re-render events to dropdowns
       filterSessionEl.onchange = renderList;
       filterEventTypeEl.onchange = renderList;
       sortOrderEl.onchange = renderList;
 
-      // Initial Call
       renderList();
     }
+    // end renderAssignmentStudentSessions
 
     // end renderAssignmentStudentSessions
     function parseLogText(text) {

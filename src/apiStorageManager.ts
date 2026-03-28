@@ -11,15 +11,6 @@ interface ApiSyncStatus {
     lastConflictAt: string | null;
 }
 
-export interface LoadLogNotesMeta {
-    teacherAuthUserId: number;
-    sessionId: number;
-    sessionEventId: number;
-    filename: string;
-    count: number;
-    notesList: any[];
-}
-
 export type UserRole = 'Student' | 'Teacher' | 'Admin';
 
 interface StudentWorkspaceLinkRecord {
@@ -42,8 +33,6 @@ export class ApiStorageManager {
         lastError: null,
         lastConflictAt: null
     };
-
-    public lastLoadLogNotesMeta: LoadLogNotesMeta | null = null;
 
     // --- ENCRYPTED OFFLINE QUEUE CONFIGURATION ---
     private readonly SECRET_PASSPHRASE = 'password';
@@ -475,7 +464,7 @@ export class ApiStorageManager {
         void this.flush([]);
     }
 
-    async flush(_newEvents: StandardEvent[]): Promise<void> {
+async flush(_newEvents: StandardEvent[]): Promise<void> {
         if (!this.context) {
             throw new Error('Storage manager is not initialized.');
         }
@@ -483,53 +472,44 @@ export class ApiStorageManager {
         const userId = Number(session?.authUserId ?? 0);
         const role = String(session?.role ?? '').toLowerCase();
 
-        // 1. HARD STOP: Do not process offline queues or live events for Teachers or anonymous users
         if (!userId || userId === 0 || role === 'teacher' || role === 'admin') {
-            // Optional: Clear the incoming events buffer so they don't pile up in memory
             return; 
         }
-
         
-        // 1. Get current session info (This will be null if they started offline!)
         let currentSessionId = this.context.workspaceState.get<number>('sessionId') || null;
         
         const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
-        const projectId = Number(session?.workspaceLinkedClassId ?? 0); // Fallback for project ID mapping
-
-        
-        // Teammate's Addition: Fetch the link record for extra backend metadata
+        const projectId = Number(session?.workspaceLinkedClassId ?? 0); 
         const linkRecord = await this.getStudentWorkspaceLinkRecord();
 
-        // 2. Format new events, tagging them with the current session state
-        const newPayloads = _newEvents.map(event => ({
-            sessionId: currentSessionId, // Could be null if DB was down at startup
-            eventType: event.eventType,
-            occurredAt: event.time || new Date().toISOString(),
-            
-            // Your Flat Columns for PostgreSQL
-            flightTimeMs: event.flightTime ? Number(event.flightTime) : null,
-            fileEdit: event.fileEdit || null,
-            fileView: event.fileView || null,
-            fileFocusCount: event.fileFocusCount || null,
-            charsAdded: event.charsAdded || null,
-            pasteCharCount: event.pasteCharCount || null,
-            windowFocused: event.windowFocused !== undefined ? event.windowFocused : true,
-            workspaceName: vscode.workspace.name || null,
-            studentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : null,
-            possibleAiDetection: event.possibleAiDetection || null,
-
-            // Teammate's Fallback JSON metadata for tracking
-            eventData: {
-                studentId: linkRecord?.studentId ?? undefined,
-                studentWorkspaceFullPath: linkRecord?.studentWorkspaceFullPath ?? undefined,
-                studentWorkspaceName: linkRecord?.studentWorkspaceName ?? undefined,
-                classId: linkRecord?.classId ?? undefined,
-                classAssignmentId: linkRecord?.classAssignmentId ?? undefined,
-                className: linkRecord?.className ?? undefined,
-                classAssignmentName: linkRecord?.classAssignmentName ?? undefined,
-                recordIdentifier: linkRecord?.recordIdentifier ?? undefined
-            }
-        }));
+        // 2. Format new events AND forcefully filter out 'file_edit' before upload
+        const newPayloads = _newEvents
+            .filter(event => String(event.eventType || '').toLowerCase() !== 'file_edit')
+            .map(event => ({
+                sessionId: currentSessionId, 
+                eventType: event.eventType,
+                occurredAt: event.time || new Date().toISOString(),
+                flightTimeMs: event.flightTime ? Number(event.flightTime) : null,
+                //fileEdit: event.fileEdit || null,
+                fileView: event.fileView || null,
+                fileFocusCount: event.fileFocusCount || null,
+                charsAdded: event.charsAdded || null,
+                pasteCharCount: event.pasteCharCount || null,
+                windowFocused: event.windowFocused !== undefined ? event.windowFocused : true,
+                workspaceName: vscode.workspace.name || null,
+                studentWorkspaceAssignmentId: studentWorkspaceAssignmentId > 0 ? studentWorkspaceAssignmentId : null,
+                possibleAiDetection: event.possibleAiDetection || null,
+                eventData: {
+                    studentId: linkRecord?.studentId ?? undefined,
+                    studentWorkspaceFullPath: linkRecord?.studentWorkspaceFullPath ?? undefined,
+                    studentWorkspaceName: linkRecord?.studentWorkspaceName ?? undefined,
+                    classId: linkRecord?.classId ?? undefined,
+                    classAssignmentId: linkRecord?.classAssignmentId ?? undefined,
+                    className: linkRecord?.className ?? undefined,
+                    classAssignmentName: linkRecord?.classAssignmentName ?? undefined,
+                    recordIdentifier: linkRecord?.recordIdentifier ?? undefined
+                }
+            }));
 
         // 3. Load the existing offline queue from .vscode/logs/tbd_offline_queue.enc
         let offlineQueue = await this.readQueue();
@@ -692,20 +672,19 @@ export class ApiStorageManager {
                         try {
                             const sessionsAndEvents = await this.listAssignmentStudentSessions(c.id, a.id, s.authUserId, teacherId);
                             const uniqueSessionIds = new Set<number>();
-                            for (const row of sessionsAndEvents) {
-                                const sid = Number(row?.SessionId ?? row?.sessionId);
-                                if (sid > 0) {
-                                    uniqueSessionIds.add(sid);
-                                }
-                            }
-
-                            for (const sid of uniqueSessionIds) {
+                            const sortedSids = Array.from(uniqueSessionIds).sort((a, b) => a - b);
+                            for (let i = 0; i < sortedSids.length; i++) {
+                                const sid = sortedSids[i];
+                                const localSessionNum = i + 1; // Sandboxed session number (1, 2, 3...)
+                                
                                 const safeCourse = String(c.courseName || 'Class').replace(/[^a-zA-Z0-9]/g, '');
                                 const safeAssign = String(a.name || 'Assign').replace(/[^a-zA-Z0-9]/g, '');
                                 const safeStudent = String(s.studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '');
-                                const label = `${safeCourse}_${safeAssign}_${safeStudent}_Session${sid}.log`;
                                 
-                                const uri = vscode.Uri.parse(`tbd-cloud:${sid}?classId=${c.id}&assignId=${a.id}&studentId=${s.authUserId}`);
+                                // UI will now show each session incremented
+                                const label = `${safeCourse}_${safeAssign}_${safeStudent}_Session${localSessionNum}.log`;
+                                
+                                const uri = vscode.Uri.parse(`tbd-cloud:${sid}?classId=${c.id}&assignId=${a.id}&studentId=${s.authUserId}&localNum=${localSessionNum}`);
                                 logs.push({ label, uri });
                             }
                         } catch(e) {
@@ -750,6 +729,7 @@ export class ApiStorageManager {
         const firstEvent = sessionEvents[0];
         const studentName = String(firstEvent?.StudentName || 'Student');
         const startTime = firstEvent?.StartedAt || firstEvent?.OccurredAt || firstEvent?.occurredAt || new Date().toISOString();
+        const localSessionNum = Number(params['localNum']) || targetSessionId;
         
         // Find workspace name from event data if possible
         let workspaceName = 'Unknown Workspace';
@@ -764,7 +744,8 @@ export class ApiStorageManager {
 
         const header = {
             sessionHeader: {
-                sessionNumber: targetSessionId,
+                sessionNumber: localSessionNum, // Now uses the sandboxed number
+        databaseSessionId: targetSessionId, // Kept for debugging
                 startedBy: studentName,
                 project: workspaceName,
                 startTime: startTime,
@@ -780,6 +761,13 @@ export class ApiStorageManager {
 
         // 2. Output each event as a flat JSON string, exactly like local logs did
         for (const row of sessionEvents) {
+            const eventType = row?.EventType || row?.eventType;
+
+            // REMOVE HISTORICAL FILE_EDIT EVENTS FROM TEACHER VIEW
+            if (eventType === 'file_edit') {
+                continue; 
+            }
+
             let eventData = row?.EventData ?? row?.eventData ?? {};
             if (typeof eventData === 'string') {
                 try { eventData = JSON.parse(eventData); } catch(e) {}
@@ -788,7 +776,7 @@ export class ApiStorageManager {
             const merged = {
                 ...eventData,
                 time: eventData.time || row?.OccurredAt || row?.occurredAt,
-                eventType: row?.EventType || row?.eventType,
+                eventType: eventType,
             };
             
             logText += JSON.stringify(merged) + '\n';
@@ -857,18 +845,11 @@ export class ApiStorageManager {
         return { text, partial: false };
     }
 
-    private parseSessionIdFromFilename(filename: string): number | null {
-        if (!filename || typeof filename !== 'string') {
-            return null;
-        }
-        const match = filename.match(/Session(\d+)/i);
-        if (!match) {
-            return null;
-        }
-        const val = Number(match[1]);
-        return Number.isFinite(val) && val > 0 ? val : null;
+    async saveLogNotes(_passwordAttempt: string, _filename: string, _notes: Array<{ timestamp: string; text: string }>): Promise<void> {
+        throw new Error('Saving log notes is not available in API-only mode.');
     }
 
+<<<<<<< HEAD
     private getCurrentTeacherId(): number {
         if (!this.context) {
             return 0;
@@ -1044,6 +1025,10 @@ export class ApiStorageManager {
         }
 
         return normalized;
+=======
+    async loadLogNotes(_passwordAttempt: string, _filename: string): Promise<Array<{ timestamp: string; text: string }>> {
+        return [];
+>>>>>>> 1b08fab8c6ad3178cc02b0f8557ce8ce166a70c9
     }
 
     async recordUnmonitoredWorkAlert(_payload: {

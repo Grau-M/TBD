@@ -847,7 +847,7 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
                 
                 // --- Flattened Native Columns ---
                 flightTimeMs: data.flightTime ? Number(data.flightTime) : null,
-                fileEdit: data.fileEdit || data.file || null,
+               //fileEdit: data.fileEdit || data.file || null,
                 fileView: data.fileView || null,
                 fileFocusCount: data.fileFocusCount || null,
                 charsAdded: data.charsAdded || null,
@@ -1290,21 +1290,21 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
         }
     };
 
-    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
-        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
-        if (e.contentChanges.length === 0) { return; }
-        const docPath = vscode.workspace.asRelativePath(e.document.uri, false);
-        if (isIgnoredPath(docPath)) { return; }
-        void promptIfUnauthenticated();
+    // context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
+    //     if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+    //     if (e.contentChanges.length === 0) { return; }
+    //     const docPath = vscode.workspace.asRelativePath(e.document.uri, false);
+    //     if (isIgnoredPath(docPath)) { return; }
+    //     void promptIfUnauthenticated();
 
-        const charsAdded = e.contentChanges.reduce((sum, change) => sum + change.text.length, 0);
-        const isPaste = e.contentChanges.some((change) => change.text.length > 1);
-        void logEvent(isPaste ? 'paste' : 'file_edit', {
-            file: docPath,
-            changeCount: e.contentChanges.length,
-            charsAdded
-        });
-    }));
+    //     const charsAdded = e.contentChanges.reduce((sum, change) => sum + change.text.length, 0);
+    //     const isPaste = e.contentChanges.some((change) => change.text.length > 1);
+    //     void logEvent(isPaste ? 'paste' : 'file_edit', {
+    //         file: docPath,
+    //         changeCount: e.contentChanges.length,
+    //         charsAdded
+    //     });
+    // }));
 
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((doc) => {
         if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }

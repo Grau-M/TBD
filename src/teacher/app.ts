@@ -150,15 +150,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         case 'loadLogNotes': {
-          if (panel) {
-            const sessionId = Number(message.sessionId || 0);
-            const sessionEventId = Number(message.sessionEventId || 0);
-            if (!Number.isFinite(sessionId) || sessionId <= 0) {
-              await handleLoadLogNotes(panel, SECRET_PASSPHRASE, message.filename, undefined, sessionEventId);
-            } else {
-              await handleLoadLogNotes(panel, SECRET_PASSPHRASE, message.filename, sessionId, sessionEventId);
-            }
-          }
+          if (panel) { await handleLoadLogNotes(panel, SECRET_PASSPHRASE, message.filename); }
           break;
         }
 

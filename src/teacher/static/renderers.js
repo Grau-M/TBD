@@ -893,18 +893,6 @@ window.TeacherUI = {
           row.dataset.filterCategory = filterCat;
           row.dataset.eventTime = e.time || "";
 
-          const parsedSessionEventId =
-            Number(e.Id || e.sessionEventId || e.eventId || e.SessionEventId || e.EventId || 0) || 0;
-          if (parsedSessionEventId > 0) {
-            row.dataset.sessionEventId = String(parsedSessionEventId);
-          }
-
-          const parsedSessionId =
-            Number(e.sessionId || e.SessionId || 0) || 0;
-          if (parsedSessionId > 0) {
-            row.dataset.sessionId = String(parsedSessionId);
-          }
-
           // Forced css to ensure dark mode doesn't swallow the styles
           if (isAiEvent) {
             row.style.cssText +=
@@ -1053,10 +1041,8 @@ window.TeacherUI = {
             const input = area?.querySelector(".event-note-input");
             const ts = row.dataset.eventTime || "";
             const text = input?.value || "";
-            const sessionEventId = Number(row.dataset.sessionEventId || 0);
-            const sessionId = Number(row.dataset.sessionId || 0);
-
             if (ts && text) {
+<<<<<<< HEAD
               const notePayload = { timestamp: ts, text };
               if (sessionEventId > 0) {
                 notePayload.sessionEventId = sessionEventId;
@@ -1065,6 +1051,9 @@ window.TeacherUI = {
                 notePayload.sessionId = sessionId;
               }
               allNotes.push(notePayload);
+=======
+              allNotes.push({ timestamp: ts, text });
+>>>>>>> 1b08fab8c6ad3178cc02b0f8557ce8ce166a70c9
             }
           });
 

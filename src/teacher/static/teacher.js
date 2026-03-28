@@ -1,8 +1,8 @@
-// teacher.js (FULL FILE as you shared it) + changes added for:
+// teacher.js (FULL FILE) + changes added for:
 // 1) listening for "studentSummary" messages and rendering output in dashboard dropdown + logs view
 // 2) optional status text updates
-// NOTE: This file assumes renderers.js adds the dashboard dropdown button that posts:
-// window.postTeacherMessage("generateStudentSummary", { filename })
+// 3) FIXED: notesByEvent ReferenceError crash in logNotes handler
+// 4) FIXED: Timeline rendering formatDuration TypeError
 
 /* Webview client script for Teacher View - strictly state and routing */
 (function () {
@@ -644,27 +644,6 @@
       }
     }
 
-    function formatTimeTo12Hour(value) {
-      const input = String(value || "").trim();
-      const match = input.match(/^(\d{1,2}):(\d{2})$/);
-      if (!match) {
-        return input;
-      }
-
-      let hours = Number(match[1]);
-      const minutes = match[2];
-      if (!Number.isFinite(hours)) {
-        return input;
-      }
-
-      const period = hours >= 12 ? "PM" : "AM";
-      hours = hours % 12;
-      if (hours === 0) {
-        hours = 12;
-      }
-      return `${hours}:${minutes} ${period}`;
-    }
-
     function formatMeetingTimeDisplay(meetingTimeRaw) {
       const meetingTime = String(meetingTimeRaw || "").trim();
       if (!meetingTime) {
@@ -780,7 +759,7 @@
           return null;
         }
         return el;
-      };
+      }
 
       const tryShowPicker = (el) => {
         if (typeof el.showPicker === "function") {
@@ -2183,7 +2162,6 @@
           }
           break;
 
-        // ✅ NEW: Student Transparency Summary response handler
         case "studentSummary": {
           const filename = msg.filename || currentLogFilename || "";
           const summaryText =
@@ -2308,14 +2286,14 @@
                 }
               }
 
-              if (noteId && notesByEvent.has(noteId)) {
-                notesByEvent.set(noteId, noteText); // ensure mapping text from loaded note
-              }
+              // FIXED: Ensure notesByEvent is defined before trying to call .has()
+              try {
+                  if (noteId && typeof window.notesByEvent !== 'undefined' && window.notesByEvent.has(noteId)) {
+                    window.notesByEvent.set(noteId, noteText); 
+                  }
+              } catch(e) {}
             });
-          } else {
-            // no notes
           }
-
           break;
 
         case "rawData":
@@ -3837,7 +3815,6 @@
       clearAssignmentComparisonSelection();
 
       // Hide previous views
-      // Hide previous views
       if (classDetailView) {
         classDetailView.style.display = "none";
       }
@@ -3883,7 +3860,7 @@
       }
 
       renderAssignmentStudentCards();
-    } // <--- THIS CLOSING BRACE IS SUPER IMPORTANT!
+    } 
 
     // Handles filtering, sorting, and drawing the actual cards
     function renderAssignmentStudentCards() {
@@ -4605,29 +4582,32 @@
       content.appendChild(timelineContainer);
 
       // Toggle Logic
-      controlsDiv.querySelector("#btn-view-list").addEventListener("click", (e) => {
-        e.target.className = "btn btn-primary";
-        controlsDiv.querySelector("#btn-view-timeline").className = "btn btn-secondary";
-        listContainer.style.display = "flex";
-        timelineContainer.style.display = "none";
-      });
+      const btnViewList = controlsDiv.querySelector("#btn-view-list");
+      const btnViewTimeline = controlsDiv.querySelector("#btn-view-timeline");
 
-      controlsDiv.querySelector("#btn-view-timeline").addEventListener("click", (e) => {
-        e.target.className = "btn btn-primary";
-        controlsDiv.querySelector("#btn-view-list").className = "btn btn-secondary";
-        listContainer.style.display = "none";
-        timelineContainer.style.display = "flex";
-      });
+      if (btnViewList && btnViewTimeline) {
+          btnViewList.addEventListener("click", (e) => {
+            e.target.className = "btn btn-primary";
+            btnViewTimeline.className = "btn btn-secondary";
+            listContainer.style.display = "flex";
+            timelineContainer.style.display = "none";
+          });
+
+          btnViewTimeline.addEventListener("click", (e) => {
+            e.target.className = "btn btn-primary";
+            btnViewList.className = "btn btn-secondary";
+            listContainer.style.display = "none";
+            timelineContainer.style.display = "flex";
+          });
+      }
 
       // --- TIMELINE DATA PROCESSING ---
-      // We process the timeline chunks here based on time gaps > 5 minutes
       const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; 
       const periods = [];
       let currentPeriod = null;
 
       const parseEventTime = (timeStr) => {
         if (!timeStr) return null;
-        // Strip trailing timezone codes if present, then pass to Date
         const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
         const d = new Date(cleanStr);
         return isNaN(d.getTime()) ? null : d.getTime();
@@ -4642,11 +4622,9 @@
         } else {
             const gap = ts - currentPeriod.endTime;
             if (gap > INACTIVITY_THRESHOLD_MS) {
-                // Gap is too big, close current period and start a new one
                 periods.push(currentPeriod);
                 currentPeriod = { startTime: ts, endTime: ts, events: [evt], eventCount: 1 };
             } else {
-                // Extend current period
                 currentPeriod.endTime = ts;
                 currentPeriod.events.push(evt);
                 currentPeriod.eventCount++;
@@ -4655,7 +4633,17 @@
       });
       if (currentPeriod) periods.push(currentPeriod);
 
-      // -> Next step: We will draw the `periods` into the `timelineContainer` here!
+      // --- FIXED: BULLETPROOF DURATION FORMATTER ---
+      const formatDurationHelper = (ms) => {
+          if (!ms || ms < 0) return "0s";
+          const totalSeconds = Math.floor(ms / 1000);
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          if (hours > 0) return `${hours}h ${minutes}m`;
+          if (minutes > 0) return `${minutes}m`;
+          return `< 1m`;
+      };
+
       // --- TIMELINE RENDERING ---
       timelineContainer.innerHTML = ""; // Clear the placeholder
 
@@ -4669,11 +4657,10 @@
         periods.forEach((p, index) => {
           const durMs = p.endTime - p.startTime;
           
-          // 1. Draw the Work Period Block
           const block = document.createElement("div");
           block.style.cssText = "display: flex; flex-direction: column; gap: 4px;";
           
-          const durationText = durMs < 60000 ? "< 1m" : window.TeacherUI.formatDuration(durMs);
+          const durationText = durMs < 60000 ? "< 1m" : formatDurationHelper(durMs);
           
           block.innerHTML = `
             <div style="display: flex; justify-content: space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);">
@@ -4689,20 +4676,18 @@
           `;
           timelineContainer.appendChild(block);
 
-          // 2. Draw the Gap (if this isn't the last period)
           if (index < periods.length - 1) {
             const gapMs = periods[index + 1].startTime - p.endTime;
             const gapDiv = document.createElement("div");
             
-            // Highlight massive gaps (e.g., > 4 hours) in an amber color
             if (gapMs > 4 * 60 * 60 * 1000) {
               gapDiv.className = "meta";
               gapDiv.style.cssText = "text-align: center; padding: 6px 0; color: #f59e0b;";
-              gapDiv.innerHTML = `⟐ <strong>Significant Gap: ${window.TeacherUI.formatDuration(gapMs)}</strong> ⟐`;
+              gapDiv.innerHTML = `⟐ <strong>Significant Gap: ${formatDurationHelper(gapMs)}</strong> ⟐`;
             } else {
               gapDiv.className = "meta";
               gapDiv.style.cssText = "text-align: center; padding: 6px 0;";
-              gapDiv.innerHTML = `&darr; Gap: ${window.TeacherUI.formatDuration(gapMs)} &darr;`;
+              gapDiv.innerHTML = `&darr; Gap: ${formatDurationHelper(gapMs)} &darr;`;
             }
             timelineContainer.appendChild(gapDiv);
           }

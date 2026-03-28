@@ -3732,8 +3732,6 @@
       view.style.display = "block";
       list.innerHTML = "";
 
-  
-
       const currentStudent =
         currentAssignmentStudents.find(
           (student) =>
@@ -3998,7 +3996,56 @@
       if (logView) logView.style.display = "none";
 
       studentView.style.display = "block";
-      title.textContent = `${studentName} - Session Logs`;
+
+      // Inject the Title and Filtering Controls beside each other
+      let controls = $("assignment-student-sessions-controls");
+      if (!controls) {
+        controls = document.createElement("div");
+        controls.id = "assignment-student-sessions-controls";
+        controls.style.cssText =
+          "display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; background: var(--surface); padding: 12px; border-radius: 8px; border: 1px solid var(--border);";
+
+        controls.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; margin-right:auto;">
+                <h2 id="dynamic-student-title" style="margin:0; color:var(--accent);"></h2>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <label class="meta" style="margin:0; font-weight:bold;">Session:</label>
+                <select id="filter-session" style="padding:6px; border-radius:4px; background:var(--bg); color:var(--fg); border:1px solid var(--border); min-width: 120px;">
+                    <option value="all">All Sessions</option>
+                </select>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <label class="meta" style="margin:0; font-weight:bold;">Event Type:</label>
+                <select id="filter-event-type" style="padding:6px; border-radius:4px; background:var(--bg); color:var(--fg); border:1px solid var(--border);">
+                    <option value="all">All Events</option>
+                    <option value="input">Input</option>
+                    <option value="replace">Replace</option>
+                    <option value="delete">Delete</option>
+                    <option value="ai-input">AI Input</option>
+                    <option value="ai-replace">AI Replace</option>
+                    <option value="ai-delete">AI Delete</option>
+                </select>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <label class="meta" style="margin:0; font-weight:bold;">Sort By:</label>
+                <select id="sort-order" style="padding:6px; border-radius:4px; background:var(--bg); color:var(--fg); border:1px solid var(--border);">
+                    <option value="session-desc">Session (Highest -> Lowest)</option>
+                    <option value="session-asc">Session (Lowest -> Highest)</option>
+                    <option value="time-desc">Time (Newest -> Oldest)</option>
+                    <option value="time-asc">Time (Oldest -> Newest)</option>
+                </select>
+            </div>
+        `;
+        list.parentNode.insertBefore(controls, list);
+      }
+
+      // Hide the original standalone title and use our embedded flexbox title
+      title.style.display = "none";
+      const dynamicTitle = $("dynamic-student-title");
+      if (dynamicTitle)
+        dynamicTitle.textContent = `${studentName} - Session Logs`;
+
       list.innerHTML = "";
 
       if (!sessions.length) {
@@ -4007,12 +4054,8 @@
       }
       empty.style.display = "none";
 
-      sessions.forEach((s, index) => {
-        const row = document.createElement("div");
-        row.className = "card";
-        row.style.cssText =
-          "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
-
+      // 1. Process all events
+      const processedEvents = sessions.map((s, index) => {
         const sessionId = normalizeSessionValue(
           s,
           ["SessionId", "sessionId", "id", "Id"],
@@ -4036,20 +4079,22 @@
           "Unknown event",
         );
 
-        // Extract the JSON data
-        let eventData = {};
-        const rawData = s?.EventData ?? s?.eventData ?? {};
-        try {
-          eventData =
-            typeof rawData === "string" ? JSON.parse(rawData) : rawData;
-        } catch (e) {
-          eventData = rawData;
+        let parsedData = {};
+        const rawDataStr = s?.EventData ?? s?.eventData;
+        if (typeof rawDataStr === "string") {
+          try {
+            parsedData = JSON.parse(rawDataStr);
+          } catch (e) {}
+        } else if (typeof rawDataStr === "object" && rawDataStr !== null) {
+          parsedData = rawDataStr;
         }
 
-        // --- Event Type Badge Color Logic ---
+        // Merge the main session object with the parsed event data to ensure we never miss a field
+        const eventData = { ...s, ...parsedData };
+
+        const eType = String(eventType).toLowerCase();
         let badgeColor = "var(--fg)";
         let badgeBg = "var(--bg)";
-        const eType = String(eventType).toLowerCase();
 
         if (eType.includes("paste")) {
           badgeColor = "#ef4444";
@@ -4065,7 +4110,8 @@
         } else if (
           eType.includes("focus") ||
           eType.includes("window") ||
-          eType.includes("active_editor")
+          eType.includes("active_editor") ||
+          eType.includes("change")
         ) {
           badgeColor = "#10b981";
           badgeBg = "rgba(16, 185, 129, 0.12)";
@@ -4077,69 +4123,253 @@
           badgeBg = "rgba(245, 158, 11, 0.12)";
         }
 
-        // --- Build Body Variables ---
-        const items = [];
-        if (eventData.file)
-          items.push(
-            `<span style="color: var(--muted)">File:</span> <strong>${eventData.file}</strong>`,
-          );
-        if (eventData.fileView && eventData.fileView !== eventData.file)
-          items.push(
-            `<span style="color: var(--muted)">View:</span> <strong>${eventData.fileView}</strong>`,
-          );
-        if (eventData.charsAdded !== undefined)
-          items.push(
-            `<span style="color: var(--muted)">Chars Added:</span> <strong>${eventData.charsAdded}</strong>`,
-          );
-        if (eventData.pasteCharCount !== undefined)
-          items.push(
-            `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${eventData.pasteCharCount}</strong>`,
-          );
-        if (eventData.flightTime !== undefined)
-          items.push(
-            `<span style="color: var(--muted)">Flight Time:</span> <strong>${eventData.flightTime}ms</strong>`,
-          );
-        if (eventData.focused !== undefined)
-          items.push(
-            `<span style="color: var(--muted)">Window Focused:</span> <strong>${eventData.focused}</strong>`,
-          );
-        if (eventData.workspaceName)
-          items.push(
-            `<span style="color: var(--muted)">Workspace:</span> <strong>${eventData.workspaceName}</strong>`,
-          );
+        return {
+          index,
+          sessionId,
+          occurredAt,
+          eventType,
+          eType,
+          eventData,
+          badgeColor,
+          badgeBg,
+        };
+      });
 
-        let noteHtml = "";
-        if (eventData.possibleAiDetection) {
-          noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${eventData.possibleAiDetection}</div>`;
+      // 2. Populate the Session Dropdown dynamically
+      const filterSessionEl = $("filter-session");
+      const filterEventTypeEl = $("filter-event-type");
+      const sortOrderEl = $("sort-order");
+
+      const uniqueSessionIds = [
+        ...new Set(processedEvents.map((e) => e.sessionId)),
+      ]
+        .filter((id) => id !== "Unknown")
+        .sort((a, b) => Number(b) - Number(a));
+
+      const currentSessionSelection = filterSessionEl.value;
+      filterSessionEl.innerHTML = `<option value="all">All Sessions</option>`;
+      uniqueSessionIds.forEach((id) => {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = `Session ${id}`;
+        filterSessionEl.appendChild(opt);
+      });
+      // Maintain selection state if valid
+      if (
+        uniqueSessionIds.includes(currentSessionSelection) ||
+        currentSessionSelection === "all"
+      ) {
+        filterSessionEl.value = currentSessionSelection;
+      } else {
+        filterSessionEl.value = "all";
+      }
+
+      // 3. Render and Filter Function
+      const renderList = () => {
+        list.innerHTML = "";
+        let filtered = processedEvents;
+
+        const sessionVal = filterSessionEl.value;
+        const eventVal = filterEventTypeEl.value;
+        const sortVal = sortOrderEl.value;
+
+        // Apply Session Filter
+        if (sessionVal !== "all") {
+          filtered = filtered.filter((e) => String(e.sessionId) === sessionVal);
         }
 
-        let rawStringFallback =
-          typeof rawData === "string" ? rawData : JSON.stringify(rawData);
-        let bodyHtml =
-          items.length > 0
-            ? items.join(
-                ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
-              )
-            : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${rawStringFallback}</code>`;
+        // Apply Event Type Filter
+        if (eventVal !== "all") {
+          filtered = filtered.filter((e) => {
+            const t = e.eType;
+            if (eventVal === "input")
+              return t.includes("input") && !t.includes("ai");
+            if (eventVal === "replace")
+              return t.includes("replace") && !t.includes("ai");
+            if (eventVal === "delete")
+              return (
+                (t.includes("delete") || t.includes("backspace")) &&
+                !t.includes("ai")
+              );
+            if (eventVal === "ai-input")
+              return (
+                t.includes("ai-input") ||
+                t.includes("ai-insert") ||
+                (t.includes("ai") && t.includes("input"))
+              );
+            if (eventVal === "ai-replace") return t.includes("ai-replace");
+            if (eventVal === "ai-delete") return t.includes("ai-delete");
+            return true;
+          });
+        }
 
-        row.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${eventType}</span>
-              <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${sessionId}</strong> &bull; ${formatSessionDate(occurredAt)}</span>
-            </div>
-            <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${index + 1}</div>
-          </div>
-          <div style="font-size: 0.9rem; line-height: 1.5; color: var(--fg);">
-            ${bodyHtml}
-            ${noteHtml}
-          </div>
-        `;
+        if (filtered.length === 0) {
+          empty.style.display = "block";
+          empty.textContent = "No events match the selected filters.";
+          return;
+        }
+        empty.style.display = "none";
 
-        list.appendChild(row);
-      });
+        // Apply Sort
+        filtered.sort((a, b) => {
+          const timeA = new Date(a.occurredAt).getTime() || 0;
+          const timeB = new Date(b.occurredAt).getTime() || 0;
+          const sessionA = Number(a.sessionId) || 0;
+          const sessionB = Number(b.sessionId) || 0;
+
+          if (sortVal === "session-desc") {
+            if (sessionA !== sessionB) return sessionB - sessionA;
+            return timeB - timeA;
+          }
+          if (sortVal === "session-asc") {
+            if (sessionA !== sessionB) return sessionA - sessionB;
+            return timeA - timeB;
+          }
+          if (sortVal === "time-desc") {
+            return timeB - timeA;
+          }
+          if (sortVal === "time-asc") {
+            return timeA - timeB;
+          }
+          return 0;
+        });
+
+        // Group by Session (to create the visual headers)
+        const groups = new Map();
+        filtered.forEach((e) => {
+          if (!groups.has(e.sessionId)) groups.set(e.sessionId, []);
+          groups.get(e.sessionId).push(e);
+        });
+
+        // Build the HTML Groupings
+        groups.forEach((groupEvents, sid) => {
+          // Visual header for each session
+          const sep = document.createElement("div");
+          sep.style.cssText =
+            "margin: 20px 0 10px 0; padding-bottom: 8px; border-bottom: 2px solid var(--accent); display:flex; justify-content:space-between; align-items:flex-end;";
+          sep.innerHTML = `<h3 style="margin:0; color:var(--accent); font-size: 1.25rem;">Session ${sid}</h3><span class="meta" style="font-weight:bold;">${groupEvents.length} events</span>`;
+          list.appendChild(sep);
+
+          // Populate the events for this session
+          groupEvents.forEach((e) => {
+            const row = document.createElement("div");
+            row.className = "card";
+            row.style.cssText =
+              "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
+
+            const items = [];
+            const ed = e.eventData;
+
+            // 1. View / File
+            const viewStr =
+              ed.View ??
+              ed.view ??
+              ed.fileView ??
+              ed.FileView ??
+              ed.file ??
+              ed.File ??
+              ed.fileName;
+            if (viewStr !== undefined && viewStr !== null && viewStr !== "") {
+              items.push(
+                `<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`,
+              );
+            }
+
+            // 2. Chars Changed
+            const charsChanged =
+              ed.CharsChanged ??
+              ed.charsChanged ??
+              ed.CharsAdded ??
+              ed.charsAdded ??
+              ed.Length ??
+              ed.length ??
+              ed.pasteCharCount;
+            if (charsChanged !== undefined && charsChanged !== null) {
+              items.push(
+                `<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`,
+              );
+            }
+
+            // 3. Flight Time
+            const flightTime = ed.FlightTime ?? ed.flightTime;
+            if (flightTime !== undefined && flightTime !== null) {
+              const ftStr = String(flightTime).endsWith("ms")
+                ? flightTime
+                : `${flightTime}ms`;
+              items.push(
+                `<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`,
+              );
+            }
+
+            // 4. Window Focused
+            const windowFocused =
+              ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
+            if (windowFocused !== undefined && windowFocused !== null) {
+              items.push(
+                `<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`,
+              );
+            }
+
+            // 5. Workspace
+            const workspace =
+              ed.WorkspaceName ??
+              ed.workspaceName ??
+              ed.Workspace ??
+              ed.workspace;
+            if (
+              workspace !== undefined &&
+              workspace !== null &&
+              workspace !== ""
+            ) {
+              items.push(
+                `<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`,
+              );
+            }
+
+            // Note/AI Warning
+            let noteHtml = "";
+            if (ed.possibleAiDetection) {
+              noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;
+            }
+
+            // Ensure the row number matches the backend row (or fallbacks to visual index)
+            const rowNum = ed.Row ?? ed.row ?? e.index + 1;
+
+            // Construct Body
+            let bodyHtml =
+              items.length > 0
+                ? items.join(
+                    ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
+                  )
+                : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${JSON.stringify(ed)}</code>`;
+
+            row.innerHTML = `
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                      <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${e.badgeBg}; color: ${e.badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${e.eventType}</span>
+                      <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${e.sessionId}</strong> &bull; ${formatSessionDate(e.occurredAt)}</span>
+                    </div>
+                    <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${rowNum}</div>
+                  </div>
+                  <div style="font-size: 0.9rem; line-height: 1.5; color: var(--fg);">
+                    ${bodyHtml}
+                    ${noteHtml}
+                  </div>
+                `;
+
+            list.appendChild(row);
+          });
+        });
+      };
+
+      // Bind re-render events to dropdowns
+      filterSessionEl.onchange = renderList;
+      filterEventTypeEl.onchange = renderList;
+      sortOrderEl.onchange = renderList;
+
+      // Initial Call
+      renderList();
     }
-
     function parseLogText(text) {
       const lines = String(text || "")
         .trim()

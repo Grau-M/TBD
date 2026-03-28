@@ -26,6 +26,6 @@ export function handleFocusRegained() {
                 fileView: 'Focus Away (Major)'
             });
         }
-        updateTrackingUI(); // 👈 Instantly clear the away state visually!
+        updateTrackingUI(); // Instantly clear the away state visually!
     }
 }

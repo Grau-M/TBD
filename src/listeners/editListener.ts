@@ -1,10 +1,4 @@
 // Module: listeners/editListener.ts
-// Purpose: Create a listener for text document changes. The listener
-// classifies edits (insert, delete, replace, paste) and heuristically
-// detects potential AI-assisted edits when the active editor does not
-// match the document being edited. It then constructs `StandardEvent`
-// objects and pushes them into the shared session buffer, triggering
-// flushes when thresholds are reached.
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { state, CONSTANTS } from '../state';
@@ -12,20 +6,17 @@ import { flushBuffer } from '../flush';
 import { isIgnoredPath, formatTimestamp, formatDuration } from '../utils';
 import { StandardEvent } from '../types';
 
-// Function: createEditListener
-// Purpose: Return a Disposable that listens for text document changes and
-// converts them into `StandardEvent` entries stored in `state.sessionBuffer`.
-// The listener classifies edits (input, paste, delete, replace) and adds
-// heuristics for detecting potential AI-assisted edits.
 export function createEditListener(): vscode.Disposable {
     return vscode.workspace.onDidChangeTextDocument((event) => {
         // The Student-Only Gate: Cut the microphone
-    if (state.currentUserRole !== 'Student') {
-        return; 
-    }
+        if (state.currentUserRole !== 'Student') {
+            return; 
+        }
+
         // 1. IGNORE CHECKS
         if (event.contentChanges.length === 0) { return; }
         if (!state.isConsentGiven) {return; }
+        
         // Use relative path to check for ignored files (logs, enc, etc.)
         const docPath = vscode.workspace.asRelativePath(event.document.uri, false);
         if (isIgnoredPath(docPath)) {return;}
@@ -40,10 +31,9 @@ export function createEditListener(): vscode.Disposable {
         const activeEditor = vscode.window.activeTextEditor;
         
         // Check if the user is focusing on the file they are editing
-        // const isFocusMismatch = activeEditor 
-        //     ? activeEditor.document.uri.toString() !== event.document.uri.toString() 
-        //     : true; 
-        const isFocusMismatch = true;
+        const isFocusMismatch = activeEditor 
+            ? activeEditor.document.uri.toString() !== event.document.uri.toString() 
+            : true; 
 
         // Get clean filenames
         const fileViewRaw = activeEditor ? path.basename(activeEditor.document.fileName) : 'System/Sidebar';
@@ -54,7 +44,6 @@ export function createEditListener(): vscode.Disposable {
         const normalize = (str: string) => str.replace(/\s+/g, '');
         const isExternalCopy = (text: string) => {
             if (!state.externalCopiedText) {return false;}
-            // Now compares the raw characters without spaces/tabs breaking it
             return normalize(state.externalCopiedText).includes(normalize(text));
         };
 
@@ -68,22 +57,29 @@ export function createEditListener(): vscode.Disposable {
             const isReplace = change.rangeLength > 0 && change.text !== '';
             const isDelete = change.rangeLength > 0 && change.text === '';
             const isInsert = change.rangeLength === 0 && change.text.length > 0;
+            
+            // MAGIC BULLET: If multiple characters arrive in a single millisecond tick, it's not human typing.
+            const isMultiCharAtomic = change.text.length > 2;
 
             // DETERMINE EVENT TYPE
-           if (isDelete) {
+            if (isDelete) {
                 eventType = isFocusMismatch ? 'ai-delete' : 'delete';
             } else if (isReplace) {
                 if (isExternalCopy(change.text)) {
                     eventType = 'external-paste';
+                } else if (isMultiCharAtomic) {
+                    // Fast atomic replacement of multiple characters (Tab completion overwrite)
+                    eventType = 'ai-replace';
                 } else {
                     eventType = isFocusMismatch ? 'ai-replace' : 'replace';
                 }
             } else if (isInsert) {
-                if (change.text.length > 1) {
+                if (isMultiCharAtomic) {
                     if (isExternalCopy(change.text)) {
                         eventType = 'external-paste';
                     } else {
-                        eventType = isFocusMismatch ? 'ai-paste' : 'paste';
+                        // Fast atomic insertion of multiple characters (Inline AI / Tab completion)
+                        eventType = 'ai-paste';
                     }
                 } else {
                     eventType = isFocusMismatch ? 'ai-paste' : 'input';
@@ -95,15 +91,13 @@ export function createEditListener(): vscode.Disposable {
             // CONSTRUCT LOG ENTRY
             const logEntry: StandardEvent = {
                 time: formattedTime,
-                flightTime: String(timeDiff),
+                flightTime: String(timeDiff > 15000 ? 0 : timeDiff), // Prevent massive AFK numbers
                 eventType,
                 fileEdit: fileEditRaw,
                 fileView,
                 charsAdded: change.text.length
             };
 
-            // We check if the event involves adding text (paste, replace, or ai-paste) and log the character count for potential AI detection heuristics and understanding paste sizes. 
-            // This helps identify unusually large pastes that may indicate AI usage, especially when combined with focus mismatch.
             if (['paste', 'external-paste', 'ai-paste', 'replace', 'ai-replace'].includes(eventType)) {
                 logEntry.pasteCharCount = change.text.length;
             }

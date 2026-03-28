@@ -3947,7 +3947,7 @@
 
       updateAssignmentComparisonControls();
     }
-
+    // start renderAssignmentStudentSessions
     function renderAssignmentStudentSessions(payload) {
       const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
       const studentName = payload.studentName || "Student";
@@ -4370,6 +4370,8 @@
       // Initial Call
       renderList();
     }
+
+    // end renderAssignmentStudentSessions
     function parseLogText(text) {
       const lines = String(text || "")
         .trim()

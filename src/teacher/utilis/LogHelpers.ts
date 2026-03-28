@@ -33,14 +33,43 @@ export function parseLogTime(s: string): number {
 export async function fetchAndParseLog(password: string, uri: vscode.Uri) {
     const res = await storageManager.retrieveLogContentWithPassword(password, uri);
     let parsed: any = null;
+    
     try { 
+        // 1. Try standard single-object JSON (Local Files)
         parsed = JSON.parse(res.text); 
     } catch {
         try {
-            const s = res.text.indexOf('{');
-            const e = res.text.lastIndexOf('}');
-            if (s !== -1 && e > s) {parsed = JSON.parse(res.text.slice(s, e + 1));}
-        } catch (_) { parsed = null; }
+            // 2. Try JSON-Lines format (Cloud Database Files)
+            const lines = res.text.split('\n').filter((l: string) => l.trim());
+            if (lines.length > 0 && lines[0].trim().startsWith('{')) {
+                parsed = { events: [] };
+                for (const line of lines) {
+                    try {
+                        const parsedLine = JSON.parse(line);
+                        // Convert cloud columns to legacy fields if needed
+                        if (parsedLine.occurredAt && !parsedLine.time) {
+                            parsedLine.time = parsedLine.occurredAt;
+                        }
+                        if (parsedLine.sessionHeader) {
+                            parsedLine.sessionHeader = parsedLine.sessionHeader;
+                        } else {
+                            parsed.events.push(parsedLine);
+                        }
+                    } catch(err) {
+                        // Skip unparseable lines silently
+                    }
+                }
+            } else {
+                // 3. Absolute fallback for corrupted local files
+                const s = res.text.indexOf('{');
+                const e = res.text.lastIndexOf('}');
+                if (s !== -1 && e > s) {
+                    parsed = JSON.parse(res.text.slice(s, e + 1));
+                }
+            }
+        } catch (_) { 
+            parsed = null; 
+        }
     }
     return { content: res.text, parsed, partial: res.partial };
 }

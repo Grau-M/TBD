@@ -2,6 +2,21 @@ import * as vscode from 'vscode';
 import { storageManager } from '../../state';
 import { fetchAndParseLog, parseLogTime } from '../utilis/LogHelpers';
 
+// Populates the logs tab dropdown in cloud mode
+export async function handleGetLogs(panel: vscode.WebviewPanel) {
+    try {
+        const files = await storageManager.listLogFiles();
+        const formattedLogs = files.map((f: any) => ({
+            name: f.label,
+            path: f.uri.toString()
+        }));
+        panel.webview.postMessage({ command: 'logsLoaded', logs: formattedLogs });
+    } catch (error: any) {
+        console.error('[TBD Logger] Failed to fetch logs:', error);
+        panel.webview.postMessage({ command: 'logsLoaded', logs: [] });
+    }
+}
+
 export async function handleOpenLog(panel: vscode.WebviewPanel, password: string, filename: string) {
   const files = await storageManager.listLogFiles();
   const chosen = files.find(f => f.label === filename);

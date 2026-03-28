@@ -1,13 +1,15 @@
-<div id="class-tab" class="tab-pane">
-  <div class="header-row">
-    <h1>🏫 My Classes</h1>
-    <button id="btn-new-class" class="btn btn-primary">+ New Class</button>
-  </div>
+<div id="class-tab" class="tab-pane active">
+  <div class="header-row" style="flex-direction:column; align-items:flex-start; gap: 12px;">
+    <div style="display:flex; gap:8px; width:100%; flex-wrap:wrap; align-items:center;">
+      <h1 style="margin:0;">🏫 My Classes</h1>
+      <div style="flex:1"></div>
+      <button id="btn-new-class" class="btn btn-primary">+ New Class</button>
+    </div>
 
   <div
     id="class-form-card"
     class="card"
-    style="display: none; max-width: 600px"
+    style="display: none; width: 100%; max-width: 1400px; margin: 0 auto 20px;"
   >
     <h2>Create New Class</h2>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
@@ -34,13 +36,13 @@
       <div class="form-group" style="grid-column: 1 / -1">
         <label>Meeting Schedule</label>
         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px">
-          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-mon" /> Mon</label>
-          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-tue" /> Tue</label>
-          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-wed" /> Wed</label>
-          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-thu" /> Thu</label>
-          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-fri" /> Fri</label>
-          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-sat" /> Sat</label>
-          <label style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg)"><input type="checkbox" id="class-day-sun" /> Sun</label>
+          <label class="meeting-day-label"><input type="checkbox" id="class-day-mon" /> Mon</label>
+          <label class="meeting-day-label"><input type="checkbox" id="class-day-tue" /> Tue</label>
+          <label class="meeting-day-label"><input type="checkbox" id="class-day-wed" /> Wed</label>
+          <label class="meeting-day-label"><input type="checkbox" id="class-day-thu" /> Thu</label>
+          <label class="meeting-day-label"><input type="checkbox" id="class-day-fri" /> Fri</label>
+          <label class="meeting-day-label"><input type="checkbox" id="class-day-sat" /> Sat</label>
+          <label class="meeting-day-label"><input type="checkbox" id="class-day-sun" /> Sun</label>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
           <div>
@@ -168,16 +170,22 @@
     id="class-list-view"
     style="
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 16px;
-      margin-top: 4px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-auto-rows: 1fr;
+      gap: 20px;
+      margin: 20px auto 0;
+      max-width: 1400px;
+      justify-content: center;
+      align-items: stretch;
+      padding: 0 16px;
+      box-sizing: border-box;
     "
   ></div>
 
   <div
     id="class-detail-view"
     class="card"
-    style="display: none; margin-top: 16px"
+    style="display: none; margin-top: 16px; width: 100%; max-width: 1400px; margin-left: auto; margin-right: auto;"
   >
     <div
       style="
@@ -304,7 +312,7 @@
       <div id="class-assignments-list" style="margin-bottom: 20px"></div>
     </div>
   </div>
-<div id="assignment-work-view" class="card" style="display: none; padding: 16px; margin-top: 16px;">
+<div id="assignment-work-view" class="card" style="display: none; width: 100%; max-width: 1400px; margin: 16px auto 0; padding: 16px;">
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
       <div>
         <h3 id="assignment-work-title" style="margin: 0; font-size: 1.25rem;">Assignment Details</h3>
@@ -407,7 +415,7 @@
     <div
       id="assignment-student-view"
       class="card"
-      style="display: none; padding: 14px; margin-top: 16px"
+      style="display: none; width: 100%; max-width: 1400px; margin: 16px auto 0; padding: 14px"
     >
       <div
         style="
@@ -442,7 +450,7 @@
     <div
       id="assignment-session-log-view"
       class="card"
-      style="display: none; padding: 14px; margin-top: 16px"
+      style="display: none; width: 100%; max-width: 1400px; margin: 16px auto 0; padding: 14px"
     >
       <h3
         id="assignment-session-log-title"

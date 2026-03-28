@@ -27,6 +27,9 @@ import { openStudentSyncView } from './auth/studentSyncView';
 import { installNotificationToastTimeouts } from './notificationToasts';
 import { closeAllWebviews } from './webviewRegistry';
 
+// ========================= W A R N I N G   S U P P R E S S I O N   C O D E =========================
+// Development-time workaround: suppress Node/Electron warnings leaking into extension host logs.
+// Remove this section in production once the IDE dependency warnings are resolved upstream.
 const originalEmitWarning = process.emitWarning.bind(process);
 let runtimeWarningFilterInstalled = false;
 
@@ -45,7 +48,8 @@ function installRuntimeWarningFilter(): void {
             message.includes('The `punycode` module is deprecated') ||
             message.includes('SQLite is an experimental feature') ||
             message.includes('DEP0040') ||
-            message.includes('ExperimentalWarning')
+            message.includes('ExperimentalWarning') ||
+            message.includes('IAgentSessionsWorkspace')
         ) {
             return;
         }
@@ -55,6 +59,7 @@ function installRuntimeWarningFilter(): void {
 }
 
 installRuntimeWarningFilter();
+// ===============================================================================================
 
 const SESSION_ID_KEY = 'sessionId';
 const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
@@ -337,6 +342,11 @@ async function showStartupWorkspaceDebugPopup(
             ? `This students current workspace is already linked to assignment: ${matchedAssignment.assignmentName} | ${matchedAssignment.className}`
             : 'This students current workspace is not matched to any linked assignment.'
     ].join('\n');
+
+    // In debug mode, show this message for inspection. Keep non-verbose during CI and normal workflows.
+    if (process.env.CI !== 'true' && process.env.TBD_SHOW_WORKSPACE_DEBUG === 'true') {
+        void vscode.window.showInformationMessage(message, { modal: false });
+    }
 
     if (matchedAssignment) {
         state.activeCourse = state.activeCourse || matchedAssignment.className;
@@ -722,7 +732,7 @@ export interface ExtensionApi {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-    installRuntimeWarningFilter();
+    // NOTE: Do not suppress process warnings in production; show root cause.
     installNotificationToastTimeouts();
     console.log('TBD Logger: activate');
 

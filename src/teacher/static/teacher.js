@@ -19,7 +19,7 @@
     flagAiEvents: true,
   };
   let currentSettings = { ...defaults };
-  let currentTab = "dashboard";
+  let currentTab = "class";
   let requestedDashboardFile = null;
   let expandedFile = null;
   let currentLogFilename = null;
@@ -455,6 +455,36 @@
       { key: "sat", label: "Sat" },
       { key: "sun", label: "Sun" },
     ];
+
+    function initMeetingDayKeyboardSupport() {
+      meetingDays.forEach((day) => {
+        const checkbox = $("class-day-" + day.key);
+        if (!checkbox) {
+          return;
+        }
+
+        // Highlight the pill when the checkbox gets keyboard focus
+        const label = checkbox.closest("label");
+        checkbox.addEventListener("focus", () => {
+          if (label) {
+            label.classList.add("focused");
+          }
+        });
+        checkbox.addEventListener("blur", () => {
+          if (label) {
+            label.classList.remove("focused");
+          }
+        });
+
+        // Allow Enter key to toggle, and keep Space key default behavior.
+        checkbox.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            checkbox.checked = !checkbox.checked;
+          }
+        });
+      });
+    }
 
     function clearMeetingScheduleInputs() {
       meetingDays.forEach((day) => {
@@ -1714,6 +1744,7 @@
 
     installDatePickerBehavior();
     installTimePickerOnlyBehavior();
+    initMeetingDayKeyboardSupport();
 
     // Make post available globally for note handlers + student summary button
     window.postTeacherMessage = post;
@@ -1792,6 +1823,7 @@
         setTeacherConnectionState(false);
         return;
       }
+      hideAllClassSubViews();
       switchTab("dashboard");
       if (dashboardDataCache && dashboardDataCache.metrics) {
         UI.renderDashboard(dashboardDataCache, handlers);
@@ -1811,6 +1843,7 @@
         setTeacherConnectionState(false);
         return;
       }
+      hideAllClassSubViews();
       switchTab("logs");
       post("listLogs");
     });
@@ -1837,7 +1870,14 @@
       switchTab("class");
       loadClasses();
     });
-    $("btn-goto-logs")?.addEventListener("click", () => switchTab("logs"));
+    $("btn-goto-logs")?.addEventListener("click", () => {
+      if (!isTeacherApiOnline) {
+        setTeacherConnectionState(false);
+        return;
+      }
+      switchTab("logs");
+      post("listLogs");
+    });
 
     $("close-log")?.addEventListener("click", () => {
       if ($("logs-viewer-container")) {
@@ -2157,36 +2197,189 @@
           break;
         }
 
-        case "logNotes":
-          // Load notes into the event rows
-          const notesMap = {};
+        case "logNotes": {
+          console.log('[TBD Logger] logNotes payload received', msg.notes);
+          if (!Array.isArray(msg.notes) || msg.notes.length === 0) {
+            console.warn('[TBD Logger] no notes returned from server');
+          }
+          const notesByEvent = new Map();
           if (Array.isArray(msg.notes)) {
             msg.notes.forEach((note) => {
-              notesMap[note.timestamp] = note.text;
+              const id = Number(
+                note?.sessionEventId ??
+                note?.SessionEventId ??
+                note?.eventId ??
+                note?.EventId ??
+                note?.Id ??
+                note?.id ??
+                0,
+              );
+              if (!id) {
+                return;
+              }
+              notesByEvent.set(id, String(note?.text ?? note?.noteText ?? note?.note ?? ""));
             });
           }
-          // Populate notes into the textareas and update visual indicators
-          const eventRows = document.querySelectorAll(".event-notes-area");
-          eventRows.forEach((area) => {
-            const input = area.querySelector(".event-note-input");
-            const eventRow = area.closest(".event");
-            const timestamp = eventRow?.dataset.eventTime || "";
-            if (input && notesMap[timestamp]) {
-              input.value = notesMap[timestamp];
-              // Update the note button visual indicator
-              const noteBtn = eventRow?.querySelector(".btn-notes");
-              if (noteBtn) {
-                noteBtn.dataset.hasNote = "true";
-                const emptyIcon = noteBtn.querySelector(".note-icon-empty");
-                const filledIcon = noteBtn.querySelector(".note-icon-filled");
-                if (emptyIcon && filledIcon) {
-                  emptyIcon.style.display = "none";
-                  filledIcon.style.display = "inline";
-                }
+
+          window.__TBD_SESSION_NOTE_MAP__ = {};
+          notesByEvent.forEach((text, id) => {
+            window.__TBD_SESSION_NOTE_MAP__[id] = text;
+          });
+
+          const sessionRows = document.querySelectorAll(".session-log-row");
+          sessionRows.forEach((row) => {
+            const rowId = Number(row.dataset.sessionEventId || 0);
+            if (!rowId) {
+              return;
+            }
+
+            const noteToggle = row.querySelector('.session-note-toggle');
+            const noteArea = row.querySelector('.session-note-area');
+            const noteTextarea = row.querySelector('.session-note-text');
+
+            if (notesByEvent.has(rowId)) {
+              const noteText = notesByEvent.get(rowId);
+              if (noteToggle) {
+                noteToggle.style.filter = 'none';
+                noteToggle.style.opacity = '1';
+              }
+              if (noteTextarea) {
+                noteTextarea.value = noteText || '';
+              }
+              if (noteArea) {
+                noteArea.style.display = 'none';
               }
             }
           });
+
+          const eventRows = document.querySelectorAll('.event');
+          eventRows.forEach((row) => {
+            const rowId = Number(row.dataset.sessionEventId || 0);
+            if (!rowId) {
+              return;
+            }
+
+            const noteBtn = row.querySelector('.btn-notes');
+            const noteArea = row.querySelector('.event-notes-area');
+            const noteTextarea = row.querySelector('.event-note-input');
+            const emptyIcon = row.querySelector('.note-icon-empty');
+            const filledIcon = row.querySelector('.note-icon-filled');
+
+            if (notesByEvent.has(rowId)) {
+              const noteText = notesByEvent.get(rowId);
+
+              if (noteBtn) {
+                noteBtn.dataset.hasNote = 'true';
+                noteBtn.style.filter = 'none';
+                noteBtn.style.opacity = '1';
+              }
+
+              if (emptyIcon && filledIcon) {
+                emptyIcon.style.display = 'none';
+                filledIcon.style.display = 'inline';
+              }
+
+              if (noteTextarea) {
+                noteTextarea.value = noteText || '';
+              }
+
+              if (noteArea) {
+                noteArea.style.display = 'none';
+              }
+            }
+          });
+
+          // Popup debug: list incoming notes and attached log row detail
+          const noteDetails = [];
+          const notesMeta = msg.notesMeta || null;
+          // Prefer raw API notes list to preserve all fields (like NoteText, Id, etc.)
+          const rawNotes = Array.isArray(notesMeta?.notesList)
+            ? notesMeta.notesList
+            : Array.isArray(msg.notes)
+            ? msg.notes
+            : [];
+
+          if (notesMeta) {
+            noteDetails.push(`sessionId = ${notesMeta.sessionId || 'unknown'}`);
+            noteDetails.push(`teacherAuthUserId = ${notesMeta.teacherAuthUserId || 'unknown'}`);
+            noteDetails.push(`fetched notes = ${notesMeta.count || 0}`);
+            noteDetails.push('');
+          }
+
+          if (rawNotes.length > 0) {
+            rawNotes.forEach((note, index) => {
+              const noteId = Number(
+                note?.sessionEventId ??
+                note?.SessionEventId ??
+                note?.eventId ??
+                note?.EventId ??
+                note?.Id ??
+                note?.id ??
+                0,
+              );
+              const noteText = String(note?.noteText ?? note?.NoteText ?? note?.text ?? note?.note ?? '');
+              const noteSessionId = Number(note?.sessionId ?? note?.SessionId ?? notesMeta?.sessionId ?? 0) || notesMeta?.sessionId || 0;
+              const noteTeacherId = Number(note?.teacherAuthUserId ?? note?.TeacherAuthUserId ?? notesMeta?.teacherAuthUserId ?? 0) || notesMeta?.teacherAuthUserId || 0;
+
+              const row = noteId
+                ? document.querySelector(`.session-log-row[data-session-event-id="${noteId}"]`) ||
+                  document.querySelector(`.event[data-session-event-id="${noteId}"]`)
+                : null;
+
+              const rowMetaText = row?.querySelector('.meta')?.textContent?.trim() || '';
+              const rowNumberMatch = rowMetaText.match(/Row\s*(\d+)/i);
+              const rowNumber = rowNumberMatch ? rowNumberMatch[1] : '(row # unknown)';
+
+              if (row) {
+                // Persist API note id so updates can use PUT when saving.
+                const apiNoteId = Number(note?.Id ?? note?.id ?? 0);
+                if (apiNoteId > 0) {
+                  row.dataset.noteId = String(apiNoteId);
+                }
+
+                // Insert a visible note text indicator into the row body
+                let noteLabel = row.querySelector('.loaded-note-text');
+                if (!noteLabel) {
+                  noteLabel = document.createElement('div');
+                  noteLabel.className = 'loaded-note-text';
+                  noteLabel.style.cssText = 'margin-top:6px;padding:6px;border-left:3px solid #4ade80;background:rgba(34,197,94,0.1);color:#9ae6b4;font-size:0.85rem;border-radius:4px;';
+                  row.appendChild(noteLabel);
+                }
+                noteLabel.textContent = `Teacher note: ${noteText}`;
+
+                const noteBtn = row.querySelector('.session-note-toggle') || row.querySelector('.btn-notes');
+                if (noteBtn) {
+                  noteBtn.style.filter = 'none';
+                  noteBtn.style.opacity = '1';
+                  noteBtn.dataset.hasNote = 'true';
+                  const emptyIcon = noteBtn.querySelector('.note-icon-empty');
+                  const filledIcon = noteBtn.querySelector('.note-icon-filled');
+                  if (emptyIcon && filledIcon) {
+                    emptyIcon.style.display = 'none';
+                    filledIcon.style.display = 'inline';
+                  }
+                }
+
+                const noteTextarea = row.querySelector('.session-note-text') || row.querySelector('.event-note-input');
+                if (noteTextarea) {
+                  noteTextarea.value = noteText;
+                }
+                const noteArea = row.querySelector('.session-note-area') || row.querySelector('.event-notes-area');
+                if (noteArea) {
+                  noteArea.style.display = 'none';
+                }
+              }
+
+              if (noteId && notesByEvent.has(noteId)) {
+                notesByEvent.set(noteId, noteText); // ensure mapping text from loaded note
+              }
+            });
+          } else {
+            // no notes
+          }
+
           break;
+        }
 
         case "rawData":
           if ($("logs-viewer-container")) {
@@ -2641,9 +2834,23 @@
         }
 
         case "classSessionLogData": {
+          if (msg.data && msg.data.filename) {
+            window.currentLogFilename = msg.data.filename;
+          }
           renderAssignmentSessionLog(msg.data || {});
           if (status) {
             status.textContent = "Session log loaded.";
+          }
+
+          // Load notes for this session id mapping. Prefer explicit sessionId when known.
+          if (window.currentLogFilename) {
+            const match = String(window.currentLogFilename).match(/Session(\d+)/i);
+            const parsedSessionId = match ? Number(match[1]) : 0;
+            if (Number.isFinite(parsedSessionId) && parsedSessionId > 0) {
+              post("loadLogNotes", { sessionId: parsedSessionId });
+            } else {
+              post("loadLogNotes", { filename: window.currentLogFilename });
+            }
           }
           break;
         }
@@ -2652,6 +2859,8 @@
 
     // --- CLASS TAB LOGIC ---
     function loadClasses() {
+      hideAllClassSubViews();
+
       const listView = $("class-list-view");
       const emptyEl = $("class-list-empty");
       const loadingEl = $("class-list-loading");
@@ -3105,6 +3314,37 @@
           : "none";
     }
 
+    function hideAllClassSubViews() {
+      [
+        "class-detail-view",
+        "assignment-work-view",
+        "assignment-student-view",
+        "assignment-session-log-view",
+        "assignment-compare-view",
+        "class-assignments-list",
+        "class-assignments-empty",
+      ].forEach((id) => {
+        const el = $(id);
+        if (el) {
+          el.style.display = "none";
+        }
+      });
+
+      const listView = $("class-list-view");
+      if (listView) {
+        listView.style.display = "grid";
+      }
+      const emptyEl = $("class-list-empty");
+      if (emptyEl) {
+        emptyEl.style.display = "none";
+      }
+
+      setAssignmentFormVisible(false);
+      clearAssignmentComparisonSelection();
+      updateTopClassActionButton();
+      updateClassTabHeading();
+    }
+
     function isInClassFlowView() {
       return (
         $("class-detail-view")?.style.display === "block" ||
@@ -3207,23 +3447,25 @@
 
       classesToRender.forEach((cls) => {
         const card = document.createElement("div");
-        card.className = "card";
-        card.style.cssText = "display:flex; flex-direction:column;";
+        card.className = "card class-card";
+        card.style.cssText = "height:100%; min-height:280px;";
         card.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <div class="class-row">
             <div>
-              <div style="font-weight:700; font-size:1rem;">${cls.courseName}</div>
-              <div class="meta">${cls.courseCode} &bull; ${cls.teacherName}</div>
+              <div style="font-weight:700; font-size:1.1rem;">${cls.courseName}</div>
+              <div class="meta" style="margin-top: 2px;">${cls.courseCode} • ${cls.teacherName}</div>
             </div>
             <div style="background:var(--accent); color:white; padding:4px 12px; border-radius:6px; font-size:0.8rem; font-weight:700; white-space:nowrap; letter-spacing:0.05em;">${cls.joinCode}</div>
           </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:0.88rem;">
-            <div><span style="color:var(--muted);">Meeting:</span> ${formatMeetingTimeDisplay(cls.meetingTime)}</div>
-            <div><span style="color:var(--muted);">Start:</span> ${formatClassDateDisplay(cls.startDate)}</div>
-            <div></div>
-            <div><span style="color:var(--muted);">End:</span> ${formatClassDateDisplay(cls.endDate)}</div>
+          <div class="class-meta-grid">
+            <div class="label">Meeting</div>
+            <div>${formatMeetingTimeDisplay(cls.meetingTime)}</div>
+            <div class="label">Start</div>
+            <div>${formatClassDateDisplay(cls.startDate)}</div>
+            <div class="label">End</div>
+            <div>${formatClassDateDisplay(cls.endDate)}</div>
           </div>
-          <div style="display:flex; gap:8px; margin-top:2px;">
+          <div style="display:flex; gap:8px; margin-top:12px;">
             <button class="btn btn-primary class-open-btn" style="padding:6px 10px;">Open Class</button>
             <button class="btn btn-secondary class-edit-btn" style="padding:6px 10px;">Edit</button>
           </div>
@@ -3928,7 +4170,9 @@
       };
 
       const formatSessionDate = (value) => {
-        if (!value) return "Unknown time";
+        if (!value) {
+          return "Unknown time";
+        }
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime())
           ? String(value)
@@ -3948,14 +4192,57 @@
       const list = $("assignment-student-sessions-list");
       const logView = $("assignment-session-log-view");
       const workView = $("assignment-work-view");
+      const sessionNotesByEventId = new Map();
 
       if (!studentView || !title || !empty || !list) {
         return;
       }
 
+      const sessionNotes = new Map();
+      if (window.__TBD_SESSION_NOTE_MAP__) {
+        for (const [key, value] of Object.entries(window.__TBD_SESSION_NOTE_MAP__)) {
+          const id = Number(key);
+          if (Number.isFinite(id) && id > 0) {
+            sessionNotes.set(id, String(value));
+          }
+        }
+      }
+
+      // Load all notes for this student's session list from API / DB.
+      // We prefer full teacher-scope fetch (via API auth user) over session-id mapping,
+      // since stored notes are by event/filename and we may not map session ids exactly.
+      console.debug('[TBD Logger] request loadLogNotes from assignment student sessions', {
+        studentName,
+        sessionCount: sessions.length,
+      });
+      // Prefer loading by sessionId from the URLs available in the session list.
+      const availableSessionIds = new Set();
+      sessions.forEach((row) => {
+        const rowSessionId = Number(
+          normalizeSessionValue(row, ['SessionId', 'sessionId', 'id', 'Id'], 0) || 0,
+        );
+        if (Number.isFinite(rowSessionId) && rowSessionId > 0) {
+          availableSessionIds.add(rowSessionId);
+        }
+      });
+
+      let currentSessionId = 0;
+      if (availableSessionIds.size > 0) {
+        currentSessionId = Number(Array.from(availableSessionIds)[0]);
+        console.debug('[TBD Logger] requesting loadLogNotes by sessionId', currentSessionId);
+        post('loadLogNotes', { sessionId: currentSessionId });
+      } else {
+        console.debug('[TBD Logger] requesting loadLogNotes by teacher fallback');
+        post('loadLogNotes', { filename: '' });
+      }
+
       // Hide the parent view (student list)
-      if (workView) workView.style.display = "none";
-      if (logView) logView.style.display = "none";
+      if (workView) {
+        workView.style.display = "none";
+      }
+      if (logView) {
+        logView.style.display = "none";
+      }
 
       studentView.style.display = "block";
       title.textContent = `${studentName} - Session Logs`;
@@ -3969,15 +4256,25 @@
 
       sessions.forEach((s, index) => {
         const row = document.createElement("div");
-        row.className = "card";
+        row.className = "card session-log-row";
         row.style.cssText =
           "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
 
-        const sessionId = normalizeSessionValue(
+        const rawSessionId = normalizeSessionValue(
           s,
           ["SessionId", "sessionId", "id", "Id"],
-          "Unknown",
+          "0",
         );
+        const parsedSessionId = Number(rawSessionId) > 0 ? Number(rawSessionId) : currentSessionId;
+        const sessionId = parsedSessionId || currentSessionId || 0;
+        const sessionEventId = Number(
+          normalizeSessionValue(
+            s,
+            ["Id", "SessionEventId", "sessionEventId", "eventId", "EventId"],
+            0,
+          ) || 0,
+        );
+
         const occurredAt = normalizeSessionValue(
           s,
           [
@@ -4039,34 +4336,41 @@
 
         // --- Build Body Variables ---
         const items = [];
-        if (eventData.file)
+        if (eventData.file) {
           items.push(
             `<span style="color: var(--muted)">File:</span> <strong>${eventData.file}</strong>`,
           );
-        if (eventData.fileView && eventData.fileView !== eventData.file)
+        }
+        if (eventData.fileView && eventData.fileView !== eventData.file) {
           items.push(
             `<span style="color: var(--muted)">View:</span> <strong>${eventData.fileView}</strong>`,
           );
-        if (eventData.charsAdded !== undefined)
+        }
+        if (eventData.charsAdded !== undefined) {
           items.push(
             `<span style="color: var(--muted)">Chars Added:</span> <strong>${eventData.charsAdded}</strong>`,
           );
-        if (eventData.pasteCharCount !== undefined)
+        }
+        if (eventData.pasteCharCount !== undefined) {
           items.push(
             `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${eventData.pasteCharCount}</strong>`,
           );
-        if (eventData.flightTime !== undefined)
+        }
+        if (eventData.flightTime !== undefined) {
           items.push(
             `<span style="color: var(--muted)">Flight Time:</span> <strong>${eventData.flightTime}ms</strong>`,
           );
-        if (eventData.focused !== undefined)
+        }
+        if (eventData.focused !== undefined) {
           items.push(
             `<span style="color: var(--muted)">Window Focused:</span> <strong>${eventData.focused}</strong>`,
           );
-        if (eventData.workspaceName)
+        }
+        if (eventData.workspaceName) {
           items.push(
             `<span style="color: var(--muted)">Workspace:</span> <strong>${eventData.workspaceName}</strong>`,
           );
+        }
 
         let noteHtml = "";
         if (eventData.possibleAiDetection) {
@@ -4088,13 +4392,136 @@
               <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${eventType}</span>
               <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${sessionId}</strong> &bull; ${formatSessionDate(occurredAt)}</span>
             </div>
-            <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${index + 1}</div>
+            <div style="display:flex; align-items:center; gap: 8px;">
+              <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${index + 1}</div>
+              <button type="button" class="btn btn-secondary session-note-toggle" style="height:28px; min-width:28px; width:28px; padding:0; font-size:0.85rem; display:flex; align-items:center; justify-content:center; filter: grayscale(100%) opacity(0.5);">✍️</button>
+            </div>
           </div>
           <div style="font-size: 0.9rem; line-height: 1.5; color: var(--fg);">
             ${bodyHtml}
             ${noteHtml}
           </div>
+          <div class="session-note-area" style="display:none; margin-top:10px;">
+            <textarea class="session-note-text" placeholder="Teacher note..." style="width:100%; min-height:70px; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--fg);"></textarea>
+            <div style="display:flex; justify-content:flex-end; margin-top:6px; gap:8px;">
+              <button type="button" class="btn btn-secondary session-note-cancel" style="padding:6px 12px;">Cancel</button>
+              <button type="button" class="btn btn-primary session-note-save" style="padding:6px 12px;">Save Note</button>
+            </div>
+          </div>
         `;
+
+        if (sessionEventId) {
+          row.dataset.sessionEventId = String(sessionEventId);
+          console.debug('[TBD Logger] attach sessionEventId to row', { sessionEventId, sessionId });
+        }
+
+        if (sessionId && Number.isFinite(Number(sessionId)) && Number(sessionId) > 0) {
+          row.dataset.sessionId = String(sessionId);
+        } else if (currentSessionId && Number.isFinite(Number(currentSessionId)) && Number(currentSessionId) > 0) {
+          row.dataset.sessionId = String(currentSessionId);
+        }
+
+        row.addEventListener('click', (evt) => {
+          // Ignore button clicks inside row, this is for row selection intent.
+          if (evt.target instanceof HTMLElement && evt.target.closest('button')) {
+            return;
+          }
+
+          const rowSessionId = Number(row.dataset.sessionId || 0);
+          const rowSessionEventId = Number(row.dataset.sessionEventId || 0);
+          if (rowSessionId > 0) {
+            console.debug('[TBD Logger] row selected -> load notes', { rowSessionId, rowSessionEventId });
+            post('loadLogNotes', { sessionId: rowSessionId, sessionEventId: rowSessionEventId });
+          }
+        });
+
+        const noteToggle = row.querySelector('.session-note-toggle');
+        const noteArea = row.querySelector('.session-note-area');
+        const noteTextarea = row.querySelector('.session-note-text');
+        const noteSave = row.querySelector('.session-note-save');
+        const noteCancel = row.querySelector('.session-note-cancel');
+
+        if (sessionEventId && sessionNotes.has(sessionEventId)) {
+          const existingText = sessionNotes.get(sessionEventId);
+          console.debug('[TBD Logger] preload note for row', { sessionEventId, existingText });
+          if (noteToggle) {
+            noteToggle.style.filter = 'none';
+            noteToggle.style.opacity = '1';
+          }
+          if (noteTextarea) {
+            noteTextarea.value = existingText;
+          }
+        }
+
+        noteToggle?.addEventListener('click', () => {
+          if (!noteArea) {
+            return;
+          }
+          const isVisible = noteArea.style.display !== 'none';
+          noteArea.style.display = isVisible ? 'none' : 'block';
+          if (!isVisible) {
+            noteTextarea?.focus();
+          }
+        });
+
+        noteCancel?.addEventListener('click', () => {
+          if (!noteArea) {
+            return;
+          }
+          if (noteTextarea) {
+            noteTextarea.value = '';
+          }
+          noteArea.style.display = 'none';
+        });
+
+        noteSave?.addEventListener('click', () => {
+          if (!noteArea || !noteTextarea || !noteToggle) {
+            return;
+          }
+          const text = String(noteTextarea.value || '').trim();
+          if (!text) {
+            alert('Please type a note before saving.');
+            return;
+          }
+
+          const targetEventId = Number(row.dataset.sessionEventId || 0);
+          const rowSessionId = Number(row.dataset.sessionId || currentSessionId || 0);
+          const rowNoteId = Number(row.dataset.noteId || 0);
+          const payloadNote = { text };
+          const effectiveSessionId = rowSessionId > 0 ? rowSessionId : Number(currentSessionId || 0);
+
+          if (targetEventId) { payloadNote.sessionEventId = targetEventId; }
+          if (effectiveSessionId > 0) { payloadNote.sessionId = effectiveSessionId; }
+          if (rowNoteId > 0) { payloadNote.id = rowNoteId; }
+
+          if (window.postTeacherMessage) {
+            window.postTeacherMessage('saveLogNotes', {
+              filename: window.currentLogFilename || '',
+              notes: [payloadNote],
+            });
+          }
+
+          // keep quick UI state while async roundtrip settles
+          window.__TBD_SESSION_NOTE_MAP__ = window.__TBD_SESSION_NOTE_MAP__ || {};
+          if (targetEventId) {
+            window.__TBD_SESSION_NOTE_MAP__[targetEventId] = text;
+          }
+
+          // immediate visual note indicator in row
+          let noteLabel = row.querySelector('.loaded-note-text');
+          if (!noteLabel) {
+            noteLabel = document.createElement('div');
+            noteLabel.className = 'loaded-note-text';
+            noteLabel.style.cssText = 'margin-top:6px;padding:6px;border-left:3px solid #4ade80;background:rgba(34,197,94,0.1);color:#9ae6b4;font-size:0.85rem;border-radius:4px;';
+            row.appendChild(noteLabel);
+          }
+          noteLabel.textContent = `Teacher note: ${text}`;
+
+          noteArea.style.display = 'none';
+          noteToggle.dataset.hasNote = 'true';
+          noteToggle.style.filter = 'none';
+          noteToggle.style.opacity = '1';
+        });
 
         list.appendChild(row);
       });
@@ -4107,35 +4534,112 @@
       const events = [];
       let currentEvent = null;
 
+      const tryPushCurrent = () => {
+        if (currentEvent) {
+          events.push(currentEvent);
+          currentEvent = null;
+        }
+      };
+
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (!line) continue;
+        if (!line) {
+          continue;
+        }
+
+        // parse line like "SESSION_START Session 3 - Mar 22, 2026, 05:50:05 PM"
+        const sessionLineMatch = line.match(/^([A-Z_]+)?\s*Session\s+(\d+)\s*-\s*(.*)$/i);
+        if (sessionLineMatch) {
+          tryPushCurrent();
+          const currentSession = sessionLineMatch[2] || "";
+          const rawTs = sessionLineMatch[3] || "";
+          currentEvent = {
+            session: currentSession,
+            timestamp: rawTs,
+            eventType: (sessionLineMatch[1] || "SESSION").trim(),
+            rawJson: "",
+            data: {},
+          };
+          continue;
+        }
 
         if (line.startsWith("Session ")) {
-          if (currentEvent) events.push(currentEvent);
-          currentEvent = { session: line.replace("Session ", ""), rawJson: "" };
-        } else if (currentEvent && line.includes(" • ")) {
+          tryPushCurrent();
+          currentEvent = {
+            session: line.replace("Session ", ""),
+            rawJson: "",
+            data: {},
+          };
+          continue;
+        }
+
+        if (currentEvent && line.includes(" • ")) {
           const parts = line.split(" • ");
           currentEvent.timestamp = parts[0];
           currentEvent.eventType = parts[1];
-        } else if (
-          currentEvent &&
-          line.startsWith("StudentWorkspaceAssignmentId:")
-        ) {
-          currentEvent.swaId = line.replace(
-            "StudentWorkspaceAssignmentId: ",
-            "",
-          );
-        } else if (currentEvent && line.startsWith("Row ")) {
+          continue;
+        }
+
+        if (currentEvent && line.startsWith("StudentWorkspaceAssignmentId:")) {
+          currentEvent.swaId = line.replace("StudentWorkspaceAssignmentId: ", "");
+          continue;
+        }
+
+        if (currentEvent && line.startsWith("Row ")) {
           currentEvent.row = line.replace("Row ", "");
-        } else if (currentEvent && line.startsWith("{")) {
-          currentEvent.rawJson = line;
+          continue;
+        }
+
+        // Support JSON event line format
+        if (line.startsWith("{")) {
+          let parsed = null;
           try {
-            currentEvent.data = JSON.parse(line);
-          } catch (e) {}
+            parsed = JSON.parse(line);
+          } catch (e) {
+            // keep raw
+          }
+
+          if (parsed) {
+            if (!currentEvent) {
+              currentEvent = { session: "", rawJson: line, data: parsed };
+            } else {
+              currentEvent.rawJson = line;
+              currentEvent.data = parsed;
+            }
+
+            const maybeId = Number(
+              parsed?.SessionEventId ??
+              parsed?.sessionEventId ??
+              parsed?.eventId ??
+              parsed?.EventId ??
+              parsed?.id ??
+              parsed?.Id ??
+              0,
+            );
+            if (Number.isFinite(maybeId) && maybeId > 0) {
+              currentEvent.sessionEventId = maybeId;
+            }
+
+            if (!currentEvent.eventType) {
+              currentEvent.eventType =
+                parsed?.eventType || parsed?.EventType || "Unknown";
+            }
+            if (!currentEvent.timestamp) {
+              currentEvent.timestamp = parsed?.time || parsed?.OccurredAt || parsed?.occurredAt || "";
+            }
+            continue;
+          }
+        }
+
+        // if no known capture, append to rawJson of current event
+        if (currentEvent) {
+          currentEvent.rawJson = currentEvent.rawJson
+            ? `${currentEvent.rawJson}\n${line}`
+            : line;
         }
       }
-      if (currentEvent) events.push(currentEvent);
+
+      tryPushCurrent();
       return events;
     }
 
@@ -4234,34 +4738,41 @@
 
           if (evt.data) {
             const items = [];
-            if (evt.data.file)
+            if (evt.data.file) {
               items.push(
                 `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
               );
-            if (evt.data.fileView && evt.data.fileView !== evt.data.file)
+            }
+            if (evt.data.fileView && evt.data.fileView !== evt.data.file) {
               items.push(
                 `<span style="color: var(--muted)">View:</span> <strong>${evt.data.fileView}</strong>`,
               );
-            if (evt.data.charsAdded !== undefined)
+            }
+            if (evt.data.charsAdded !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
               );
-            if (evt.data.pasteCharCount !== undefined)
+            }
+            if (evt.data.pasteCharCount !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
               );
-            if (evt.data.flightTime !== undefined)
+            }
+            if (evt.data.flightTime !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
               );
-            if (evt.data.focused !== undefined)
+            }
+            if (evt.data.focused !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
               );
-            if (evt.data.workspaceName)
+            }
+            if (evt.data.workspaceName) {
               items.push(
                 `<span style="color: var(--muted)">Workspace:</span> <strong>${evt.data.workspaceName}</strong>`,
               );
+            }
 
             // Highlight AI or Interruption Notes
             if (evt.data.possibleAiDetection) {
@@ -4352,17 +4863,10 @@
     });
 
     $("btn-back-to-classes")?.addEventListener("click", () => {
-      if ($("class-detail-view")) {
-        $("class-detail-view").style.display = "none";
-      }
-      if ($("class-list-view")) {
-        $("class-list-view").style.display = "grid";
-      }
       currentClassDetailTab = "students";
       currentClassDisplayName = "";
-      setAssignmentFormVisible(false);
+      hideAllClassSubViews();
       updateTopClassActionButton();
-      updateClassTabHeading();
       updateClassPrimaryActionButton();
       loadClasses();
     });
@@ -4582,11 +5086,9 @@
       showConnectionLostState();
     } else {
       setTeacherConnectionState(true);
-      switchTab("dashboard");
-      showDashboardLoading();
+      switchTab("class");
+      loadClasses();
       post("clientReady");
-      post("analyzeLogs");
-      post("listLogs");
       post("getSettings");
     }
   });

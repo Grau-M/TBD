@@ -958,6 +958,7 @@
             renderSelectedClass();
           }
           showClassesSuccess("Workspace linked to assignment successfully.");
+          post('refreshStatusBar');
           break;
         }
         case "studentClassJoinResult": {

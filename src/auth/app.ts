@@ -4,6 +4,7 @@ import { WorkspaceAuthSession } from '../auth';
 import { getAuthHtml } from './getHtml';
 import { ApiHttpError } from '../api';
 import { getThemePreference } from '../themePreference';
+import { getUserFriendlyErrorMessage } from '../utils';
 import { registerWebviewPanel } from '../webviewRegistry';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
@@ -299,14 +300,14 @@ export async function openAuthView(
                     }
                 }
             } catch (e: any) {
-                // If it's an API HTTP error (like 500), show the response body for debugging
-                let errorMessage = String(e?.message || e);
+                let errorMessage = getUserFriendlyErrorMessage(e, 'Authentication failed. Please try again.');
+
                 if (e instanceof ApiHttpError) {
-                    const registrationEmail = String(message.email || '').trim().toLowerCase();
-                    errorMessage = message.command === 'register' && registrationEmail
-                        ? `Registration failed for ${registrationEmail}: ${e.message}`
-                        : e.message;
                     console.error('Auth API error:', { status: e.status, body: e.responseBody });
+
+                    if (message.command === 'register' && e.status === 409) {
+                        errorMessage = 'An account with that email already exists. Please sign in instead.';
+                    }
                 }
 
                 // 👉 THE FIX: Intercept the raw 401 API error and make it user-friendly

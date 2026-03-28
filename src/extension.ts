@@ -14,7 +14,7 @@ import { createSaveListener } from './listeners/saveListener';
 import { startUiTimer } from './uiTimer';
 import { flushBuffer } from './flush';
 import { storageManager, state, CONSTANTS } from './state';
-import { isIgnoredPath, formatTimestamp } from './utils';
+import { isIgnoredPath, formatTimestamp, getUserFriendlyErrorMessage } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
 import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess, WorkspaceAuthSession } from './auth';
@@ -27,6 +27,9 @@ import { openStudentSyncView } from './auth/studentSyncView';
 import { installNotificationToastTimeouts } from './notificationToasts';
 import { closeAllWebviews } from './webviewRegistry';
 
+// ========================= W A R N I N G   S U P P R E S S I O N   C O D E =========================
+// Development-time workaround: suppress Node/Electron warnings leaking into extension host logs.
+// Remove this section in production once the IDE dependency warnings are resolved upstream.
 const originalEmitWarning = process.emitWarning.bind(process);
 let runtimeWarningFilterInstalled = false;
 
@@ -45,7 +48,8 @@ function installRuntimeWarningFilter(): void {
             message.includes('The `punycode` module is deprecated') ||
             message.includes('SQLite is an experimental feature') ||
             message.includes('DEP0040') ||
-            message.includes('ExperimentalWarning')
+            message.includes('ExperimentalWarning') ||
+            message.includes('IAgentSessionsWorkspace')
         ) {
             return;
         }
@@ -55,6 +59,7 @@ function installRuntimeWarningFilter(): void {
 }
 
 installRuntimeWarningFilter();
+// ===============================================================================================
 
 const SESSION_ID_KEY = 'sessionId';
 const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
@@ -338,6 +343,11 @@ async function showStartupWorkspaceDebugPopup(
             : 'This students current workspace is not matched to any linked assignment.'
     ].join('\n');
 
+    // In debug mode, show this message for inspection. Keep non-verbose during CI and normal workflows.
+    if (process.env.CI !== 'true' && process.env.TBD_SHOW_WORKSPACE_DEBUG === 'true') {
+        void vscode.window.showInformationMessage(message, { modal: false });
+    }
+
     if (matchedAssignment) {
         state.activeCourse = state.activeCourse || matchedAssignment.className;
         state.activeAssignment = state.activeAssignment || matchedAssignment.assignmentName;
@@ -552,7 +562,7 @@ async function reconcileStudentWorkspaceState(
         await updateAuthStatusBar(context);
         updateTrackingUI(session.role);
 
-        await openStudentSyncView(context);
+        // don't automatically open sync view on login in subsequent sessions
         return session;
     }
 
@@ -722,7 +732,7 @@ export interface ExtensionApi {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-    installRuntimeWarningFilter();
+    // NOTE: Do not suppress process warnings in production; show root cause.
     installNotificationToastTimeouts();
     console.log('TBD Logger: activate');
 
@@ -1143,7 +1153,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
             vscode.window.showInformationMessage('Logs decrypted successfully.');
 
         } catch (err) {
-            vscode.window.showErrorMessage(`Access Denied: ${err}`);
+            const message = getUserFriendlyErrorMessage(err, 'Access denied. Please sign in and try again.');
+            vscode.window.showErrorMessage(`Access Denied: ${message}`);
         }
     };
     context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.openLogs', openLogs));
@@ -1163,7 +1174,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
             const doc = await vscode.workspace.openTextDocument({ content: content, language: 'json' });
             await vscode.window.showTextDocument(doc, { preview: false });
         } catch (err) {
-            vscode.window.showErrorMessage(`Unable to access deletion activity log: ${err}`);
+            const message = getUserFriendlyErrorMessage(err, 'Unable to access deletion activity log. Please try again.');
+            vscode.window.showErrorMessage(`Unable to access deletion activity log: ${message}`);
         }
     };
     context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.showHiddenDeletions', showHidden));
@@ -1220,6 +1232,12 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
     }));
 
     updateAuthStatusBar(context);
+
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.refreshStatusBar', async () => {
+        await updateDbStatusBar(context);
+        await updateAuthStatusBar(context);
+        updateTrackingUI(getWorkspaceAuthSession(context)?.role || 'None');
+    }));
 
     context.subscriptions.push(createEditListener());
     context.subscriptions.push(createFocusListener());
@@ -1340,9 +1358,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
             const result = await apiGet('/health');
             vscode.window.showInformationMessage(`API ONLINE\nStatus: ${result?.status ?? 'unknown'}`);
         } catch (err: any) {
-            vscode.window.showErrorMessage(
-                `API health check failed!\nError: ${err?.message || String(err)}`
-            );
+            const message = getUserFriendlyErrorMessage(err, 'API health check failed. Please try again later.');
+            vscode.window.showErrorMessage(`API health check failed. ${message}`);
         }
         void updateDbStatusBar(context);
     }));
@@ -1352,8 +1369,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
             const result = await apiGet('/health');
             vscode.window.showInformationMessage(`API status: ${result.status}`);
         } catch (error: any) {
-            const message = error?.message || String(error);
-            vscode.window.showErrorMessage(`API test failed: ${message}`);
+            const message = getUserFriendlyErrorMessage(error, 'API test failed. Please try again later.');
+            vscode.window.showErrorMessage(`API test failed. ${message}`);
         }
     }));
 

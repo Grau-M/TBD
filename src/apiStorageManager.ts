@@ -11,6 +11,15 @@ interface ApiSyncStatus {
     lastConflictAt: string | null;
 }
 
+export interface LoadLogNotesMeta {
+    teacherAuthUserId: number;
+    sessionId: number;
+    sessionEventId: number;
+    filename: string;
+    count: number;
+    notesList: any[];
+}
+
 export type UserRole = 'Student' | 'Teacher' | 'Admin';
 
 interface StudentWorkspaceLinkRecord {
@@ -33,6 +42,8 @@ export class ApiStorageManager {
         lastError: null,
         lastConflictAt: null
     };
+
+    public lastLoadLogNotesMeta: LoadLogNotesMeta | null = null;
 
     // --- ENCRYPTED OFFLINE QUEUE CONFIGURATION ---
     private readonly SECRET_PASSPHRASE = 'password';
@@ -66,7 +77,9 @@ export class ApiStorageManager {
 
     private decrypt(buffer: Uint8Array): string {
         const buf = Buffer.from(buffer);
-        if (buf.length < this.IV_LENGTH) return '[]';
+        if (buf.length < this.IV_LENGTH) {
+            return '[]';
+        }
         const iv = buf.subarray(0, this.IV_LENGTH);
         const content = buf.subarray(this.IV_LENGTH);
         const decipher = crypto.createDecipheriv(this.ALGORITHM, this.KEY, iv);
@@ -76,7 +89,9 @@ export class ApiStorageManager {
 
     private async readQueue(): Promise<any[]> {
         const uri = this.getQueueUri();
-        if (!uri) return [];
+        if (!uri) {
+            return [];
+        }
         try {
             const data = await vscode.workspace.fs.readFile(uri);
             const jsonStr = this.decrypt(data);
@@ -89,7 +104,9 @@ export class ApiStorageManager {
 
    private async writeQueue(events: any[]): Promise<void> {
         const uri = this.getQueueUri();
-        if (!uri) return;
+        if (!uri) {
+            return;
+        }
         
         try {
             // Ensure the .vscode/logs directory exists before attempting to write
@@ -101,7 +118,11 @@ export class ApiStorageManager {
 
         if (events.length === 0) {
             // Clear file if the queue successfully emptied (synced to cloud)
-            try { await vscode.workspace.fs.delete(uri); } catch (e) {}
+            try {
+                await vscode.workspace.fs.delete(uri);
+            } catch (e) {
+                // ignore delete errors
+            }
             return;
         }
 
@@ -458,15 +479,24 @@ export class ApiStorageManager {
         if (!this.context) {
             throw new Error('Storage manager is not initialized.');
         }
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const userId = Number(session?.authUserId ?? 0);
+        const role = String(session?.role ?? '').toLowerCase();
 
+        // 1. HARD STOP: Do not process offline queues or live events for Teachers or anonymous users
+        if (!userId || userId === 0 || role === 'teacher' || role === 'admin') {
+            // Optional: Clear the incoming events buffer so they don't pile up in memory
+            return; 
+        }
+
+        
         // 1. Get current session info (This will be null if they started offline!)
         let currentSessionId = this.context.workspaceState.get<number>('sessionId') || null;
-        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         
         const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
-        const userId = Number(session?.authUserId ?? 0);
         const projectId = Number(session?.workspaceLinkedClassId ?? 0); // Fallback for project ID mapping
 
+        
         // Teammate's Addition: Fetch the link record for extra backend metadata
         const linkRecord = await this.getStudentWorkspaceLinkRecord();
 
@@ -542,7 +572,7 @@ export class ApiStorageManager {
                             userId: userId,
                             projectId: projectId,
                             // Use Date.now() without dividing by 1000 to ensure uniqueness in milliseconds
-                           sessionNumber: Math.floor(Date.now() / 1000) - 1700000000 + Math.floor(Math.random() * 10000), 
+                            sessionNumber: 0, 
                             startedAt: payload.occurredAt,
                             studentWorkspaceAssignmentId: studentWorkspaceAssignmentId
                         });
@@ -641,10 +671,14 @@ export class ApiStorageManager {
     }
 
    async listLogFiles(): Promise<Array<{ label: string; uri: vscode.Uri }>> {
-        if (!this.context) return [];
+        if (!this.context) {
+            return [];
+        }
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const teacherId = Number(session?.authUserId || 0);
-        if (!teacherId) return [];
+        if (!teacherId) {
+            return [];
+        }
 
         const classes = await this.listTeacherClasses(teacherId);
         const logs: Array<{ label: string; uri: vscode.Uri }> = [];
@@ -660,7 +694,9 @@ export class ApiStorageManager {
                             const uniqueSessionIds = new Set<number>();
                             for (const row of sessionsAndEvents) {
                                 const sid = Number(row?.SessionId ?? row?.sessionId);
-                                if (sid > 0) uniqueSessionIds.add(sid);
+                                if (sid > 0) {
+                                    uniqueSessionIds.add(sid);
+                                }
                             }
 
                             for (const sid of uniqueSessionIds) {
@@ -762,10 +798,14 @@ export class ApiStorageManager {
     }
 
    async retrieveHiddenLogContent(_passwordAttempt: string): Promise<string> {
-        if (!this.context) return '{"deletions":[]}';
+        if (!this.context) {
+            return '{"deletions":[]}';
+        }
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const teacherId = Number(session?.authUserId || 0);
-        if (!teacherId) return '{"deletions":[]}';
+        if (!teacherId) {
+            return '{"deletions":[]}';
+        }
 
         const classes = await this.listTeacherClasses(teacherId);
         const deletions: any[] = [];
@@ -817,12 +857,193 @@ export class ApiStorageManager {
         return { text, partial: false };
     }
 
-    async saveLogNotes(_passwordAttempt: string, _filename: string, _notes: Array<{ timestamp: string; text: string }>): Promise<void> {
-        throw new Error('Saving log notes is not available in API-only mode.');
+    private parseSessionIdFromFilename(filename: string): number | null {
+        if (!filename || typeof filename !== 'string') {
+            return null;
+        }
+        const match = filename.match(/Session(\d+)/i);
+        if (!match) {
+            return null;
+        }
+        const val = Number(match[1]);
+        return Number.isFinite(val) && val > 0 ? val : null;
     }
 
-    async loadLogNotes(_passwordAttempt: string, _filename: string): Promise<Array<{ timestamp: string; text: string }>> {
-        return [];
+    private getCurrentTeacherId(): number {
+        if (!this.context) {
+            return 0;
+        }
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        if (!session) {
+            return 0;
+        }
+        const id = Number(session.authUserId || session.userId || 0);
+        return Number.isFinite(id) && id > 0 ? id : 0;
+    }
+
+    async saveLogNotes(_passwordAttempt: string, filename: string, notes: Array<{ id?: number; Id?: number; sessionEventId?: number; sessionId?: number; timestamp?: string; text: string }>): Promise<void> {
+        const teacherAuthUserId = this.getCurrentTeacherId();
+        const sessionId = this.parseSessionIdFromFilename(filename);
+
+        if (!teacherAuthUserId || !Array.isArray(notes)) {
+            console.warn('[TBD Logger] saveLogNotes skipped: missing teacherAuthUserId or invalid notes payload', { teacherAuthUserId, notes });
+            return;
+        }
+
+        for (const note of notes) {
+            const sessionEventId = Number(note?.sessionEventId || 0);
+            const noteText = String(note?.text || '').trim();
+            const noteSessionId = Number(note?.sessionId || 0) || sessionId;
+            const filenameSessionId = this.parseSessionIdFromFilename(filename);
+            const finalSessionId = noteSessionId || filenameSessionId;
+
+            if (!noteText) {
+                console.warn('[TBD Logger] saveLogNotes skipped note with empty text', { note });
+                continue;
+            }
+
+            if (!finalSessionId && !sessionEventId) {
+                console.warn('[TBD Logger] saveLogNotes skipped note: missing sessionId and sessionEventId', { note, filename });
+                continue;
+            }
+
+            const noteId = Number(note?.id ?? note?.Id ?? 0);
+            const payload: Record<string, any> = {
+                teacherAuthUserId,
+                noteText,
+                filename: filename || '',
+                createdAt: new Date().toISOString(),
+            };
+
+            if (sessionEventId) {
+                payload.sessionEventId = sessionEventId;
+            }
+            if (finalSessionId) {
+                payload.sessionId = finalSessionId;
+            }
+            if (note?.timestamp) {
+                payload.timestamp = note.timestamp;
+            }
+
+            const attemptPut = async (path: string): Promise<boolean> => {
+                try {
+                    await apiPut(path, payload, { silent: true });
+                    return true;
+                } catch (putError) {
+                    return false;
+                }
+            };
+
+            const attemptPost = async (): Promise<void> => {
+                try {
+                    await apiPost('/api/notes/instructor-notes', payload, { silent: true });
+                    console.log('[TBD Logger] saveLogNotes API successful (POST primary)', { sessionEventId, finalSessionId, noteText });
+                } catch (primaryError) {
+                    console.warn('[TBD Logger] Primary saveLogNotes endpoint failed, trying fallback /api/instructor-notes', primaryError);
+                    await apiPost('/api/instructor-notes', payload, { silent: true });
+                    console.log('[TBD Logger] saveLogNotes API (fallback) successful (POST)', { sessionEventId, finalSessionId, noteText });
+                }
+            };
+
+            try {
+                console.log('[TBD Logger] saveLogNotes final payload', { payload, finalSessionId, sessionEventId, noteId });
+
+                let saved = false;
+
+                // Try direct PUT upsert via core endpoint (new backend expected behavior)
+                saved = await attemptPut('/api/notes/instructor-notes');
+
+                if (!saved) {
+                    saved = await attemptPut('/api/instructor-notes');
+                }
+
+                // Legacy: if id is known, try explicit PUT by id first for backward compatibility
+                if (!saved && noteId > 0) {
+                    saved = await attemptPut(`/api/notes/instructor-notes/${noteId}`);
+                    if (!saved) {
+                        saved = await attemptPut(`/api/instructor-notes/${noteId}`);
+                    }
+                }
+
+                // If still not saved, fall back to POST route
+                if (!saved) {
+                    await attemptPost();
+                }
+            } catch (err) {
+                console.warn('[TBD Logger] Failed to save instructor note:', err);
+            }
+        }
+    }
+
+    async loadLogNotes(_passwordAttempt: string, filename: string, sessionId?: number, sessionEventId?: number): Promise<Array<{ sessionEventId?: number; timestamp?: string; text: string }>> {
+        const teacherAuthUserId = this.getCurrentTeacherId();
+        const parsedSessionId = Number.isFinite(Number(sessionId)) && Number(sessionId) > 0 ? Number(sessionId) : (this.parseSessionIdFromFilename(filename) || 0);
+        const parsedSessionEventId = Number.isFinite(Number(sessionEventId)) && Number(sessionEventId) > 0 ? Number(sessionEventId) : 0;
+
+        if (!teacherAuthUserId) {
+            console.warn('[TBD Logger] loadLogNotes skipped: missing teacherAuthUserId');
+            return [];
+        }
+
+        let response: any;
+        try {
+            const tryPaths = [];
+            if (parsedSessionEventId) {
+                tryPaths.push(`/api/notes/instructor-notes?sessionEventId=${parsedSessionEventId}`);
+            }
+            if (parsedSessionId) {
+                tryPaths.push(`/api/notes/instructor-notes?sessionId=${parsedSessionId}`);
+            }
+            if (filename && filename.trim()) {
+                tryPaths.push(`/api/notes/instructor-notes?filename=${encodeURIComponent(filename || '')}`);
+            }
+            tryPaths.push(`/api/notes/instructor-notes?teacherAuthUserId=${teacherAuthUserId}`);
+            tryPaths.push(`/api/notes/instructor-notes?teacherId=${teacherAuthUserId}`);
+            tryPaths.push('/api/notes/instructor-notes');
+            tryPaths.push(`/api/instructor-notes?sessionId=${parsedSessionId}`);
+            tryPaths.push(`/api/instructor-notes?filename=${encodeURIComponent(filename || '')}`);
+            tryPaths.push(`/api/instructor-notes?teacherAuthUserId=${teacherAuthUserId}`);
+            tryPaths.push(`/api/instructor-notes?teacherId=${teacherAuthUserId}`);
+            tryPaths.push('/api/instructor-notes');
+
+            response = await this.apiGetFirst(tryPaths);
+        } catch (err) {
+            console.warn('[TBD Logger] Failed to load instructor notes:', err);
+            return [];
+        }
+
+        const notesList = Array.isArray(response)
+            ? response
+            : Array.isArray(response?.data) ? response.data
+            : Array.isArray(response?.notes) ? response.notes
+            : [];
+
+        const meta: LoadLogNotesMeta = {
+            teacherAuthUserId: Number(teacherAuthUserId) || 0,
+            sessionId: parsedSessionId,
+            sessionEventId: parsedSessionEventId,
+            filename,
+            count: notesList.length,
+            notesList
+        };
+
+        this.lastLoadLogNotesMeta = meta;
+
+        console.log('[TBD Logger] loadLogNotes fetched notes from API', meta);
+
+        const normalized: Array<{ sessionEventId: number; timestamp?: string; text: string }> = [];
+
+        for (const note of notesList) {
+            const sessionEventId = Number(note?.SessionEventId ?? note?.sessionEventId ?? note?.eventId ?? note?.EventId ?? 0);
+            const noteText = String(note?.noteText ?? note?.note ?? note?.text ?? '').trim();
+            const timestamp = String(note?.timestamp ?? note?.createdAt ?? note?.CreatedAt ?? '');
+            if (!sessionEventId || !noteText) {
+                continue;
+            }
+            normalized.push({ sessionEventId, timestamp, text: noteText });
+        }
+
+        return normalized;
     }
 
     async recordUnmonitoredWorkAlert(_payload: {

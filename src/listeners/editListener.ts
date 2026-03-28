@@ -63,7 +63,7 @@ export function createEditListener(): vscode.Disposable {
 
         event.contentChanges.forEach((change) => {
             totalAdded += change.text.length;
-            totalDeleted += change.rangeLength; // This represents the number of characters removed
+            totalDeleted += change.rangeLength;
             if (change.text.length > 0) {
                 lastChangeText = change.text;
             }
@@ -74,8 +74,9 @@ export function createEditListener(): vscode.Disposable {
         const isDelete = totalDeleted > 0 && totalAdded === 0;
         const isInsert = totalDeleted === 0 && totalAdded > 0;
         
-        // AI DETECTION: Multiple chars in < 50ms is impossible for humans
-        const isMultiCharAtomic = totalAdded > 2 && timeDiff < 50;
+        // AI DETECTION: A human typing generates 1 char per event.
+        // If a single event contains > 2 chars, it was inserted atomically (Paste, Snippet, AI).
+        const isMultiCharAtomic = totalAdded > 2;
 
         if (isDelete) {
             eventType = isFocusMismatch ? 'ai-delete' : 'delete';
@@ -101,13 +102,16 @@ export function createEditListener(): vscode.Disposable {
             eventType = 'input';
         }
 
-        // FIX: Accurately capture the number of characters changed for both inserts and deletes
+        // --- NEW CHARS CHANGED LOGIC ---
         let charsChanged = 0;
         if (isDelete || eventType === 'ai-delete') {
             charsChanged = totalDeleted;
-        } else if (isReplace || eventType === 'ai-replace') {
-            charsChanged = Math.max(totalAdded, totalDeleted); 
+        } else if (eventType === 'ai-replace') {
+            // VS Code Tab completions often replace the entire line prefix.
+            // Subtracting totalDeleted gets us the *net new* characters the AI actually generated.
+            charsChanged = totalAdded > totalDeleted ? (totalAdded - totalDeleted) : totalAdded;
         } else {
+            // For human inputs, pastes, and replaces, we care about what they actually put in.
             charsChanged = totalAdded;
         }
 
@@ -116,7 +120,6 @@ export function createEditListener(): vscode.Disposable {
             const isSameFile = pendingEditEvent.fileEdit === fileEditRaw;
             const isSameType = pendingEditEvent.eventType === eventType;
 
-            // Group them if it's the exact same action in the same file
             if (isSameFile && isSameType) {
                 pendingEditEvent.charsAdded = (pendingEditEvent.charsAdded || 0) + charsChanged;
                 
@@ -124,12 +127,10 @@ export function createEditListener(): vscode.Disposable {
                     pendingEditEvent.pasteCharCount = pendingEditEvent.charsAdded;
                 }
 
-                // Reset the quiet timer
                 if (editDebounceTimer) clearTimeout(editDebounceTimer);
                 editDebounceTimer = setTimeout(pushPendingEvent, DEBOUNCE_MS);
                 return;
             } else {
-                // Action changed (e.g. typing -> deleting). Push the old batch immediately.
                 pushPendingEvent();
             }
         }
@@ -141,7 +142,7 @@ export function createEditListener(): vscode.Disposable {
             eventType,
             fileEdit: fileEditRaw,
             fileView,
-            charsAdded: charsChanged // Accurately set to the number of deleted or added chars
+            charsAdded: charsChanged
         };
 
         if (['paste', 'external-paste', 'ai-paste', 'replace', 'ai-replace'].includes(eventType)) {

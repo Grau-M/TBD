@@ -308,6 +308,12 @@ export async function openAuthView(
                         : e.message;
                     console.error('Auth API error:', { status: e.status, body: e.responseBody });
                 }
+
+                // 👉 THE FIX: Intercept the raw 401 API error and make it user-friendly
+                if (errorMessage.includes('401') || errorMessage.toLowerCase().includes('unauthorized')) {
+                    errorMessage = 'Incorrect username or password.';
+                }
+
                 authPanel?.webview.postMessage({
                     command: 'authError',
                     form: message.command === 'register' ? 'register' : 'signin',

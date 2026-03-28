@@ -128,10 +128,11 @@ export async function handleSaveLogNotes(panel: vscode.WebviewPanel, password: s
   }
 }
 
-export async function handleLoadLogNotes(panel: vscode.WebviewPanel, password: string, filename: string) {
+export async function handleLoadLogNotes(panel: vscode.WebviewPanel, password: string, filename: string, sessionId?: number, sessionEventId?: number) {
   try {
-    const notes = await storageManager.loadLogNotes(password, filename);
-    panel.webview.postMessage({ command: 'logNotes', filename, notes });
+    const notes = await storageManager.loadLogNotes(password, filename, sessionId, sessionEventId);
+    const notesMeta = (storageManager as any).lastLoadLogNotesMeta || null;
+    panel.webview.postMessage({ command: 'logNotes', filename, notes, notesMeta });
   } catch (err: any) {
     panel.webview.postMessage({ command: 'error', message: `Failed to load notes: ${err.message}` });
   }

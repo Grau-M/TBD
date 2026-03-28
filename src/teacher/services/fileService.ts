@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { storageManager } from '../../state';
+import { getUserFriendlyErrorMessage } from '../../utils';
 import { fetchAndParseLog, parseLogTime } from '../utilis/LogHelpers';
 
 export async function handleOpenLog(panel: vscode.WebviewPanel, password: string, filename: string) {
@@ -103,8 +104,9 @@ export async function handleExportLog(panel: vscode.WebviewPanel, password: stri
       } catch { }
       await vscode.workspace.fs.writeFile(auditUri, Buffer.from(currentAudit + auditEntry, 'utf8'));
     }
-    vscode.window.showErrorMessage(`Export Failed: ${err.message}`);
-    panel.webview.postMessage({ command: 'error', message: `Export failed: ${err.message}` });
+    const message = getUserFriendlyErrorMessage(err, 'Export failed. Please try again.');
+    vscode.window.showErrorMessage(`Export Failed: ${message}`);
+    panel.webview.postMessage({ command: 'error', message: `Export failed: ${message}` });
   }
 }
 

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WorkspaceAuthSession } from '../auth';
 import { state, storageManager } from '../state';
 import { apiGet } from '../api';
+import { getUserFriendlyErrorMessage } from '../utils';
 import { updateApiKeyStatus } from '../statusBar';
 import { registerWebviewPanel } from '../webviewRegistry';
 
@@ -255,11 +256,8 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                 render();
 
             } catch (error: any) {
-                if (String(error).includes('500') || String(error).includes('Unique')) {
-                    vscode.window.showErrorMessage(`Failed to link assignment. This workspace may already be linked in the database.`);
-                } else {
-                    vscode.window.showErrorMessage(`Failed to link assignment: ${error.message || error}`);
-                }
+                const message = getUserFriendlyErrorMessage(error, 'Failed to link assignment. Please try again.');
+                vscode.window.showErrorMessage(`Failed to link assignment: ${message}`);
                 activePanel.webview.postMessage({ command: 'syncReset' });
             }
         }

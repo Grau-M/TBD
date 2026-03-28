@@ -53,3 +53,54 @@ export function isIgnoredPath(relPath: string): boolean {
     if (p.endsWith('.log') || p.endsWith('.json')|| p.endsWith('enc')) {return true;}
     return false;
 }
+
+export function getUserFriendlyErrorMessage(error: unknown, fallback = 'An unexpected error occurred. Please try again.') {
+    // Handle API errors that expose status codes.
+    if (error && typeof error === 'object') {
+        const err = error as { status?: number; message?: string; responseBody?: string };
+        const status = Number(err.status || 0);
+
+        // Standard login failures should avoid technical details.
+        if ([401, 403, 404].includes(status)) {
+            return 'Invalid credentials. Please check your email and password.';
+        }
+
+        // Conflicts mean existing record; guide user experience.
+        if (status === 409) {
+            return 'An account with that email already exists. Please sign in instead.';
+        }
+
+        // Server-side issues should be non-technical.
+        if (status >= 500) {
+            return 'Server is currently unavailable. Please try again later.';
+        }
+
+        // Some API implementations may include user-friendly error text in body.
+        if (err.responseBody && typeof err.responseBody === 'string') {
+            const body = err.responseBody.trim();
+            if (body.length > 0 && body.length < 512) {
+                return body;
+            }
+        }
+
+        if (err.message && typeof err.message === 'string') {
+            const msg = err.message.trim();
+            if (msg.length > 0 && !msg.startsWith('API ')) {
+                return msg;
+            }
+        }
+    }
+
+    if (error instanceof Error) {
+        const msg = String(error.message || '').trim();
+        if (msg.length > 0) {
+            return msg;
+        }
+    }
+
+    if (typeof error === 'string' && error.trim().length > 0) {
+        return error.trim();
+    }
+
+    return fallback;
+}

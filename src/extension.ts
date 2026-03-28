@@ -14,7 +14,7 @@ import { createSaveListener } from './listeners/saveListener';
 import { startUiTimer } from './uiTimer';
 import { flushBuffer } from './flush';
 import { storageManager, state, CONSTANTS } from './state';
-import { isIgnoredPath, formatTimestamp } from './utils';
+import { isIgnoredPath, formatTimestamp, getUserFriendlyErrorMessage } from './utils';
 import { SessionInterruptionTracker } from './sessionInterruptions';
 import { openTeacherView } from './teacher';
 import { clearWorkspaceAuthSession, getWorkspaceAuthSession, manageClassActivities, requireRoleAccess, WorkspaceAuthSession } from './auth';
@@ -1153,7 +1153,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
             vscode.window.showInformationMessage('Logs decrypted successfully.');
 
         } catch (err) {
-            vscode.window.showErrorMessage(`Access Denied: ${err}`);
+            const message = getUserFriendlyErrorMessage(err, 'Access denied. Please sign in and try again.');
+            vscode.window.showErrorMessage(`Access Denied: ${message}`);
         }
     };
     context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.openLogs', openLogs));
@@ -1173,7 +1174,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
             const doc = await vscode.workspace.openTextDocument({ content: content, language: 'json' });
             await vscode.window.showTextDocument(doc, { preview: false });
         } catch (err) {
-            vscode.window.showErrorMessage(`Unable to access deletion activity log: ${err}`);
+            const message = getUserFriendlyErrorMessage(err, 'Unable to access deletion activity log. Please try again.');
+            vscode.window.showErrorMessage(`Unable to access deletion activity log: ${message}`);
         }
     };
     context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.showHiddenDeletions', showHidden));
@@ -1356,9 +1358,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
             const result = await apiGet('/health');
             vscode.window.showInformationMessage(`API ONLINE\nStatus: ${result?.status ?? 'unknown'}`);
         } catch (err: any) {
-            vscode.window.showErrorMessage(
-                `API health check failed!\nError: ${err?.message || String(err)}`
-            );
+            const message = getUserFriendlyErrorMessage(err, 'API health check failed. Please try again later.');
+            vscode.window.showErrorMessage(`API health check failed. ${message}`);
         }
         void updateDbStatusBar(context);
     }));
@@ -1368,8 +1369,8 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
             const result = await apiGet('/health');
             vscode.window.showInformationMessage(`API status: ${result.status}`);
         } catch (error: any) {
-            const message = error?.message || String(error);
-            vscode.window.showErrorMessage(`API test failed: ${message}`);
+            const message = getUserFriendlyErrorMessage(error, 'API test failed. Please try again later.');
+            vscode.window.showErrorMessage(`API test failed. ${message}`);
         }
     }));
 

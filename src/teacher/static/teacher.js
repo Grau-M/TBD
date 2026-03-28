@@ -1823,6 +1823,7 @@
         setTeacherConnectionState(false);
         return;
       }
+      hideAllClassSubViews();
       switchTab("dashboard");
       if (dashboardDataCache && dashboardDataCache.metrics) {
         UI.renderDashboard(dashboardDataCache, handlers);
@@ -1842,6 +1843,7 @@
         setTeacherConnectionState(false);
         return;
       }
+      hideAllClassSubViews();
       switchTab("logs");
       post("listLogs");
     });
@@ -2857,6 +2859,8 @@
 
     // --- CLASS TAB LOGIC ---
     function loadClasses() {
+      hideAllClassSubViews();
+
       const listView = $("class-list-view");
       const emptyEl = $("class-list-empty");
       const loadingEl = $("class-list-loading");
@@ -3308,6 +3312,37 @@
         inClassDetail && currentClassDetailTab === "assignments"
           ? "inline-flex"
           : "none";
+    }
+
+    function hideAllClassSubViews() {
+      [
+        "class-detail-view",
+        "assignment-work-view",
+        "assignment-student-view",
+        "assignment-session-log-view",
+        "assignment-compare-view",
+        "class-assignments-list",
+        "class-assignments-empty",
+      ].forEach((id) => {
+        const el = $(id);
+        if (el) {
+          el.style.display = "none";
+        }
+      });
+
+      const listView = $("class-list-view");
+      if (listView) {
+        listView.style.display = "grid";
+      }
+      const emptyEl = $("class-list-empty");
+      if (emptyEl) {
+        emptyEl.style.display = "none";
+      }
+
+      setAssignmentFormVisible(false);
+      clearAssignmentComparisonSelection();
+      updateTopClassActionButton();
+      updateClassTabHeading();
     }
 
     function isInClassFlowView() {
@@ -4828,17 +4863,10 @@
     });
 
     $("btn-back-to-classes")?.addEventListener("click", () => {
-      if ($("class-detail-view")) {
-        $("class-detail-view").style.display = "none";
-      }
-      if ($("class-list-view")) {
-        $("class-list-view").style.display = "grid";
-      }
       currentClassDetailTab = "students";
       currentClassDisplayName = "";
-      setAssignmentFormVisible(false);
+      hideAllClassSubViews();
       updateTopClassActionButton();
-      updateClassTabHeading();
       updateClassPrimaryActionButton();
       loadClasses();
     });

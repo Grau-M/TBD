@@ -2004,6 +2004,7 @@
         const checks = document.querySelectorAll(".log-checkbox:checked");
         const filenames = Array.from(checks).map((c) => c.value);
         if (filenames.length === 0) {
+          alert("Error: Please select at least 1 log to build a timeline.");
           return (status.textContent =
             "Error: Select at least 1 log to build a timeline.");
         }
@@ -2014,6 +2015,7 @@
         const checks = document.querySelectorAll(".log-checkbox:checked");
         const filenames = Array.from(checks).map((c) => c.value);
         if (filenames.length < 2) {
+          alert("Error: Please select at least 2 logs to build a behavioral profile.");
           return (status.textContent =
             "Error: Select at least 2 logs to build a profile.");
         }

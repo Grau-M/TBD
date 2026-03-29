@@ -2105,13 +2105,13 @@
           ? "Create Timeline"
           : "Analyze Behavioral Patterns";
       if ($("session-modal-title"))
-        $("session-modal-title").textContent = title;
-      if (sessionModalList) sessionModalList.innerHTML = "";
+        {$("session-modal-title").textContent = title;}
+      if (sessionModalList) {sessionModalList.innerHTML = "";}
 
       if (context === "raw") {
         if ($("session-modal-desc"))
-          $("session-modal-desc").textContent =
-            "Select the raw log files to include:";
+          {$("session-modal-desc").textContent =
+            "Select the raw log files to include:";}
         logNamesCache.forEach((logName) => {
           const label = document.createElement("label");
           label.style.cssText =
@@ -2121,8 +2121,8 @@
         });
       } else if (context === "student") {
         if ($("session-modal-desc"))
-          $("session-modal-desc").textContent =
-            "Select the sessions to include for this student:";
+          {$("session-modal-desc").textContent =
+            "Select the sessions to include for this student:";}
         const sessionDropdown = $("filter-session");
         if (sessionDropdown) {
           Array.from(sessionDropdown.options).forEach((opt) => {
@@ -2137,8 +2137,8 @@
         }
       } else if (context === "class") {
         if ($("session-modal-desc"))
-          $("session-modal-desc").textContent =
-            "Select the students to include in this class analysis:";
+          {$("session-modal-desc").textContent =
+            "Select the students to include in this class analysis:";}
         currentAssignmentStudents.forEach((student) => {
           if (student.sessionCount > 0) {
             const label = document.createElement("label");
@@ -2150,8 +2150,8 @@
         });
       }
 
-      if (sessionModalSelectAll) sessionModalSelectAll.checked = true;
-      if (sessionModal) sessionModal.style.display = "flex";
+      if (sessionModalSelectAll) {sessionModalSelectAll.checked = true;}
+      if (sessionModal) {sessionModal.style.display = "flex";}
     }
 
     if (sessionModalSelectAll) {
@@ -2202,7 +2202,7 @@
 
         if (btnId === "btn-cancel-session-selection") {
           e.preventDefault();
-          if (sessionModal) sessionModal.style.display = "none";
+          if (sessionModal) {sessionModal.style.display = "none";}
         }
 
         if (btnId === "btn-confirm-session-selection") {
@@ -2214,7 +2214,7 @@
 
           if (selectedValues.length === 0) {
             if (status)
-              status.textContent = "Error: Select at least 1 item to proceed.";
+              {status.textContent = "Error: Select at least 1 item to proceed.";}
             return;
           }
 
@@ -2224,14 +2224,14 @@
             currentModalContext === "raw"
           ) {
             if (status)
-              status.textContent =
-                "Error: Select at least 2 logs to build a profile.";
+              {status.textContent =
+                "Error: Select at least 2 logs to build a profile.";}
             return;
           }
 
-          if (sessionModal) sessionModal.style.display = "none";
+          if (sessionModal) {sessionModal.style.display = "none";}
           if (status)
-            status.textContent = `Generating ${currentModalAction}...`;
+            {status.textContent = `Generating ${currentModalAction}...`;}
 
           if (currentModalContext === "raw") {
             const command =
@@ -2294,19 +2294,19 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) $("logs-tab").classList.add("active");
-          if ($("nav-logs")) $("nav-logs").classList.add("active");
+          if ($("logs-tab")) {$("logs-tab").classList.add("active");}
+          if ($("nav-logs")) {$("nav-logs").classList.add("active");}
 
           // 2. Ensure the viewer container is visible
           if ($("logs-viewer-container"))
-            $("logs-viewer-container").style.display = "block";
+            {$("logs-viewer-container").style.display = "block";}
           if ($("logs-log-name"))
-            $("logs-log-name").textContent = "Generated Behavioral Profile";
+            {$("logs-log-name").textContent = "Generated Behavioral Profile";}
 
           // 3. Render it
           if (window.TeacherUI && window.TeacherUI.renderProfile)
-            window.TeacherUI.renderProfile(msg.data);
-          if (status) status.textContent = "Behavioral profile generated.";
+            {window.TeacherUI.renderProfile(msg.data);}
+          if (status) {status.textContent = "Behavioral profile generated.";}
           break;
 
         case "timelineData":
@@ -2317,19 +2317,19 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) $("logs-tab").classList.add("active");
-          if ($("nav-logs")) $("nav-logs").classList.add("active");
+          if ($("logs-tab")) {$("logs-tab").classList.add("active");}
+          if ($("nav-logs")) {$("nav-logs").classList.add("active");}
 
           // 2. Ensure the viewer container is visible
           if ($("logs-viewer-container"))
-            $("logs-viewer-container").style.display = "block";
+            {$("logs-viewer-container").style.display = "block";}
           if ($("logs-log-name"))
-            $("logs-log-name").textContent = "Generated Visual Timeline";
+            {$("logs-log-name").textContent = "Generated Visual Timeline";}
 
           // 3. Render it
           if (window.TeacherUI && window.TeacherUI.renderTimeline)
-            window.TeacherUI.renderTimeline(msg.data);
-          if (status) status.textContent = "Timeline generated.";
+            {window.TeacherUI.renderTimeline(msg.data);}
+          if (status) {status.textContent = "Timeline generated.";}
           break;
 
         case "timelineData":
@@ -4465,7 +4465,7 @@
       title.style.display = "none";
       const dynamicTitle = $("dynamic-student-title");
       if (dynamicTitle)
-        dynamicTitle.textContent = `${studentName} - Session Logs`;
+        {dynamicTitle.textContent = `${studentName} - Session Logs`;}
 
       // Set up Dual Containers inside the main list area
       list.innerHTML = `
@@ -4676,9 +4676,9 @@
 
       // 2. Helper to format large ms values into "Xh Ym" or "Xm"
       const formatDashDuration = (ms) => {
-        if (!ms || ms <= 0) return "0m";
+        if (!ms || ms <= 0) {return "0m";}
         const totalMins = Math.round(ms / 60000);
-        if (totalMins === 0) return "< 1m";
+        if (totalMins === 0) {return "< 1m";}
         const hours = Math.floor(totalMins / 60);
         const mins = totalMins % 60;
         return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
@@ -4806,12 +4806,12 @@
       }
 
       const formatDurationHelper = (ms) => {
-        if (!ms || ms < 0) return "0s";
+        if (!ms || ms < 0) {return "0s";}
         const totalSeconds = Math.floor(ms / 1000);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
-        if (hours > 0) return `${hours}h ${minutes}m`;
-        if (minutes > 0) return `${minutes}m`;
+        if (hours > 0) {return `${hours}h ${minutes}m`;}
+        if (minutes > 0) {return `${minutes}m`;}
         return `< 1m`;
       };
 
@@ -4833,29 +4833,29 @@
           filtered = filtered.filter((e) => {
             const t = e.eType;
             if (eventVal === "input")
-              return t.includes("input") && !t.includes("ai");
+              {return t.includes("input") && !t.includes("ai");}
             if (eventVal === "paste")
-              return t.includes("paste") && !t.includes("ai"); // NEW: Catch manual pastes
+              {return t.includes("paste") && !t.includes("ai");} // NEW: Catch manual pastes
             if (eventVal === "replace")
-              return t.includes("replace") && !t.includes("ai");
+              {return t.includes("replace") && !t.includes("ai");}
             if (eventVal === "delete")
-              return (
+              {return (
                 (t.includes("delete") || t.includes("backspace")) &&
                 !t.includes("ai")
-              );
+              );}
             if (eventVal === "ai-input")
-              return (
+              {return (
                 t.includes("ai-input") ||
                 t.includes("ai-insert") ||
                 (t.includes("ai") && t.includes("input"))
-              );
+              );}
             if (eventVal === "ai-paste")
-              return (
+              {return (
                 t.includes("ai-paste") ||
                 (t.includes("ai") && t.includes("paste"))
-              ); // NEW: Catch AI pastes
-            if (eventVal === "ai-replace") return t.includes("ai-replace");
-            if (eventVal === "ai-delete") return t.includes("ai-delete");
+              );} // NEW: Catch AI pastes
+            if (eventVal === "ai-replace") {return t.includes("ai-replace");}
+            if (eventVal === "ai-delete") {return t.includes("ai-delete");}
             return true;
           });
         }
@@ -4876,7 +4876,7 @@
         let currentPeriod = null;
 
         chronologicalEvents.forEach((evt) => {
-          if (!evt.timestampMs || isNaN(evt.timestampMs)) return;
+          if (!evt.timestampMs || isNaN(evt.timestampMs)) {return;}
           if (!currentPeriod) {
             currentPeriod = {
               startTime: evt.timestampMs,
@@ -4901,7 +4901,7 @@
             }
           }
         });
-        if (currentPeriod) periods.push(currentPeriod);
+        if (currentPeriod) {periods.push(currentPeriod);}
 
         if (periods.length === 0) {
           timelineContainer.innerHTML = `<div class="meta" style="padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px;">No significant work periods found.</div>`;
@@ -4975,23 +4975,23 @@
         filtered.sort((a, b) => {
           if (sortVal === "session-desc") {
             if (a.sessionId !== b.sessionId)
-              return Number(b.sessionId) - Number(a.sessionId);
+              {return Number(b.sessionId) - Number(a.sessionId);}
             return b.timestampMs - a.timestampMs;
           }
           if (sortVal === "session-asc") {
             if (a.sessionId !== b.sessionId)
-              return Number(a.sessionId) - Number(b.sessionId);
+              {return Number(a.sessionId) - Number(b.sessionId);}
             return a.timestampMs - b.timestampMs;
           }
-          if (sortVal === "time-desc") return b.timestampMs - a.timestampMs;
-          if (sortVal === "time-asc") return a.timestampMs - b.timestampMs;
+          if (sortVal === "time-desc") {return b.timestampMs - a.timestampMs;}
+          if (sortVal === "time-asc") {return a.timestampMs - b.timestampMs;}
           return 0;
         });
 
         // Group by Session for LIST view
         const groups = new Map();
         filtered.forEach((e) => {
-          if (!groups.has(e.sessionId)) groups.set(e.sessionId, []);
+          if (!groups.has(e.sessionId)) {groups.set(e.sessionId, []);}
           groups.get(e.sessionId).push(e);
         });
 
@@ -5021,9 +5021,9 @@
               ed.File ??
               ed.fileName;
             if (viewStr)
-              items.push(
+              {items.push(
                 `<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`,
-              );
+              );}
 
             const charsChanged =
               ed.CharsChanged ??
@@ -5034,9 +5034,9 @@
               ed.length ??
               ed.pasteCharCount;
             if (charsChanged !== undefined && charsChanged !== null)
-              items.push(
+              {items.push(
                 `<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`,
-              );
+              );}
 
             const flightTime = ed.FlightTime ?? ed.flightTime;
             if (flightTime !== undefined && flightTime !== null) {
@@ -5051,9 +5051,9 @@
             const windowFocused =
               ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
             if (windowFocused !== undefined && windowFocused !== null)
-              items.push(
+              {items.push(
                 `<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`,
-              );
+              );}
 
             const workspace =
               ed.WorkspaceName ??
@@ -5061,13 +5061,13 @@
               ed.Workspace ??
               ed.workspace;
             if (workspace)
-              items.push(
+              {items.push(
                 `<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`,
-              );
+              );}
 
             let noteHtml = "";
             if (ed.possibleAiDetection)
-              noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;
+              {noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;}
 
             const rowNum = ed.Row ?? ed.row ?? e.index + 1;
             let bodyHtml =
@@ -5118,7 +5118,7 @@
         }
 
         if (line.startsWith("Session ")) {
-          if (currentEvent) events.push(currentEvent);
+          if (currentEvent) {events.push(currentEvent);}
           currentEvent = { session: line.replace("Session ", ""), rawJson: "" };
         } else if (currentEvent && line.includes(" • ")) {
           const parts = line.split(" • ");
@@ -5141,7 +5141,7 @@
           } catch (e) {}
         }
       }
-      if (currentEvent) events.push(currentEvent);
+      if (currentEvent) {events.push(currentEvent);}
       return events;
     }
 
@@ -5232,7 +5232,7 @@
       let currentPeriod = null;
 
       const parseEventTime = (timeStr) => {
-        if (!timeStr) return null;
+        if (!timeStr) {return null;}
         const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
         const d = new Date(cleanStr);
         return isNaN(d.getTime()) ? null : d.getTime();
@@ -5240,7 +5240,7 @@
 
       events.forEach((evt) => {
         const ts = parseEventTime(evt.timestamp);
-        if (!ts) return;
+        if (!ts) {return;}
 
         if (!currentPeriod) {
           currentPeriod = {
@@ -5266,16 +5266,16 @@
           }
         }
       });
-      if (currentPeriod) periods.push(currentPeriod);
+      if (currentPeriod) {periods.push(currentPeriod);}
 
       // --- FIXED: BULLETPROOF DURATION FORMATTER ---
       const formatDurationHelper = (ms) => {
-        if (!ms || ms < 0) return "0s";
+        if (!ms || ms < 0) {return "0s";}
         const totalSeconds = Math.floor(ms / 1000);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
-        if (hours > 0) return `${hours}h ${minutes}m`;
-        if (minutes > 0) return `${minutes}m`;
+        if (hours > 0) {return `${hours}h ${minutes}m`;}
+        if (minutes > 0) {return `${minutes}m`;}
         return `< 1m`;
       };
 
@@ -5388,25 +5388,25 @@
         if (evt.data) {
           const items = [];
           if (evt.data.file)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
-            );
+            );}
           if (evt.data.charsAdded !== undefined)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
-            );
+            );}
           if (evt.data.pasteCharCount !== undefined)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
-            );
+            );}
           if (evt.data.flightTime !== undefined)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
-            );
+            );}
           if (evt.data.focused !== undefined)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
-            );
+            );}
 
           if (evt.data.possibleAiDetection) {
             items.push(

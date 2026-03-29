@@ -1,8 +1,8 @@
-// teacher.js (FULL FILE as you shared it) + changes added for:
+// teacher.js (FULL FILE) + changes added for:
 // 1) listening for "studentSummary" messages and rendering output in dashboard dropdown + logs view
 // 2) optional status text updates
-// NOTE: This file assumes renderers.js adds the dashboard dropdown button that posts:
-// window.postTeacherMessage("generateStudentSummary", { filename })
+// 3) FIXED: notesByEvent ReferenceError crash in logNotes handler
+// 4) FIXED: Timeline rendering formatDuration TypeError
 
 /* Webview client script for Teacher View - strictly state and routing */
 (function () {
@@ -642,27 +642,6 @@
           $("class-meeting-end").value = end ? formatTimeTo12Hour(end) : "";
         }
       }
-    }
-
-    function formatTimeTo12Hour(value) {
-      const input = String(value || "").trim();
-      const match = input.match(/^(\d{1,2}):(\d{2})$/);
-      if (!match) {
-        return input;
-      }
-
-      let hours = Number(match[1]);
-      const minutes = match[2];
-      if (!Number.isFinite(hours)) {
-        return input;
-      }
-
-      const period = hours >= 12 ? "PM" : "AM";
-      hours = hours % 12;
-      if (hours === 0) {
-        hours = 12;
-      }
-      return `${hours}:${minutes} ${period}`;
     }
 
     function formatMeetingTimeDisplay(meetingTimeRaw) {
@@ -2106,6 +2085,172 @@
         dashOut.innerHTML = `<pre style="white-space:pre-wrap; margin:0; padding:10px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">${summaryText}</pre>`;
       }
     }
+    // --- TIMELINE & BEHAVIORAL MODAL LOGIC ---
+    const sessionModal = $("session-selection-modal");
+    const sessionModalList = $("session-modal-list");
+    const sessionModalSelectAll = $("session-modal-select-all");
+    let currentModalAction = "";
+    let currentModalContext = "";
+
+    function openSessionModal(action, context) {
+      currentModalAction = action;
+      currentModalContext = context;
+
+      const title =
+        action === "timeline"
+          ? "Create Timeline"
+          : "Analyze Behavioral Patterns";
+      if ($("session-modal-title"))
+        $("session-modal-title").textContent = title;
+      if (sessionModalList) sessionModalList.innerHTML = "";
+
+      if (context === "raw") {
+        if ($("session-modal-desc"))
+          $("session-modal-desc").textContent =
+            "Select the raw log files to include:";
+        logNamesCache.forEach((logName) => {
+          const label = document.createElement("label");
+          label.style.cssText =
+            "display: flex; align-items: center; gap: 8px; cursor: pointer;";
+          label.innerHTML = `<input type="checkbox" class="session-modal-checkbox" value="${logName}" checked> ${logName}`;
+          sessionModalList.appendChild(label);
+        });
+      } else if (context === "student") {
+        if ($("session-modal-desc"))
+          $("session-modal-desc").textContent =
+            "Select the sessions to include for this student:";
+        const sessionDropdown = $("filter-session");
+        if (sessionDropdown) {
+          Array.from(sessionDropdown.options).forEach((opt) => {
+            if (opt.value !== "all") {
+              const label = document.createElement("label");
+              label.style.cssText =
+                "display: flex; align-items: center; gap: 8px; cursor: pointer;";
+              label.innerHTML = `<input type="checkbox" class="session-modal-checkbox" value="${opt.value}" checked> Session ${opt.value}`;
+              sessionModalList.appendChild(label);
+            }
+          });
+        }
+      } else if (context === "class") {
+        if ($("session-modal-desc"))
+          $("session-modal-desc").textContent =
+            "Select the students to include in this class analysis:";
+        currentAssignmentStudents.forEach((student) => {
+          if (student.sessionCount > 0) {
+            const label = document.createElement("label");
+            label.style.cssText =
+              "display: flex; align-items: center; gap: 8px; cursor: pointer;";
+            label.innerHTML = `<input type="checkbox" class="session-modal-checkbox" value="${student.authUserId}" checked> ${student.studentName} (${student.sessionCount} sessions)`;
+            sessionModalList.appendChild(label);
+          }
+        });
+      }
+
+      if (sessionModalSelectAll) sessionModalSelectAll.checked = true;
+      if (sessionModal) sessionModal.style.display = "flex";
+    }
+
+    if (sessionModalSelectAll) {
+      sessionModalSelectAll.addEventListener("change", (e) => {
+        document.querySelectorAll(".session-modal-checkbox").forEach((cb) => {
+          cb.checked = e.target.checked;
+        });
+      });
+    }
+
+    // Use a Global Document click listener (Capture Phase) so the buttons ALWAYS work
+    document.addEventListener(
+      "click",
+      (e) => {
+        const target = e.target;
+        const btnId = target.id || target.closest(".btn")?.id;
+
+        if (btnId === "btn-class-timeline") {
+          e.preventDefault();
+          e.stopPropagation();
+          openSessionModal("timeline", "class");
+        }
+        if (btnId === "btn-class-behavior") {
+          e.preventDefault();
+          e.stopPropagation();
+          openSessionModal("behavior", "class");
+        }
+        if (btnId === "btn-student-timeline") {
+          e.preventDefault();
+          e.stopPropagation();
+          openSessionModal("timeline", "student");
+        }
+        if (btnId === "btn-student-behavior") {
+          e.preventDefault();
+          e.stopPropagation();
+          openSessionModal("behavior", "student");
+        }
+        if (btnId === "btn-raw-log-timeline") {
+          e.preventDefault();
+          e.stopPropagation();
+          openSessionModal("timeline", "raw");
+        }
+        if (btnId === "btn-raw-log-behavior") {
+          e.preventDefault();
+          e.stopPropagation();
+          openSessionModal("behavior", "raw");
+        }
+
+        if (btnId === "btn-cancel-session-selection") {
+          e.preventDefault();
+          if (sessionModal) sessionModal.style.display = "none";
+        }
+
+        if (btnId === "btn-confirm-session-selection") {
+          e.preventDefault();
+          const selectedBoxes = Array.from(
+            document.querySelectorAll(".session-modal-checkbox:checked"),
+          );
+          const selectedValues = selectedBoxes.map((cb) => cb.value);
+
+          if (selectedValues.length === 0) {
+            if (status)
+              status.textContent = "Error: Select at least 1 item to proceed.";
+            return;
+          }
+
+          if (
+            currentModalAction === "behavior" &&
+            selectedValues.length < 2 &&
+            currentModalContext === "raw"
+          ) {
+            if (status)
+              status.textContent =
+                "Error: Select at least 2 logs to build a profile.";
+            return;
+          }
+
+          if (sessionModal) sessionModal.style.display = "none";
+          if (status)
+            status.textContent = `Generating ${currentModalAction}...`;
+
+          if (currentModalContext === "raw") {
+            const command =
+              currentModalAction === "timeline"
+                ? "generateTimeline"
+                : "generateProfile";
+            post(command, { filenames: selectedValues });
+          } else {
+            const command =
+              currentModalAction === "timeline"
+                ? "generateDbTimeline"
+                : "generateDbProfile";
+            post(command, {
+              context: currentModalContext,
+              classId: currentClassId,
+              assignmentId: currentAssignmentId,
+              selectionIds: selectedValues,
+            });
+          }
+        }
+      },
+      true,
+    );
 
     // --- ROUTER (LISTEN FOR MESSAGES) ---
     window.addEventListener("message", (event) => {
@@ -2138,10 +2283,49 @@
           break;
 
         case "profileData":
-          UI.renderProfile(msg.data);
-          if (status) {
-            status.textContent = "Behavioral profile generated.";
-          }
+          // 1. Force the UI to switch to the Logs Tab so you can actually see the chart!
+          document
+            .querySelectorAll(".tab-pane")
+            .forEach((el) => el.classList.remove("active"));
+          document
+            .querySelectorAll(".tab-btn")
+            .forEach((el) => el.classList.remove("active"));
+          if ($("logs-tab")) $("logs-tab").classList.add("active");
+          if ($("nav-logs")) $("nav-logs").classList.add("active");
+
+          // 2. Ensure the viewer container is visible
+          if ($("logs-viewer-container"))
+            $("logs-viewer-container").style.display = "block";
+          if ($("logs-log-name"))
+            $("logs-log-name").textContent = "Generated Behavioral Profile";
+
+          // 3. Render it
+          if (window.TeacherUI && window.TeacherUI.renderProfile)
+            window.TeacherUI.renderProfile(msg.data);
+          if (status) status.textContent = "Behavioral profile generated.";
+          break;
+
+        case "timelineData":
+          // 1. Force the UI to switch to the Logs Tab
+          document
+            .querySelectorAll(".tab-pane")
+            .forEach((el) => el.classList.remove("active"));
+          document
+            .querySelectorAll(".tab-btn")
+            .forEach((el) => el.classList.remove("active"));
+          if ($("logs-tab")) $("logs-tab").classList.add("active");
+          if ($("nav-logs")) $("nav-logs").classList.add("active");
+
+          // 2. Ensure the viewer container is visible
+          if ($("logs-viewer-container"))
+            $("logs-viewer-container").style.display = "block";
+          if ($("logs-log-name"))
+            $("logs-log-name").textContent = "Generated Visual Timeline";
+
+          // 3. Render it
+          if (window.TeacherUI && window.TeacherUI.renderTimeline)
+            window.TeacherUI.renderTimeline(msg.data);
+          if (status) status.textContent = "Timeline generated.";
           break;
 
         case "timelineData":
@@ -2183,7 +2367,6 @@
           }
           break;
 
-        // ✅ NEW: Student Transparency Summary response handler
         case "studentSummary": {
           const filename = msg.filename || currentLogFilename || "";
           const summaryText =
@@ -2346,14 +2529,18 @@
                 }
               }
 
-              if (noteId && notesByEvent.has(noteId)) {
-                notesByEvent.set(noteId, noteText); // ensure mapping text from loaded note
-              }
+              // FIXED: Ensure notesByEvent is defined before trying to call .has()
+              try {
+                if (
+                  noteId &&
+                  typeof window.notesByEvent !== "undefined" &&
+                  window.notesByEvent.has(noteId)
+                ) {
+                  window.notesByEvent.set(noteId, noteText);
+                }
+              } catch (e) {}
             });
-          } else {
-            // no notes
           }
-
           break;
 
         case "rawData":
@@ -2585,9 +2772,15 @@
             }
           }
           // If class loading fails, stop spinner and show empty state instead of hanging.
+          const isDeepView =
+            $("assignment-work-view")?.style.display === "block" ||
+            $("assignment-student-view")?.style.display === "block" ||
+            $("assignment-session-log-view")?.style.display === "block";
+
           if (
             currentTab === "class" &&
-            $("class-detail-view")?.style.display !== "block"
+            $("class-detail-view")?.style.display !== "block" &&
+            !isDeepView
           ) {
             setClassRefreshLoading(false);
             const loadingEl = $("class-list-loading");
@@ -3875,7 +4068,6 @@
       clearAssignmentComparisonSelection();
 
       // Hide previous views
-      // Hide previous views
       if (classDetailView) {
         classDetailView.style.display = "none";
       }
@@ -3921,7 +4113,7 @@
       }
 
       renderAssignmentStudentCards();
-    } // <--- THIS CLOSING BRACE IS SUPER IMPORTANT!
+    }
 
     // Handles filtering, sorting, and drawing the actual cards
     function renderAssignmentStudentCards() {
@@ -4166,7 +4358,7 @@
 
       studentView.style.display = "block";
 
-      // Inject the Title and Filtering Controls beside each other
+      // Inject the Title and Filtering Controls
       let controls = $("assignment-student-sessions-controls");
       if (!controls) {
         controls = document.createElement("div");
@@ -4175,7 +4367,7 @@
           "display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; background: var(--surface); padding: 12px; border-radius: 8px; border: 1px solid var(--border);";
 
         controls.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px; margin-right:auto;">
+            <div style="display:flex; align-items:center; gap:8px; margin-right:auto; width: 100%;">
                 <h2 id="dynamic-student-title" style="margin:0; color:var(--accent);"></h2>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
@@ -4205,6 +4397,10 @@
                     <option value="time-asc">Time (Oldest -> Newest)</option>
                 </select>
             </div>
+            <div style="display:flex; align-items:center; gap:8px; width: 100%; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 12px;">
+                <button id="btn-db-view-list" class="btn btn-primary">📋 Event List</button>
+                <button id="btn-db-view-timeline" class="btn btn-secondary">⏱️ Visual Timeline</button>
+            </div>
         `;
         list.parentNode.insertBefore(controls, list);
       }
@@ -4215,7 +4411,36 @@
       if (dynamicTitle)
         dynamicTitle.textContent = `${studentName} - Session Logs`;
 
-      list.innerHTML = "";
+      // Set up Dual Containers inside the main list area
+      list.innerHTML = `
+        <div id="db-session-list-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        <div id="db-session-timeline-container" style="display: none; flex-direction: column; gap: 12px;"></div>
+      `;
+
+      const listContainer = document.getElementById(
+        "db-session-list-container",
+      );
+      const timelineContainer = document.getElementById(
+        "db-session-timeline-container",
+      );
+
+      // Toggle Logic
+      const btnViewList = document.getElementById("btn-db-view-list");
+      const btnViewTimeline = document.getElementById("btn-db-view-timeline");
+
+      btnViewList.onclick = (e) => {
+        e.target.className = "btn btn-primary";
+        btnViewTimeline.className = "btn btn-secondary";
+        listContainer.style.display = "flex";
+        timelineContainer.style.display = "none";
+      };
+
+      btnViewTimeline.onclick = (e) => {
+        e.target.className = "btn btn-primary";
+        btnViewList.className = "btn btn-secondary";
+        listContainer.style.display = "none";
+        timelineContainer.style.display = "flex";
+      };
 
       if (!sessions.length) {
         empty.style.display = "block";
@@ -4223,7 +4448,7 @@
       }
       empty.style.display = "none";
 
-      // 1. Process all events (Keep HEAD implementation here)
+      // 1. Process all events
       const processedEvents = sessions.map((s, index) => {
         const sessionId = normalizeSessionValue(
           s,
@@ -4259,10 +4484,9 @@
         }
 
         const eventData = { ...s, ...parsedData };
-
         const eType = String(eventType).toLowerCase();
-        let badgeColor = "var(--fg)";
-        let badgeBg = "var(--bg)";
+        let badgeColor = "var(--fg)",
+          badgeBg = "var(--bg)";
 
         if (eType.includes("paste")) {
           badgeColor = "#ef4444";
@@ -4300,6 +4524,7 @@
           eventData,
           badgeColor,
           badgeBg,
+          timestampMs: new Date(occurredAt).getTime(),
         };
       });
 
@@ -4313,8 +4538,8 @@
       ]
         .filter((id) => id !== "Unknown")
         .sort((a, b) => Number(b) - Number(a));
-
       const currentSessionSelection = filterSessionEl.value;
+
       filterSessionEl.innerHTML = `<option value="all">All Sessions</option>`;
       uniqueSessionIds.forEach((id) => {
         const opt = document.createElement("option");
@@ -4332,21 +4557,30 @@
         filterSessionEl.value = "all";
       }
 
-      // 3. Render and Filter Function (Integrating incoming UI changes here)
+      const formatDurationHelper = (ms) => {
+        if (!ms || ms < 0) return "0s";
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        if (hours > 0) return `${hours}h ${minutes}m`;
+        if (minutes > 0) return `${minutes}m`;
+        return `< 1m`;
+      };
+
+      // 3. Render and Filter Function
       const renderList = () => {
-        list.innerHTML = "";
+        listContainer.innerHTML = "";
+        timelineContainer.innerHTML = "";
         let filtered = processedEvents;
 
         const sessionVal = filterSessionEl.value;
         const eventVal = filterEventTypeEl.value;
         const sortVal = sortOrderEl.value;
 
-        // Apply Session Filter
         if (sessionVal !== "all") {
           filtered = filtered.filter((e) => String(e.sessionId) === sessionVal);
         }
 
-        // Apply Event Type Filter
         if (eventVal !== "all") {
           filtered = filtered.filter((e) => {
             const t = e.eType;
@@ -4363,8 +4597,7 @@
               return (
                 t.includes("ai-input") ||
                 t.includes("ai-insert") ||
-                (t.includes("ai") && t.includes("input")) ||
-                t.includes("ai-paste")
+                (t.includes("ai") && t.includes("input"))
               );
             if (eventVal === "ai-replace") return t.includes("ai-replace");
             if (eventVal === "ai-delete") return t.includes("ai-delete");
@@ -4379,66 +4612,163 @@
         }
         empty.style.display = "none";
 
-        // Apply Sort
-        filtered.sort((a, b) => {
-          const timeA = new Date(a.occurredAt).getTime() || 0;
-          const timeB = new Date(b.occurredAt).getTime() || 0;
-          const sessionA = Number(a.sessionId) || 0;
-          const sessionB = Number(b.sessionId) || 0;
+        // Generate TIMELINE View (Requires Chronological order)
+        const chronologicalEvents = [...filtered].sort(
+          (a, b) => a.timestampMs - b.timestampMs,
+        );
+        const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000;
+        const periods = [];
+        let currentPeriod = null;
 
+        chronologicalEvents.forEach((evt) => {
+          if (!evt.timestampMs || isNaN(evt.timestampMs)) return;
+          if (!currentPeriod) {
+            currentPeriod = {
+              startTime: evt.timestampMs,
+              endTime: evt.timestampMs,
+              events: [evt],
+              eventCount: 1,
+            };
+          } else {
+            const gap = evt.timestampMs - currentPeriod.endTime;
+            if (gap > INACTIVITY_THRESHOLD_MS) {
+              periods.push(currentPeriod);
+              currentPeriod = {
+                startTime: evt.timestampMs,
+                endTime: evt.timestampMs,
+                events: [evt],
+                eventCount: 1,
+              };
+            } else {
+              currentPeriod.endTime = evt.timestampMs;
+              currentPeriod.events.push(evt);
+              currentPeriod.eventCount++;
+            }
+          }
+        });
+        if (currentPeriod) periods.push(currentPeriod);
+
+        if (periods.length === 0) {
+          timelineContainer.innerHTML = `<div class="meta" style="padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px;">No significant work periods found.</div>`;
+        } else {
+          // NEW: Formatter that includes the specific Date AND Time (e.g. "Mar 28, 04:14 PM")
+          const formatDateTime = (ts) =>
+            new Date(ts).toLocaleString([], {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+
+          periods.forEach((p, index) => {
+            const durMs = p.endTime - p.startTime;
+            const block = document.createElement("div");
+            block.style.cssText =
+              "display: flex; flex-direction: column; gap: 4px;";
+            const durationText =
+              durMs < 60000 ? "< 1m" : formatDurationHelper(durMs);
+
+            // NEW: Extract all unique session IDs involved in this specific work period
+            const sessionsList = [...new Set(p.events.map((e) => e.sessionId))]
+              .filter((id) => id !== "Unknown")
+              .join(", ");
+            const sessionBadge = sessionsList
+              ? `<span class="meta" style="margin-left: 12px; padding: 2px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; font-size: 0.75rem;">Session(s): ${sessionsList}</span>`
+              : "";
+
+            block.innerHTML = `
+                <div style="display: flex; justify-content: space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);">
+                  <div>
+                    <div style="display: flex; align-items: center;">
+                        <strong style="font-size: 1.1rem;">Work Period ${index + 1}</strong>
+                        ${sessionBadge}
+                    </div>
+                    <div class="meta" style="margin-top: 6px; font-size: 0.9rem;">${formatDateTime(p.startTime)} &rarr; ${formatDateTime(p.endTime)}</div>
+                  </div>
+                  <div style="text-align: right;">
+                    <div style="font-weight: bold; color: var(--fg);">${durationText}</div>
+                    <div class="meta" style="margin-top: 4px;">${p.eventCount} logged events</div>
+                  </div>
+                </div>
+              `;
+            timelineContainer.appendChild(block);
+
+            if (index < periods.length - 1) {
+              const gapMs = periods[index + 1].startTime - p.endTime;
+              const gapDiv = document.createElement("div");
+
+              // NEW: Calculate specific start/end dates for the gap
+              const gapStart = formatDateTime(p.endTime);
+              const gapEnd = formatDateTime(periods[index + 1].startTime);
+
+              if (gapMs > 4 * 60 * 60 * 1000) {
+                gapDiv.className = "meta";
+                gapDiv.style.cssText =
+                  "text-align: center; padding: 8px 0; color: #f59e0b; background: rgba(245, 158, 11, 0.05); border-radius: 4px; margin: 4px 0;";
+                gapDiv.innerHTML = `⟐ <strong>Significant Gap</strong> (${formatDurationHelper(gapMs)})<br/><span style="font-size: 0.85rem; display: inline-block; margin-top: 4px;">${gapStart} &rarr; ${gapEnd}</span> ⟐`;
+              } else {
+                gapDiv.className = "meta";
+                gapDiv.style.cssText = "text-align: center; padding: 6px 0;";
+                gapDiv.innerHTML = `&darr; Gap: ${formatDurationHelper(gapMs)}<br/><span style="font-size: 0.85rem; display: inline-block; margin-top: 4px;">${gapStart} &rarr; ${gapEnd}</span> &darr;`;
+              }
+              timelineContainer.appendChild(gapDiv);
+            }
+          });
+        }
+
+        // Apply Sort for LIST View
+        filtered.sort((a, b) => {
           if (sortVal === "session-desc") {
-            if (sessionA !== sessionB) return sessionB - sessionA;
-            return timeB - timeA;
+            if (a.sessionId !== b.sessionId)
+              return Number(b.sessionId) - Number(a.sessionId);
+            return b.timestampMs - a.timestampMs;
           }
           if (sortVal === "session-asc") {
-            if (sessionA !== sessionB) return sessionA - sessionB;
-            return timeA - timeB;
+            if (a.sessionId !== b.sessionId)
+              return Number(a.sessionId) - Number(b.sessionId);
+            return a.timestampMs - b.timestampMs;
           }
-          if (sortVal === "time-desc") {
-            return timeB - timeA;
-          }
-          if (sortVal === "time-asc") {
-            return timeA - timeB;
-          }
+          if (sortVal === "time-desc") return b.timestampMs - a.timestampMs;
+          if (sortVal === "time-asc") return a.timestampMs - b.timestampMs;
           return 0;
         });
 
-        // Group by Session (to create the visual headers)
+        // Group by Session for LIST view
         const groups = new Map();
         filtered.forEach((e) => {
           if (!groups.has(e.sessionId)) groups.set(e.sessionId, []);
           groups.get(e.sessionId).push(e);
         });
 
-        // Build the HTML Groupings
+        // Build the HTML Groupings for LIST view
         groups.forEach((groupEvents, sid) => {
-          // Visual header for each session
           const sep = document.createElement("div");
           sep.style.cssText =
             "margin: 20px 0 10px 0; padding-bottom: 8px; border-bottom: 2px solid var(--accent); display:flex; justify-content:space-between; align-items:flex-end;";
           sep.innerHTML = `<h3 style="margin:0; color:var(--accent); font-size: 1.25rem;">Session ${sid}</h3><span class="meta" style="font-weight:bold;">${groupEvents.length} events</span>`;
-          list.appendChild(sep);
+          listContainer.appendChild(sep);
 
-          // Populate the events for this session (Incoming logic merged here)
           groupEvents.forEach((e) => {
             const row = document.createElement("div");
-            row.className = "card session-log-row event";
+            row.className = "card";
             row.style.cssText =
               "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
 
             const items = [];
             const ed = e.eventData;
 
-            if (ed.file) {
+            const viewStr =
+              ed.View ??
+              ed.view ??
+              ed.fileView ??
+              ed.FileView ??
+              ed.file ??
+              ed.File ??
+              ed.fileName;
+            if (viewStr)
               items.push(
-                `<span style="color: var(--muted)">File:</span> <strong>${ed.file}</strong>`,
+                `<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`,
               );
-            }
-            if (ed.fileView && ed.fileView !== ed.file) {
-              items.push(
-                `<span style="color: var(--muted)">View:</span> <strong>${ed.fileView}</strong>`,
-              );
-            }
 
             const charsChanged =
               ed.CharsChanged ??
@@ -4448,17 +4778,10 @@
               ed.Length ??
               ed.length ??
               ed.pasteCharCount;
-            if (charsChanged !== undefined && charsChanged !== null) {
+            if (charsChanged !== undefined && charsChanged !== null)
               items.push(
                 `<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`,
               );
-            }
-
-            if (ed.pasteCharCount !== undefined && ed.pasteCharCount !== null) {
-              items.push(
-                `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${ed.pasteCharCount}</strong>`,
-              );
-            }
 
             const flightTime = ed.FlightTime ?? ed.flightTime;
             if (flightTime !== undefined && flightTime !== null) {
@@ -4472,209 +4795,60 @@
 
             const windowFocused =
               ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
-            if (windowFocused !== undefined && windowFocused !== null) {
+            if (windowFocused !== undefined && windowFocused !== null)
               items.push(
                 `<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`,
               );
-            }
 
             const workspace =
               ed.WorkspaceName ??
               ed.workspaceName ??
               ed.Workspace ??
               ed.workspace;
-            if (
-              workspace !== undefined &&
-              workspace !== null &&
-              workspace !== ""
-            ) {
+            if (workspace)
               items.push(
                 `<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`,
               );
-            }
 
             let noteHtml = "";
-            if (ed.possibleAiDetection) {
+            if (ed.possibleAiDetection)
               noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;
-            }
 
             const rowNum = ed.Row ?? ed.row ?? e.index + 1;
-            const rawStringFallback =
-              typeof ed === "string" ? ed : JSON.stringify(ed);
-
             let bodyHtml =
               items.length > 0
                 ? items.join(
                     ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
                   )
-                : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${rawStringFallback}</code>`;
+                : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${JSON.stringify(ed)}</code>`;
 
             row.innerHTML = `
-              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
-                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                  <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${e.badgeBg}; color: ${e.badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${e.eventType}</span>
-                  <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${e.sessionId}</strong> &bull; ${formatSessionDate(e.occurredAt)}</span>
-                </div>
-                <div style="display:flex; align-items:center; gap: 8px;">
-                  <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${rowNum}</div>
-                  <button type="button" class="btn btn-secondary session-note-toggle" style="height:28px; min-width:28px; width:28px; padding:0; font-size:0.85rem; display:flex; align-items:center; justify-content:center; filter: grayscale(100%) opacity(0.5);">✍️</button>
-                </div>
-              </div>
-              <div style="font-size: 0.9rem; line-height: 1.5; color: var(--fg);">
-                ${bodyHtml}
-                ${noteHtml}
-              </div>
-              <div class="session-note-area" style="display:none; margin-top:10px;">
-                <textarea class="session-note-text" placeholder="Teacher note..." style="width:100%; min-height:70px; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--fg);"></textarea>
-                <div style="display:flex; justify-content:flex-end; margin-top:6px; gap:8px;">
-                  <button type="button" class="btn btn-secondary session-note-cancel" style="padding:6px 12px;">Cancel</button>
-                  <button type="button" class="btn btn-primary session-note-save" style="padding:6px 12px;">Save Note</button>
-                </div>
-              </div>
-            `;
-
-            // Extract IDs safely for Note saving
-            const sessionEventId = Number(
-              ed.SessionEventId ??
-                ed.sessionEventId ??
-                ed.eventId ??
-                ed.EventId ??
-                0,
-            );
-
-            if (sessionEventId) {
-              row.dataset.sessionEventId = String(sessionEventId);
-            }
-            if (
-              e.sessionId &&
-              Number.isFinite(Number(e.sessionId)) &&
-              Number(e.sessionId) > 0
-            ) {
-              row.dataset.sessionId = String(e.sessionId);
-            }
-
-            // Click listener for loading notes
-            row.addEventListener("click", (evt) => {
-              if (
-                evt.target instanceof HTMLElement &&
-                evt.target.closest("button")
-              ) {
-                return;
-              }
-              const rowSessionId = Number(row.dataset.sessionId || 0);
-              const rowSessionEventId = Number(row.dataset.sessionEventId || 0);
-              if (rowSessionId > 0) {
-                post("loadLogNotes", {
-                  sessionId: rowSessionId,
-                  sessionEventId: rowSessionEventId,
-                });
-              }
-            });
-
-            // Note toggle UI logic
-            const noteToggle = row.querySelector(".session-note-toggle");
-            const noteArea = row.querySelector(".session-note-area");
-            const noteTextarea = row.querySelector(".session-note-text");
-            const noteSave = row.querySelector(".session-note-save");
-            const noteCancel = row.querySelector(".session-note-cancel");
-
-            // Safely look up notes loaded in the global object
-            const notesMap = window.__TBD_SESSION_NOTE_MAP__ || {};
-            if (sessionEventId && notesMap[sessionEventId]) {
-              const existingText = notesMap[sessionEventId];
-              if (noteToggle) {
-                noteToggle.style.filter = "none";
-                noteToggle.style.opacity = "1";
-              }
-              if (noteTextarea) {
-                noteTextarea.value = existingText;
-              }
-            }
-
-            noteToggle?.addEventListener("click", () => {
-              if (!noteArea) return;
-              const isVisible = noteArea.style.display !== "none";
-              noteArea.style.display = isVisible ? "none" : "block";
-              if (!isVisible) noteTextarea?.focus();
-            });
-
-            noteCancel?.addEventListener("click", () => {
-              if (!noteArea) return;
-              if (noteTextarea) noteTextarea.value = "";
-              noteArea.style.display = "none";
-            });
-
-            noteSave?.addEventListener("click", () => {
-              if (!noteArea || !noteTextarea || !noteToggle) return;
-
-              const text = String(noteTextarea.value || "").trim();
-              if (!text) {
-                alert("Please type a note before saving.");
-                return;
-              }
-
-              const targetEventId = Number(row.dataset.sessionEventId || 0);
-              const rowSessionId = Number(
-                row.dataset.sessionId || e.sessionId || 0,
-              );
-              const rowNoteId = Number(row.dataset.noteId || 0);
-              const payloadNote = { text };
-              const effectiveSessionId =
-                rowSessionId > 0 ? rowSessionId : Number(e.sessionId || 0);
-
-              if (targetEventId) {
-                payloadNote.sessionEventId = targetEventId;
-              }
-              if (effectiveSessionId > 0) {
-                payloadNote.sessionId = effectiveSessionId;
-              }
-              if (rowNoteId > 0) {
-                payloadNote.id = rowNoteId;
-              }
-
-              if (window.postTeacherMessage) {
-                window.postTeacherMessage("saveLogNotes", {
-                  filename: window.currentLogFilename || "",
-                  notes: [payloadNote],
-                });
-              }
-
-              // Update UI Cache
-              window.__TBD_SESSION_NOTE_MAP__ =
-                window.__TBD_SESSION_NOTE_MAP__ || {};
-              if (targetEventId) {
-                window.__TBD_SESSION_NOTE_MAP__[targetEventId] = text;
-              }
-
-              let noteLabel = row.querySelector(".loaded-note-text");
-              if (!noteLabel) {
-                noteLabel = document.createElement("div");
-                noteLabel.className = "loaded-note-text";
-                noteLabel.style.cssText =
-                  "margin-top:6px;padding:6px;border-left:3px solid #4ade80;background:rgba(34,197,94,0.1);color:#9ae6b4;font-size:0.85rem;border-radius:4px;";
-                row.appendChild(noteLabel);
-              }
-              noteLabel.textContent = `Teacher note: ${text}`;
-
-              noteArea.style.display = "none";
-              noteToggle.dataset.hasNote = "true";
-              noteToggle.style.filter = "none";
-              noteToggle.style.opacity = "1";
-            });
-
-            list.appendChild(row);
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                      <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${e.badgeBg}; color: ${e.badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${e.eventType}</span>
+                      <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${e.sessionId}</strong> &bull; ${formatSessionDate(e.occurredAt)}</span>
+                    </div>
+                    <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${rowNum}</div>
+                  </div>
+                  <div style="font-size: 0.9rem; line-height: 1.5; color: var(--fg);">
+                    ${bodyHtml}
+                    ${noteHtml}
+                  </div>
+                `;
+            listContainer.appendChild(row);
           });
         });
       };
 
-      // Bind re-render events to dropdowns
       filterSessionEl.onchange = renderList;
       filterEventTypeEl.onchange = renderList;
       sortOrderEl.onchange = renderList;
 
-      // Initial Call
       renderList();
     }
+    // end renderAssignmentStudentSessions
+
+    // end renderAssignmentStudentSessions
     function parseLogText(text) {
       const lines = String(text || "")
         .trim()
@@ -4716,7 +4890,7 @@
       return events;
     }
 
-    // Completely revamped UI/UX for Session Logs
+    // Completely revamped UI/UX for Session Logs (Now with Timeline Support)
     function renderAssignmentSessionLog(payload) {
       const title = $("assignment-session-log-title");
       const content = $("assignment-session-log-content");
@@ -4728,7 +4902,7 @@
 
       title.textContent = payload.filename || "Session Log";
 
-      // Reset inline styles from the HTML that forced monospace
+      // Reset inline styles
       content.style.whiteSpace = "normal";
       content.style.fontFamily = "inherit";
       content.style.background = "transparent";
@@ -4746,131 +4920,258 @@
       const events = parseLogText(text);
 
       if (events.length === 0) {
-        // Fallback if parsing fails
         content.innerHTML = `<pre style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); overflow-x: auto;">${text}</pre>`;
-      } else {
-        const container = document.createElement("div");
-        container.style.cssText =
-          "display: flex; flex-direction: column; gap: 8px;";
+        view.style.display = "block";
+        return;
+      }
 
-        events.forEach((evt) => {
-          const card = document.createElement("div");
-          card.style.cssText =
-            "background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;";
+      // --- NEW: UI TOGGLE CONTROLS ---
+      const controlsDiv = document.createElement("div");
+      controlsDiv.style.cssText =
+        "display: flex; gap: 8px; margin-bottom: 16px;";
+      controlsDiv.innerHTML = `
+        <button id="btn-view-list" class="btn btn-primary">📋 Event List</button>
+        <button id="btn-view-timeline" class="btn btn-secondary">⏱️ Visual Timeline</button>
+      `;
+      content.appendChild(controlsDiv);
 
-          // --- HEADER ROW ---
-          const header = document.createElement("div");
-          header.style.cssText =
-            "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 4px;";
+      // --- CONTAINERS ---
+      const listContainer = document.createElement("div");
+      listContainer.id = "session-list-container";
+      listContainer.style.display = "flex";
+      listContainer.style.flexDirection = "column";
+      listContainer.style.gap = "8px";
 
-          // Event type badge color logic
-          const typeBadge = document.createElement("span");
-          let badgeColor = "var(--fg)";
-          let badgeBg = "var(--bg)";
-          const eType = (evt.eventType || "").toLowerCase();
+      const timelineContainer = document.createElement("div");
+      timelineContainer.id = "session-timeline-container";
+      timelineContainer.style.display = "none"; // Hidden by default
+      timelineContainer.style.flexDirection = "column";
+      timelineContainer.style.gap = "12px";
 
-          if (eType.includes("paste")) {
-            badgeColor = "#ef4444";
-            badgeBg = "rgba(239, 68, 68, 0.1)";
-          } // Red
-          else if (
-            eType.includes("input") ||
-            eType.includes("edit") ||
-            eType.includes("replace")
-          ) {
-            badgeColor = "#3b82f6";
-            badgeBg = "rgba(59, 130, 246, 0.1)";
-          } // Blue
-          else if (eType.includes("focus") || eType.includes("window")) {
-            badgeColor = "#10b981";
-            badgeBg = "rgba(16, 185, 129, 0.1)";
-          } // Green
-          else if (eType.includes("save")) {
-            badgeColor = "#8b5cf6";
-            badgeBg = "rgba(139, 92, 246, 0.1)";
-          } // Purple
-          else if (eType.includes("start") || eType.includes("end")) {
-            badgeColor = "#f59e0b";
-            badgeBg = "rgba(245, 158, 11, 0.1)";
-          } // Orange
+      content.appendChild(listContainer);
+      content.appendChild(timelineContainer);
 
-          typeBadge.style.cssText = `font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;`;
-          typeBadge.textContent = evt.eventType || "Unknown Event";
+      // Toggle Logic
+      const btnViewList = controlsDiv.querySelector("#btn-view-list");
+      const btnViewTimeline = controlsDiv.querySelector("#btn-view-timeline");
 
-          const timeSpan = document.createElement("span");
-          timeSpan.style.cssText = "font-size: 0.8rem; color: var(--muted);";
-          timeSpan.innerHTML = `<strong>Session ${evt.session}</strong> &bull; Row ${evt.row} &bull; ${evt.timestamp}`;
-
-          header.appendChild(typeBadge);
-          header.appendChild(timeSpan);
-          card.appendChild(header);
-
-          // --- BODY ROW ---
-          const body = document.createElement("div");
-          body.style.cssText = "font-size: 0.9rem; line-height: 1.4;";
-
-          if (evt.data) {
-            const items = [];
-            if (evt.data.file) {
-              items.push(
-                `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
-              );
-            }
-            if (evt.data.fileView && evt.data.fileView !== evt.data.file) {
-              items.push(
-                `<span style="color: var(--muted)">View:</span> <strong>${evt.data.fileView}</strong>`,
-              );
-            }
-            if (evt.data.charsAdded !== undefined) {
-              items.push(
-                `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
-              );
-            }
-            if (evt.data.pasteCharCount !== undefined) {
-              items.push(
-                `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
-              );
-            }
-            if (evt.data.flightTime !== undefined) {
-              items.push(
-                `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
-              );
-            }
-            if (evt.data.focused !== undefined) {
-              items.push(
-                `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
-              );
-            }
-            if (evt.data.workspaceName) {
-              items.push(
-                `<span style="color: var(--muted)">Workspace:</span> <strong>${evt.data.workspaceName}</strong>`,
-              );
-            }
-
-            // Highlight AI or Interruption Notes
-            if (evt.data.possibleAiDetection) {
-              items.push(
-                `<div style="margin-top: 8px; width: 100%; padding: 8px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 4px 4px 0;"><strong>Note:</strong> ${evt.data.possibleAiDetection}</div>`,
-              );
-            }
-
-            if (items.length > 0) {
-              body.innerHTML = items.join(
-                ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
-              );
-            } else {
-              body.innerHTML = `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson}</code>`;
-            }
-          } else {
-            body.innerHTML = `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson || "(Empty Data)"}</code>`;
-          }
-
-          card.appendChild(body);
-          container.appendChild(card);
+      if (btnViewList && btnViewTimeline) {
+        btnViewList.addEventListener("click", (e) => {
+          e.target.className = "btn btn-primary";
+          btnViewTimeline.className = "btn btn-secondary";
+          listContainer.style.display = "flex";
+          timelineContainer.style.display = "none";
         });
 
-        content.appendChild(container);
+        btnViewTimeline.addEventListener("click", (e) => {
+          e.target.className = "btn btn-primary";
+          btnViewList.className = "btn btn-secondary";
+          listContainer.style.display = "none";
+          timelineContainer.style.display = "flex";
+        });
       }
+
+      // --- TIMELINE DATA PROCESSING ---
+      const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000;
+      const periods = [];
+      let currentPeriod = null;
+
+      const parseEventTime = (timeStr) => {
+        if (!timeStr) return null;
+        const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
+        const d = new Date(cleanStr);
+        return isNaN(d.getTime()) ? null : d.getTime();
+      };
+
+      events.forEach((evt) => {
+        const ts = parseEventTime(evt.timestamp);
+        if (!ts) return;
+
+        if (!currentPeriod) {
+          currentPeriod = {
+            startTime: ts,
+            endTime: ts,
+            events: [evt],
+            eventCount: 1,
+          };
+        } else {
+          const gap = ts - currentPeriod.endTime;
+          if (gap > INACTIVITY_THRESHOLD_MS) {
+            periods.push(currentPeriod);
+            currentPeriod = {
+              startTime: ts,
+              endTime: ts,
+              events: [evt],
+              eventCount: 1,
+            };
+          } else {
+            currentPeriod.endTime = ts;
+            currentPeriod.events.push(evt);
+            currentPeriod.eventCount++;
+          }
+        }
+      });
+      if (currentPeriod) periods.push(currentPeriod);
+
+      // --- FIXED: BULLETPROOF DURATION FORMATTER ---
+      const formatDurationHelper = (ms) => {
+        if (!ms || ms < 0) return "0s";
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        if (hours > 0) return `${hours}h ${minutes}m`;
+        if (minutes > 0) return `${minutes}m`;
+        return `< 1m`;
+      };
+
+      // --- TIMELINE RENDERING ---
+      timelineContainer.innerHTML = ""; // Clear the placeholder
+
+      if (periods.length === 0) {
+        timelineContainer.innerHTML = `<div class="meta" style="padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px;">No significant work periods found to build a timeline.</div>`;
+      } else {
+        const formatTime = (ts) => {
+          return new Date(ts).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        };
+
+        periods.forEach((p, index) => {
+          const durMs = p.endTime - p.startTime;
+
+          const block = document.createElement("div");
+          block.style.cssText =
+            "display: flex; flex-direction: column; gap: 4px;";
+
+          const durationText =
+            durMs < 60000 ? "< 1m" : formatDurationHelper(durMs);
+
+          block.innerHTML = `
+            <div style="display: flex; justify-content: space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);">
+              <div>
+                <strong style="font-size: 1.1rem;">Work Period ${index + 1}</strong>
+                <div class="meta" style="margin-top: 4px;">${formatTime(p.startTime)} &rarr; ${formatTime(p.endTime)}</div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-weight: bold; color: var(--fg);">${durationText}</div>
+                <div class="meta">${p.eventCount} logged events</div>
+              </div>
+            </div>
+          `;
+          timelineContainer.appendChild(block);
+
+          if (index < periods.length - 1) {
+            const gapMs = periods[index + 1].startTime - p.endTime;
+            const gapDiv = document.createElement("div");
+
+            if (gapMs > 4 * 60 * 60 * 1000) {
+              gapDiv.className = "meta";
+              gapDiv.style.cssText =
+                "text-align: center; padding: 6px 0; color: #f59e0b;";
+              gapDiv.innerHTML = `⟐ <strong>Significant Gap: ${formatDurationHelper(gapMs)}</strong> ⟐`;
+            } else {
+              gapDiv.className = "meta";
+              gapDiv.style.cssText = "text-align: center; padding: 6px 0;";
+              gapDiv.innerHTML = `&darr; Gap: ${formatDurationHelper(gapMs)} &darr;`;
+            }
+            timelineContainer.appendChild(gapDiv);
+          }
+        });
+      }
+
+      // --- LIST VIEW RENDERING (Existing Logic) ---
+      events.forEach((evt) => {
+        const card = document.createElement("div");
+        card.style.cssText =
+          "background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;";
+
+        const header = document.createElement("div");
+        header.style.cssText =
+          "display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 4px;";
+
+        const typeBadge = document.createElement("span");
+        let badgeColor = "var(--fg)",
+          badgeBg = "var(--bg)";
+        const eType = (evt.eventType || "").toLowerCase();
+
+        if (eType.includes("paste")) {
+          badgeColor = "#ef4444";
+          badgeBg = "rgba(239, 68, 68, 0.1)";
+        } else if (
+          eType.includes("input") ||
+          eType.includes("edit") ||
+          eType.includes("replace")
+        ) {
+          badgeColor = "#3b82f6";
+          badgeBg = "rgba(59, 130, 246, 0.1)";
+        } else if (eType.includes("focus") || eType.includes("window")) {
+          badgeColor = "#10b981";
+          badgeBg = "rgba(16, 185, 129, 0.1)";
+        } else if (eType.includes("save")) {
+          badgeColor = "#8b5cf6";
+          badgeBg = "rgba(139, 92, 246, 0.1)";
+        } else if (eType.includes("start") || eType.includes("end")) {
+          badgeColor = "#f59e0b";
+          badgeBg = "rgba(245, 158, 11, 0.1)";
+        }
+
+        typeBadge.style.cssText = `font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;`;
+        typeBadge.textContent = evt.eventType || "Unknown Event";
+
+        const timeSpan = document.createElement("span");
+        timeSpan.style.cssText = "font-size: 0.8rem; color: var(--muted);";
+        timeSpan.innerHTML = `<strong>Session ${evt.session}</strong> &bull; Row ${evt.row} &bull; ${evt.timestamp}`;
+
+        header.appendChild(typeBadge);
+        header.appendChild(timeSpan);
+        card.appendChild(header);
+
+        const body = document.createElement("div");
+        body.style.cssText = "font-size: 0.9rem; line-height: 1.4;";
+
+        if (evt.data) {
+          const items = [];
+          if (evt.data.file)
+            items.push(
+              `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
+            );
+          if (evt.data.charsAdded !== undefined)
+            items.push(
+              `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
+            );
+          if (evt.data.pasteCharCount !== undefined)
+            items.push(
+              `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
+            );
+          if (evt.data.flightTime !== undefined)
+            items.push(
+              `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
+            );
+          if (evt.data.focused !== undefined)
+            items.push(
+              `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
+            );
+
+          if (evt.data.possibleAiDetection) {
+            items.push(
+              `<div style="margin-top: 8px; width: 100%; padding: 8px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 4px 4px 0;"><strong>Note:</strong> ${evt.data.possibleAiDetection}</div>`,
+            );
+          }
+
+          body.innerHTML =
+            items.length > 0
+              ? items.join(
+                  ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
+                )
+              : `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson}</code>`;
+        } else {
+          body.innerHTML = `<code style="background: var(--bg); padding: 4px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${evt.rawJson || "(Empty Data)"}</code>`;
+        }
+
+        card.appendChild(body);
+        listContainer.appendChild(card);
+      });
 
       view.style.display = "block";
     }

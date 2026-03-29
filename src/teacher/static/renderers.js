@@ -1065,6 +1065,7 @@ window.TeacherUI = {
                 notePayload.sessionId = sessionId;
               }
               allNotes.push(notePayload);
+              allNotes.push({ timestamp: ts, text });
             }
           });
 

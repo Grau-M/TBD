@@ -3,7 +3,14 @@ import { storageManager, state } from '../state';
 import { getHtml } from './getHtml';
 import { requireRoleAccess, getWorkspaceAuthSession } from '../auth';
 import { apiGet } from '../api';
-import { handleAnalyzeLogs, handleCompareAssignmentStudents, handleGenerateProfile, handleGenerateTimeline } from './services/dashboardService';
+import { 
+  handleAnalyzeLogs, 
+  handleCompareAssignmentStudents, 
+  handleGenerateProfile, 
+  handleGenerateTimeline,
+  handleGenerateDbTimeline,
+  handleGenerateDbProfile 
+} from './services/dashboardService';
 import {
   handleOpenLog,
   handleExportLog,
@@ -516,6 +523,36 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           });
           break;
         }
+
+        // 🟢 NEW: DB Driven Timeline and Profile Resolvers
+        case 'generateDbTimeline':
+        case 'generateDbProfile': {
+          const teacherId = await getValidTeacherId();
+          const classId = Number(message.classId);
+          const assignmentId = Number(message.assignmentId);
+          const reqContext = message.context; // 'class' or 'student'
+          const selectionIds = message.selectionIds || [];
+
+          let sessionIds: number[] = [];
+
+          if (reqContext === 'student') {
+            sessionIds = selectionIds.map(Number);
+          } else if (reqContext === 'class') {
+            // For class view, selectionIds are student AuthUserIds. We need to fetch all their sessions.
+            for (const studentId of selectionIds) {
+              const sessions = await storageManager.listAssignmentStudentSessions(classId, assignmentId, Number(studentId), teacherId);
+              sessionIds.push(...sessions.map(s => s.sessionId));
+            }
+          }
+
+          if (message.command === 'generateDbTimeline') {
+            if (panel) { await handleGenerateDbTimeline(panel, SECRET_PASSPHRASE, sessionIds, context); }
+          } else {
+            if (panel) { await handleGenerateDbProfile(panel, SECRET_PASSPHRASE, sessionIds, context); }
+          }
+          break;
+        }
+
       }
     } catch (e: any) {
       panel?.webview.postMessage({ command: 'error', message: String(e.message || e) });

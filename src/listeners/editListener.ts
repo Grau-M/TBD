@@ -22,7 +22,8 @@ function pushPendingEvent() {
 }
 
 export function createEditListener(): vscode.Disposable {
-    return vscode.workspace.onDidChangeTextDocument((event) => {
+    // Make the handler async so we can instantly read the OS clipboard on massive inserts
+    return vscode.workspace.onDidChangeTextDocument(async (event) => {
         // The Student-Only Gate: Cut the microphone
         if (state.currentUserRole !== 'Student') {
             return; 
@@ -50,59 +51,82 @@ export function createEditListener(): vscode.Disposable {
 
         if (isIgnoredPath(fileEditRaw)) { return; }
 
-        const normalize = (str: string) => str.replace(/\s+/g, '');
-        const isExternalCopy = (text: string) => {
-            if (!state.externalCopiedText) {return false;}
-            return normalize(state.externalCopiedText).includes(normalize(text));
-        };
-
         // PROCESS CHANGES
         let totalAdded = 0;
         let totalDeleted = 0;
-        let lastChangeText = '';
+        let largestChangeText = '';
 
+        // Extract the largest single block of text inserted (prevents multi-cursor paste bugs)
         event.contentChanges.forEach((change) => {
             totalAdded += change.text.length;
             totalDeleted += change.rangeLength;
-            if (change.text.length > 0) {
-                lastChangeText = change.text;
+            if (change.text.length > largestChangeText.length) {
+                largestChangeText = change.text;
             }
         });
 
-        let eventType: StandardEvent['eventType'];
         const isReplace = totalDeleted > 0 && totalAdded > 0;
         const isDelete = totalDeleted > 0 && totalAdded === 0;
         const isInsert = totalDeleted === 0 && totalAdded > 0;
         
         // AI DETECTION: A human typing generates 1 char per event.
-        // If a single event contains > 2 chars, it was inserted atomically (Paste, Snippet, AI).
-        const isMultiCharAtomic = totalAdded > 2;
+        // If > 1 char is inserted atomically, it was a Paste, Snippet, or AI.
+        const isMultiCharAtomic = totalAdded > 1;
 
+        // Instantly grab the REAL clipboard if an atomic block is dropped in
+        let clipboardText = state.externalCopiedText || '';
+        if (isMultiCharAtomic) {
+            try {
+                clipboardText = await vscode.env.clipboard.readText();
+                state.externalCopiedText = clipboardText; // Keep state synced
+            } catch (err) {
+                // fallback to state if clipboard read fails
+            }
+        }
+
+        const normalize = (str: string) => str.replace(/\s+/g, '');
+        const isExternalCopy = (text: string) => {
+            if (!clipboardText) { return false; }
+            const normClip = normalize(clipboardText);
+            const normText = normalize(text);
+            if (!normClip || !normText) { return false; }
+            
+            // STRICT MATCHING: The inserted text must exactly match the clipboard.
+            // This prevents AI completions that happen to be substrings of an old clipboard 
+            // from being falsely flagged as manual pastes.
+            return normClip === normText;
+        };
+
+        let eventType: StandardEvent['eventType'];
+
+        // CLASSIFICATION TREE
         if (isDelete) {
             eventType = isFocusMismatch ? 'ai-delete' : 'delete';
         } else if (isReplace) {
-            if (isExternalCopy(lastChangeText)) {
-                eventType = 'external-paste';
-            } else if (isMultiCharAtomic) {
-                eventType = 'ai-replace';
+            if (isMultiCharAtomic) {
+                if (isExternalCopy(largestChangeText)) {
+                    eventType = 'replace'; // Manual replace via Ctrl+V
+                } else {
+                    eventType = 'ai-replace'; // AI Tab Completion over existing text
+                }
             } else {
-                eventType = isFocusMismatch ? 'ai-replace' : 'replace';
+                eventType = isFocusMismatch ? 'ai-replace' : 'replace'; // Standard typing over selection
             }
         } else if (isInsert) {
             if (isMultiCharAtomic) {
-                if (isExternalCopy(lastChangeText)) {
-                    eventType = 'external-paste';
+                if (isExternalCopy(largestChangeText)) {
+                    eventType = 'paste'; // Manual Ctrl+V
                 } else {
-                    eventType = 'ai-paste'; // Tab completions / Inline AI
+                    eventType = 'ai-paste'; // AI Tab Completion / Snippet insertion
                 }
             } else {
-                eventType = isFocusMismatch ? 'ai-paste' : 'input';
+                eventType = isFocusMismatch ? 'ai-paste' : 'input'; // Standard human typing
             }
         } else {
             eventType = 'input';
         }
 
-        // --- NEW CHARS CHANGED LOGIC ---
+        // --- CHARS CHANGED LOGIC ---
         let charsChanged = 0;
         if (isDelete || eventType === 'ai-delete') {
             charsChanged = totalDeleted;
@@ -111,7 +135,7 @@ export function createEditListener(): vscode.Disposable {
             // Subtracting totalDeleted gets us the *net new* characters the AI actually generated.
             charsChanged = totalAdded > totalDeleted ? (totalAdded - totalDeleted) : totalAdded;
         } else {
-            // For human inputs, pastes, and replaces, we care about what they actually put in.
+            // For human inputs, pastes, and regular replaces, record what was actually inserted
             charsChanged = totalAdded;
         }
 
@@ -123,7 +147,7 @@ export function createEditListener(): vscode.Disposable {
             if (isSameFile && isSameType) {
                 pendingEditEvent.charsAdded = (pendingEditEvent.charsAdded || 0) + charsChanged;
                 
-                if (['paste', 'external-paste', 'ai-paste', 'replace', 'ai-replace'].includes(pendingEditEvent.eventType)) {
+                if (['paste', 'ai-paste', 'replace', 'ai-replace'].includes(pendingEditEvent.eventType)) {
                     pendingEditEvent.pasteCharCount = pendingEditEvent.charsAdded;
                 }
 
@@ -145,7 +169,7 @@ export function createEditListener(): vscode.Disposable {
             charsAdded: charsChanged
         };
 
-        if (['paste', 'external-paste', 'ai-paste', 'replace', 'ai-replace'].includes(eventType)) {
+        if (['paste', 'ai-paste', 'replace', 'ai-replace'].includes(eventType)) {
             pendingEditEvent.pasteCharCount = charsChanged;
         }
 

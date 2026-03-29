@@ -2015,7 +2015,9 @@
         const checks = document.querySelectorAll(".log-checkbox:checked");
         const filenames = Array.from(checks).map((c) => c.value);
         if (filenames.length < 2) {
-          alert("Error: Please select at least 2 logs to build a behavioral profile.");
+          alert(
+            "Error: Please select at least 2 logs to build a behavioral profile.",
+          );
           return (status.textContent =
             "Error: Select at least 2 logs to build a profile.");
         }
@@ -4105,6 +4107,56 @@
 
       title.textContent = `Assignment Details: ${currentAssignmentName || "Assignment"}`;
       meta.textContent = `Students who started: ${students.length || 0}`;
+      // Calculate aggregate AI probability for the entire assignment
+      let totalAssigEvents = 0;
+      let totalAssigAiEvents = 0;
+
+      // Tally up all events for all students in this assignment
+      currentAssignmentStudents.forEach((s) => {
+        totalAssigEvents += s.totalEvents || 0;
+        totalAssigAiEvents += s.aiEventCount || 0;
+      });
+
+      // Calculate the overall AI probability percentage
+      const aggregateAiProb =
+        totalAssigEvents > 0
+          ? Math.round((totalAssigAiEvents / totalAssigEvents) * 100)
+          : 0;
+
+      // Determine the severity color
+      let aggAiColor = "#10b981"; // Low AI (Green)
+      if (aggregateAiProb > 15) {
+        aggAiColor = "#f59e0b"; // Moderate AI (Orange)
+      }
+      if (aggregateAiProb >= 40) {
+        aggAiColor = "#ef4444"; // High AI (Red)
+      }
+
+      // Create or select the UI box to avoid duplicates on re-renders
+      let aiMetricBox = document.getElementById("assignment-aggregate-ai-box");
+      if (!aiMetricBox) {
+        aiMetricBox = document.createElement("div");
+        aiMetricBox.id = "assignment-aggregate-ai-box";
+        // Insert it right after the meta text
+        meta.parentNode.insertBefore(aiMetricBox, meta.nextSibling);
+      }
+
+      // Style and inject the HTML for the box
+      aiMetricBox.className = "card";
+      aiMetricBox.style.cssText = `margin-top: 16px; margin-bottom: 20px; padding: 16px; border-left: 6px solid ${aggAiColor}; display: flex; align-items: center; justify-content: space-between; max-width: 450px; background: var(--surface);`;
+
+      aiMetricBox.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div>
+            <div style="font-size: 2rem; font-weight: 700; color: ${aggAiColor}; line-height: 1;">${aggregateAiProb}%</div>
+            <div class="meta" style="margin-top: 4px;">Overall AI Probability</div>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 700; font-size: 1.1rem; color: var(--fg);">${totalAssigAiEvents} <span style="font-weight: 400; color: var(--muted);">/ ${totalAssigEvents}</span></div>
+          <div class="meta" style="margin-top: 4px;">Total AI Events</div>
+        </div>
+      `;
 
       // Reset search and sort when opening a new assignment
       if ($("assignment-student-search")) {
@@ -4383,9 +4435,11 @@
                 <select id="filter-event-type" style="padding:6px; border-radius:4px; background:var(--bg); color:var(--fg); border:1px solid var(--border);">
                     <option value="all">All Events</option>
                     <option value="input">Input</option>
+                    <option value="paste">Paste</option>
                     <option value="replace">Replace</option>
                     <option value="delete">Delete</option>
                     <option value="ai-input">AI Input</option>
+                    <option value="ai-paste">AI Paste</option>
                     <option value="ai-replace">AI Replace</option>
                     <option value="ai-delete">AI Delete</option>
                 </select>
@@ -4530,6 +4584,198 @@
         };
       });
 
+      // STUDENT ANALYSIS DASHBOARD
+      let dashTotalEvents = processedEvents.length;
+      let dashUniqueSessions = new Set(processedEvents.map((e) => e.sessionId))
+        .size;
+
+      let dashAiEventCount = 0;
+      let dashPasteEventCount = 0;
+      let dashTotalPasteLength = 0;
+
+      const sessionGroups = new Map();
+
+      processedEvents.forEach((e) => {
+        // Count AI Events robustly
+        const t = String(e.eType || "").toLowerCase();
+        if (
+          t.startsWith("ai") ||
+          t.includes("-ai") ||
+          t.includes("_ai") ||
+          (e.eventData && (e.eventData.aiProvider || e.eventData.AiProvider))
+        ) {
+          dashAiEventCount++;
+        }
+
+        // Count Paste Events & Length
+        if (t.includes("paste")) {
+          dashPasteEventCount++;
+          const ed = e.eventData || {};
+          // Check every possible key the database might use to store the character count
+          const chars = Number(
+            ed.charsAdded ??
+              ed.CharsAdded ??
+              ed.CharsChanged ??
+              ed.charsChanged ??
+              ed.pasteCharCount ??
+              ed.PasteCharCount ??
+              ed.Length ??
+              ed.length ??
+              0,
+          );
+
+          if (!isNaN(chars) && chars > 0) {
+            dashTotalPasteLength += chars;
+          }
+        }
+
+        // Group by Session ID for time calculations
+        if (!sessionGroups.has(e.sessionId)) {
+          sessionGroups.set(e.sessionId, []);
+        }
+        sessionGroups.get(e.sessionId).push(e.timestampMs);
+      });
+
+      let dashTotalWallTimeMs = 0;
+      let dashTotalActiveTimeMs = 0;
+      // Use the teacher's custom inactivity threshold from settings (fallback to 5 mins if undefined)
+      const DASH_INACTIVITY_THRESHOLD_MS =
+        (currentSettings.inactivity || 5) * 60 * 1000;
+
+      const allTimestamps = processedEvents
+        .map((e) => e.timestampMs)
+        .filter((ts) => !isNaN(ts))
+        .sort((a, b) => a - b);
+
+      if (allTimestamps.length > 0) {
+        const globalFirst = allTimestamps[0];
+        const globalLast = allTimestamps[allTimestamps.length - 1];
+
+        // Wall time is the absolute total span from the very first event to the very last event
+        dashTotalWallTimeMs = globalLast - globalFirst;
+
+        // Calculate Active time by ignoring gaps larger than 5 minutes
+        let currentActiveStart = globalFirst;
+        let lastTime = globalFirst;
+
+        for (let i = 1; i < allTimestamps.length; i++) {
+          const time = allTimestamps[i];
+          const gap = time - lastTime;
+
+          if (gap > DASH_INACTIVITY_THRESHOLD_MS) {
+            // Close the previous active block
+            dashTotalActiveTimeMs += lastTime - currentActiveStart;
+            // Start a new active block
+            currentActiveStart = time;
+          }
+          lastTime = time;
+        }
+        // Add the final active block
+        dashTotalActiveTimeMs += lastTime - currentActiveStart;
+      }
+
+      // 2. Helper to format large ms values into "Xh Ym" or "Xm"
+      const formatDashDuration = (ms) => {
+        if (!ms || ms <= 0) return "0m";
+        const totalMins = Math.round(ms / 60000);
+        if (totalMins === 0) return "< 1m";
+        const hours = Math.floor(totalMins / 60);
+        const mins = totalMins % 60;
+        return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+      };
+
+      const dashActiveTimeText = formatDashDuration(dashTotalActiveTimeMs);
+      const dashWallTimeText = formatDashDuration(dashTotalWallTimeMs);
+
+      // Efficiency is still (Active / Wall) * 100
+      const dashEfficiency =
+        dashTotalWallTimeMs > 0
+          ? Math.round((dashTotalActiveTimeMs / dashTotalWallTimeMs) * 100)
+          : 0;
+
+      const dashAiProb =
+        dashTotalEvents > 0
+          ? Math.round((dashAiEventCount / dashTotalEvents) * 100)
+          : 0;
+      const dashPasteProb =
+        dashTotalEvents > 0
+          ? Math.round((dashPasteEventCount / dashTotalEvents) * 100)
+          : 0;
+      const dashAvgPaste =
+        dashPasteEventCount > 0
+          ? Math.round(dashTotalPasteLength / dashPasteEventCount)
+          : 0;
+
+      let dashAiColor =
+        dashAiProb >= 40 ? "#ef4444" : dashAiProb > 15 ? "#f59e0b" : "#10b981";
+      let dashPasteColor =
+        dashPasteProb >= 40
+          ? "#ef4444"
+          : dashPasteProb > 15
+            ? "#f59e0b"
+            : "#10b981";
+
+      let analysisDash = document.getElementById(
+        "assignment-student-analysis-dashboard",
+      );
+      if (!analysisDash) {
+        analysisDash = document.createElement("div");
+        analysisDash.id = "assignment-student-analysis-dashboard";
+
+        const controlsEl = document.getElementById(
+          "assignment-student-sessions-controls",
+        );
+        if (controlsEl && controlsEl.parentNode) {
+          controlsEl.parentNode.insertBefore(analysisDash, controlsEl);
+        } else if (list && list.parentNode) {
+          list.parentNode.insertBefore(analysisDash, list);
+        }
+      }
+
+      analysisDash.className = "card";
+      analysisDash.style.cssText =
+        "padding: 16px; margin-bottom: 20px; border-left: 6px solid var(--accent); background: var(--surface); display: flex; flex-direction: column; gap: 12px;";
+
+      analysisDash.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <h3 style="margin: 0; color: var(--accent); font-size: 1.1rem;">📊 ${studentName}'s Behavioral Dashboard</h3>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 4px;">
+            <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--fg);">${dashActiveTimeText}</div>
+                <div class="meta" style="margin-top: 4px; font-size: 0.8rem; text-transform: uppercase;">Active Time</div>
+            </div>
+            <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--fg);">${dashWallTimeText}</div>
+                <div class="meta" style="margin-top: 4px; font-size: 0.8rem; text-transform: uppercase;">Wall Time</div>
+            </div>
+            <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--fg);">${dashEfficiency}%</div>
+                <div class="meta" style="margin-top: 4px; font-size: 0.8rem; text-transform: uppercase;">Efficiency</div>
+            </div>
+            <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid ${dashAiColor}; text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: ${dashAiColor};">${dashAiProb}%</div>
+                <div class="meta" style="margin-top: 4px; font-size: 0.8rem; text-transform: uppercase;">AI Likelihood</div>
+            </div>
+            <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid ${dashPasteColor}; text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: ${dashPasteColor};">${dashPasteProb}%</div>
+                <div class="meta" style="margin-top: 4px; font-size: 0.8rem; text-transform: uppercase;">Paste Ratio</div>
+            </div>
+            <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--fg);">${dashAvgPaste}</div>
+                <div class="meta" style="margin-top: 4px; font-size: 0.8rem; text-transform: uppercase;">Avg Paste Len</div>
+            </div>
+            <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--fg);">${dashUniqueSessions}</div>
+                <div class="meta" style="margin-top: 4px; font-size: 0.8rem; text-transform: uppercase;">Total Sessions</div>
+            </div>
+            <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--fg);">${dashTotalEvents}</div>
+                <div class="meta" style="margin-top: 4px; font-size: 0.8rem; text-transform: uppercase;">Total Events</div>
+            </div>
+        </div>
+      `;
+      // end to analysis dashboard
       // 2. Populate the Session Dropdown dynamically
       const filterSessionEl = $("filter-session");
       const filterEventTypeEl = $("filter-event-type");
@@ -4588,6 +4834,8 @@
             const t = e.eType;
             if (eventVal === "input")
               return t.includes("input") && !t.includes("ai");
+            if (eventVal === "paste")
+              return t.includes("paste") && !t.includes("ai"); // NEW: Catch manual pastes
             if (eventVal === "replace")
               return t.includes("replace") && !t.includes("ai");
             if (eventVal === "delete")
@@ -4601,6 +4849,11 @@
                 t.includes("ai-insert") ||
                 (t.includes("ai") && t.includes("input"))
               );
+            if (eventVal === "ai-paste")
+              return (
+                t.includes("ai-paste") ||
+                (t.includes("ai") && t.includes("paste"))
+              ); // NEW: Catch AI pastes
             if (eventVal === "ai-replace") return t.includes("ai-replace");
             if (eventVal === "ai-delete") return t.includes("ai-delete");
             return true;

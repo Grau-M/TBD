@@ -3,6 +3,7 @@ import { storageManager, state } from '../state';
 import { getHtml } from './getHtml';
 import { requireRoleAccess, getWorkspaceAuthSession } from '../auth';
 import { apiGet } from '../api';
+import { fetchAndParseLog } from './utilis/LogHelpers';
 import { 
   handleAnalyzeLogs, 
   handleCompareAssignmentStudents, 
@@ -322,6 +323,46 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           const studentWorkRows = Array.isArray(studentWorkRawResponse?.students)
             ? studentWorkRawResponse.students
             : (Array.isArray(studentWorkRawResponse?.data) ? studentWorkRawResponse.data : students);
+          // start of AI detection and count fix
+           if (Array.isArray(studentWorkRows)) {
+            await Promise.all(studentWorkRows.map(async (student) => {
+              const studentId = Number(student?.authUserId ?? student?.UserId ?? student?.userId ?? 0);
+              if (studentId > 0) {
+                let aiCount = 0;
+                let actualTotal = 0;
+                try {
+                  // 💡 BIG FIX: This actually returns the flat list of EVENT rows from the DB, not files!
+                  const events = await storageManager.listAssignmentStudentSessions(classId, assignmentId, studentId, teacherId);
+                  
+                  if (Array.isArray(events)) {
+                    actualTotal = events.length;
+                    
+                    // Loop directly over the returned rows and count the AI ones
+                    for (const e of events) {
+                      const t = String(e.eventType || e.EventType || e.event_type || e.type || '').toLowerCase().trim();
+                      
+                      // Catch ai-replace, ai-input, ai replace, etc.
+                      if (t.startsWith('ai') || t.includes('-ai') || t.includes('_ai') || e.aiProvider || e.AiProvider) {
+                        aiCount++;
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.warn(`Failed to process events for student ${studentId}:`, e);
+                }
+                
+                // Bind the verified counts back to the student object
+                student.aiEventCount = aiCount;
+                student.AiEventCount = aiCount; // Fallback for UI mappers
+                
+                // Update total events to match the actual DB row count
+                if (actualTotal > 0) {
+                    student.totalEvents = actualTotal;
+                    student.TotalEvents = actualTotal;
+                }
+              }
+            }));
+          } // end of AI detection and count fix
           const focusedStudentWorkRow = (studentWorkRows || []).find((studentRow: any) => Number(studentRow?.authUserId ?? studentRow?.UserId ?? studentRow?.userId ?? 0) === focusStudentAuthUserId) || null;
 
           let studentReport: any = null;

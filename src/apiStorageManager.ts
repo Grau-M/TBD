@@ -444,7 +444,7 @@ export class ApiStorageManager {
         this.context = context;
         this.syncStatus.state = 'synced';
         this.syncStatus.lastError = null;
-           
+            
         try {
             await this.ensureStudentWorkspaceLinkFile();
         } catch {
@@ -464,7 +464,7 @@ export class ApiStorageManager {
         void this.flush([]);
     }
 
-async flush(_newEvents: StandardEvent[]): Promise<void> {
+    async flush(_newEvents: StandardEvent[]): Promise<void> {
         if (!this.context) {
             throw new Error('Storage manager is not initialized.');
         }
@@ -482,15 +482,18 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         const projectId = Number(session?.workspaceLinkedClassId ?? 0); 
         const linkRecord = await this.getStudentWorkspaceLinkRecord();
 
-        // 2. Format new events AND forcefully filter out 'file_edit' before upload
+        // 1. NUCLEAR FILTER: Aggressively block all variations of file_edit
         const newPayloads = _newEvents
-            .filter(event => String(event.eventType || '').toLowerCase() !== 'file_edit')
+            .filter(event => {
+                const eType = String(event.eventType || '').toLowerCase();
+                return !eType.includes('file_edit') && !eType.includes('fileedit');
+            })
             .map(event => ({
                 sessionId: currentSessionId, 
                 eventType: event.eventType,
                 occurredAt: event.time || new Date().toISOString(),
                 flightTimeMs: event.flightTime ? Number(event.flightTime) : null,
-                //fileEdit: event.fileEdit || null,
+                fileEdit: event.fileEdit || null,
                 fileView: event.fileView || null,
                 fileFocusCount: event.fileFocusCount || null,
                 charsAdded: event.charsAdded || null,
@@ -511,16 +514,12 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
                 }
             }));
 
-        // 3. Load the existing offline queue from .vscode/logs/tbd_offline_queue.enc
         let offlineQueue = await this.readQueue();
-        
-        // 4. Add new events to the back of the queue
         offlineQueue.push(...newPayloads);
         this.syncStatus.pendingQueueCount = offlineQueue.length;
 
-        // 5. Try to push everything in the queue to the API
         const remainingQueue: any[] = [];
-        const flushedEvents: Array<{ // Array to hold teammate's UI logs
+        const flushedEvents: Array<{ 
             eventType: string;
             occurredAt: string;
             eventId: number | undefined;
@@ -528,48 +527,35 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         }> = [];
 
         let isOffline = false;
-        //Keep track of the session we generate so we don't spam the API
         let generatedOfflineSessionId: number | null = null;
 
         for (const payload of offlineQueue) {
-            
-            // If the API drops mid-upload, stop making network calls and cache the rest
             if (isOffline) {
                 remainingQueue.push(payload);
                 continue;
             }
 
             try {
-                // SCENARIO 1: They started offline and need a new Session ID generated
                 if (!payload.sessionId) {
-                    
-                    // If we ALREADY generated a session for this batch, reuse it!
                     if (generatedOfflineSessionId) {
                         payload.sessionId = generatedOfflineSessionId;
                     } else {
-                        // Otherwise, create a new one natively
                         const newSession = await apiPost('/api/sessions', {
                             userId: userId,
                             projectId: projectId,
-                            // Use Date.now() without dividing by 1000 to ensure uniqueness in milliseconds
                             sessionNumber: 0, 
                             startedAt: payload.occurredAt,
                             studentWorkspaceAssignmentId: studentWorkspaceAssignmentId
                         });
 
-                        // Save the new session ID
                         currentSessionId = newSession.Id || newSession.id || newSession.SessionId;
                         generatedOfflineSessionId = currentSessionId;
                         await this.context.workspaceState.update('sessionId', currentSessionId);
-                        
                         payload.sessionId = currentSessionId;
-                        console.log(`[TBD Logger] Recovered from offline start. Generated new Session ID: ${currentSessionId}`);
                     }
                 }
 
-                // SCENARIO 2: Upload the event
                 const response = await apiPost('/api/events', payload, { silent: true });
-                
                 const eventId = response?.event?.Id ?? response?.event?.id ?? response?.id ?? response?.Id;
                 flushedEvents.push({
                     eventType: payload.eventType,
@@ -587,7 +573,6 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
             }
         }
 
-        // 6. Save the remaining queue back to the encrypted file
         try {
             await this.writeQueue(remainingQueue);
             this.syncStatus.pendingQueueCount = remainingQueue.length;
@@ -596,21 +581,16 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
             throw error; 
         }
 
-        // 7. Resolve status
         if (!isOffline) {
             this.syncStatus.lastSyncedAt = new Date().toISOString();
             this.syncStatus.state = 'synced';
             this.syncStatus.lastError = null;
         }
 
-        // 8. Teammate's Beautiful Console Output Grouping
         if (flushedEvents.length > 0) {
             console.groupCollapsed(`[TBD Logger] Logs pushed to /api/events: ${flushedEvents.length} event(s)`);
             for (const event of flushedEvents) {
-                console.groupCollapsed(
-                    `${event.eventType} @ ${event.occurredAt}` +
-                    (event.eventId ? ` (event id: ${event.eventId})` : '')
-                );
+                console.groupCollapsed(`${event.eventType} @ ${event.occurredAt}`);
                 console.log('payload', event.eventData);
                 console.groupEnd();
             }
@@ -618,85 +598,8 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         }
     }
 
-    isOnline(): boolean {
-        return true;
-    }
 
-    isConnecting(): boolean {
-        return false;
-    }
-
-    getBackgroundSyncStatus(): ApiSyncStatus {
-        return { ...this.syncStatus };
-    }
-
-    async dispose(): Promise<void> {
-        this.syncStatus.state = 'idle';
-    }
-
-    async checkUserConsent(policyVersion: string): Promise<boolean> {
-        if (!this.context) {
-            return false;
-        }
-        const key = `tbd.logger.localConsent.${policyVersion}`;
-        return this.context.workspaceState.get<boolean>(key) === true;
-    }
-
-    async recordUserConsent(policyVersion: string): Promise<void> {
-        if (!this.context) {
-            return;
-        }
-        const key = `tbd.logger.localConsent.${policyVersion}`;
-        await this.context.workspaceState.update(key, true);
-    }
-
-   async listLogFiles(): Promise<Array<{ label: string; uri: vscode.Uri }>> {
-        if (!this.context) {
-            return [];
-        }
-        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
-        const teacherId = Number(session?.authUserId || 0);
-        if (!teacherId) {
-            return [];
-        }
-
-        const classes = await this.listTeacherClasses(teacherId);
-        const logs: Array<{ label: string; uri: vscode.Uri }> = [];
-
-        for (const c of classes) {
-            const assignments = await this.listClassAssignments(c.id, teacherId);
-            for (const a of assignments) {
-                const students = await this.listAssignmentStudentWork(c.id, a.id, teacherId);
-                for (const s of students) {
-                    if (Number(s.sessionCount) > 0) {
-                        try {
-                            const sessionsAndEvents = await this.listAssignmentStudentSessions(c.id, a.id, s.authUserId, teacherId);
-                            const uniqueSessionIds = new Set<number>();
-                            const sortedSids = Array.from(uniqueSessionIds).sort((a, b) => a - b);
-                            for (let i = 0; i < sortedSids.length; i++) {
-                                const sid = sortedSids[i];
-                                const localSessionNum = i + 1; // Sandboxed session number (1, 2, 3...)
-                                
-                                const safeCourse = String(c.courseName || 'Class').replace(/[^a-zA-Z0-9]/g, '');
-                                const safeAssign = String(a.name || 'Assign').replace(/[^a-zA-Z0-9]/g, '');
-                                const safeStudent = String(s.studentName || 'Student').replace(/[^a-zA-Z0-9]/g, '');
-                                
-                                // UI will now show each session incremented
-                                const label = `${safeCourse}_${safeAssign}_${safeStudent}_Session${localSessionNum}.log`;
-                                
-                                const uri = vscode.Uri.parse(`tbd-cloud:${sid}?classId=${c.id}&assignId=${a.id}&studentId=${s.authUserId}&localNum=${localSessionNum}`);
-                                logs.push({ label, uri });
-                            }
-                        } catch(e) {
-                            console.warn('Failed to fetch sessions for virtual log', e);
-                        }
-                    }
-                }
-            }
-        }
-        return logs;
-    }
-
+    // --- THE UI DISPLAY GROUPING ENGINE ---
     async retrieveLogContentForUri(_passwordAttempt: string, fileUri: vscode.Uri): Promise<string> {
         if (fileUri.scheme !== 'tbd-cloud') {
             return 'No cloud data found for this URI.';
@@ -705,7 +608,6 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         const session = this.context?.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
         const teacherId = Number(session?.authUserId || 0);
 
-        // Parse custom query string
         const queryParts = fileUri.query.split('&');
         const params: Record<string, string> = {};
         for (const part of queryParts) {
@@ -725,13 +627,11 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
             return '';
         }
 
-        // 1. Generate the Legacy "sessionHeader" so the Logs tab triggers the beautiful UI
         const firstEvent = sessionEvents[0];
         const studentName = String(firstEvent?.StudentName || 'Student');
         const startTime = firstEvent?.StartedAt || firstEvent?.OccurredAt || firstEvent?.occurredAt || new Date().toISOString();
         const localSessionNum = Number(params['localNum']) || targetSessionId;
         
-        // Find workspace name from event data if possible
         let workspaceName = 'Unknown Workspace';
         for (const row of sessionEvents) {
             let ed = row?.EventData ?? row?.eventData ?? {};
@@ -744,8 +644,8 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
 
         const header = {
             sessionHeader: {
-                sessionNumber: localSessionNum, // Now uses the sandboxed number
-        databaseSessionId: targetSessionId, // Kept for debugging
+                sessionNumber: localSessionNum, 
+                databaseSessionId: targetSessionId, 
                 startedBy: studentName,
                 project: workspaceName,
                 startTime: startTime,
@@ -756,15 +656,17 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
             }
         };
 
-        // Add the header as the first line
         let logText = JSON.stringify(header) + '\n';
 
-        // 2. Output each event as a flat JSON string, exactly like local logs did
-        for (const row of sessionEvents) {
-            const eventType = row?.EventType || row?.eventType;
+        // THE GROUPING ENGINE: Combine sequential inputs and scrub file_edit
+        const processedEvents: any[] = [];
+        let lastEvent: any = null;
 
-            // REMOVE HISTORICAL FILE_EDIT EVENTS FROM TEACHER VIEW
-            if (eventType === 'file_edit') {
+        for (const row of sessionEvents) {
+            const rawEventType = String(row?.EventType || row?.eventType || '').toLowerCase();
+
+            // 🛑 NUCLEAR FILTER: Clean out old legacy noise
+            if (rawEventType.includes('file_edit') || rawEventType.includes('fileedit')) {
                 continue; 
             }
 
@@ -773,13 +675,39 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
                 try { eventData = JSON.parse(eventData); } catch(e) {}
             }
             
-            const merged = {
+            const currentEvent = {
                 ...eventData,
                 time: eventData.time || row?.OccurredAt || row?.occurredAt,
-                eventType: eventType,
+                eventType: row?.EventType || row?.eventType,
             };
-            
-            logText += JSON.stringify(merged) + '\n';
+
+            const currentChars = Number(currentEvent.charsAdded || 0);
+
+            // If it's the exact same action in the same file, merge them!
+            if (lastEvent && 
+                lastEvent.eventType === currentEvent.eventType && 
+                lastEvent.fileEdit === currentEvent.fileEdit &&
+                ['input', 'delete'].includes(rawEventType)) {
+                
+                // Add the characters together and update the timestamp
+                lastEvent.charsAdded = (Number(lastEvent.charsAdded) || 0) + currentChars;
+                lastEvent.time = currentEvent.time; 
+            } else {
+                // If it's a new action, push the old batch to the array
+                if (lastEvent) {
+                    processedEvents.push(lastEvent);
+                }
+                lastEvent = currentEvent;
+            }
+        }
+        
+        if (lastEvent) {
+            processedEvents.push(lastEvent);
+        }
+
+        // Print the clean, grouped logs to the string
+        for (const ev of processedEvents) {
+            logText += JSON.stringify(ev) + '\n';
         }
         
         return logText.trim();
@@ -845,12 +773,209 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         return { text, partial: false };
     }
 
-    async saveLogNotes(_passwordAttempt: string, _filename: string, _notes: Array<{ timestamp: string; text: string }>): Promise<void> {
-        throw new Error('Saving log notes is not available in API-only mode.');
+    private getCurrentTeacherId(): number {
+        if (!this.context) {
+            return 0;
+        }
+        const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        if (!session) {
+            return 0;
+        }
+        const id = Number(session.authUserId || session.userId || 0);
+        return Number.isFinite(id) && id > 0 ? id : 0;
     }
 
-    async loadLogNotes(_passwordAttempt: string, _filename: string): Promise<Array<{ timestamp: string; text: string }>> {
-        return [];
+    // --- Helper function added for parseSessionIdFromFilename ---
+    private parseSessionIdFromFilename(filename: string): number {
+        const match = filename.match(/Session(\d+)/i);
+        if (match && match[1]) {
+            return parseInt(match[1], 10);
+        }
+        return 0;
+    }
+
+    async saveLogNotes(_passwordAttempt: string, filename: string, notes: Array<{ id?: number; Id?: number; sessionEventId?: number; sessionId?: number; timestamp?: string; text: string }>): Promise<void> {
+        const teacherAuthUserId = this.getCurrentTeacherId();
+        const sessionId = this.parseSessionIdFromFilename(filename);
+
+        if (!teacherAuthUserId || !Array.isArray(notes)) {
+            console.warn('[TBD Logger] saveLogNotes skipped: missing teacherAuthUserId or invalid notes payload', { teacherAuthUserId, notes });
+            return;
+        }
+
+        for (const note of notes) {
+            const sessionEventId = Number(note?.sessionEventId || 0);
+            const noteText = String(note?.text || '').trim();
+            const noteSessionId = Number(note?.sessionId || 0) || sessionId;
+            const filenameSessionId = this.parseSessionIdFromFilename(filename);
+            const finalSessionId = noteSessionId || filenameSessionId;
+
+            if (!noteText) {
+                console.warn('[TBD Logger] saveLogNotes skipped note with empty text', { note });
+                continue;
+            }
+
+            if (!finalSessionId && !sessionEventId) {
+                console.warn('[TBD Logger] saveLogNotes skipped note: missing sessionId and sessionEventId', { note, filename });
+                continue;
+            }
+
+            const noteId = Number(note?.id ?? note?.Id ?? 0);
+            const payload: Record<string, any> = {
+                teacherAuthUserId: teacherAuthUserId,
+                TeacherAuthUserId: teacherAuthUserId,
+                teacherId: teacherAuthUserId,
+                TeacherId: teacherAuthUserId,
+                
+                noteText: noteText,
+                NoteText: noteText,
+                text: noteText,
+                note: noteText,
+                
+                filename: filename || '',
+                Filename: filename || '',
+                
+                createdAt: new Date().toISOString(),
+                CreatedAt: new Date().toISOString(),
+            };
+            if (sessionEventId) {
+                payload.sessionEventId = sessionEventId;
+                payload.SessionEventId = sessionEventId;
+                payload.eventId = sessionEventId;
+                payload.EventId = sessionEventId;
+            }
+            if (finalSessionId) {
+                payload.sessionId = finalSessionId;
+                payload.SessionId = finalSessionId;
+            }
+            if (note?.timestamp) {
+                payload.timestamp = note.timestamp;
+                payload.Timestamp = note.timestamp;
+            }
+            if (noteId > 0) {
+                payload.id = noteId;
+                payload.Id = noteId;
+            }
+
+            const attemptPut = async (path: string): Promise<boolean> => {
+                try {
+                    await apiPut(path, payload, { silent: true });
+                    return true;
+                } catch (putError) {
+                    return false;
+                }
+            };
+
+            const attemptPost = async (): Promise<void> => {
+                try {
+                    await apiPost('/api/notes/instructor-notes', payload, { silent: true });
+                    console.log('[TBD Logger] saveLogNotes API successful (POST primary)', { sessionEventId, finalSessionId, noteText });
+                } catch (primaryError) {
+                    console.warn('[TBD Logger] Primary saveLogNotes endpoint failed, trying fallback /api/instructor-notes', primaryError);
+                    await apiPost('/api/instructor-notes', payload, { silent: true });
+                    console.log('[TBD Logger] saveLogNotes API (fallback) successful (POST)', { sessionEventId, finalSessionId, noteText });
+                }
+            };
+
+            try {
+                console.log('[TBD Logger] saveLogNotes final payload', { payload, finalSessionId, sessionEventId, noteId });
+
+                let saved = false;
+
+                // Try direct PUT upsert via core endpoint (new backend expected behavior)
+                saved = await attemptPut('/api/notes/instructor-notes');
+
+                if (!saved) {
+                    saved = await attemptPut('/api/instructor-notes');
+                }
+
+                // Legacy: if id is known, try explicit PUT by id first for backward compatibility
+                if (!saved && noteId > 0) {
+                    saved = await attemptPut(`/api/notes/instructor-notes/${noteId}`);
+                    if (!saved) {
+                        saved = await attemptPut(`/api/instructor-notes/${noteId}`);
+                    }
+                }
+
+                // If still not saved, fall back to POST route
+                if (!saved) {
+                    await attemptPost();
+                }
+            } catch (err) {
+                console.warn('[TBD Logger] Failed to save instructor note:', err);
+            }
+        }
+    }
+
+    async loadLogNotes(_passwordAttempt: string, filename: string, sessionId?: number, sessionEventId?: number): Promise<Array<{ sessionEventId?: number; timestamp?: string; text: string }>> {
+        const teacherAuthUserId = this.getCurrentTeacherId();
+        const parsedSessionId = Number.isFinite(Number(sessionId)) && Number(sessionId) > 0 ? Number(sessionId) : (this.parseSessionIdFromFilename(filename) || 0);
+        const parsedSessionEventId = Number.isFinite(Number(sessionEventId)) && Number(sessionEventId) > 0 ? Number(sessionEventId) : 0;
+
+        if (!teacherAuthUserId) {
+            console.warn('[TBD Logger] loadLogNotes skipped: missing teacherAuthUserId');
+            return [];
+        }
+
+        let response: any;
+        try {
+            const tryPaths = [];
+            if (parsedSessionEventId) {
+                tryPaths.push(`/api/notes/instructor-notes?sessionEventId=${parsedSessionEventId}`);
+            }
+            if (parsedSessionId) {
+                tryPaths.push(`/api/notes/instructor-notes?sessionId=${parsedSessionId}`);
+            }
+            if (filename && filename.trim()) {
+                tryPaths.push(`/api/notes/instructor-notes?filename=${encodeURIComponent(filename || '')}`);
+            }
+            tryPaths.push(`/api/notes/instructor-notes?teacherAuthUserId=${teacherAuthUserId}`);
+            tryPaths.push(`/api/notes/instructor-notes?teacherId=${teacherAuthUserId}`);
+            tryPaths.push('/api/notes/instructor-notes');
+            tryPaths.push(`/api/instructor-notes?sessionId=${parsedSessionId}`);
+            tryPaths.push(`/api/instructor-notes?filename=${encodeURIComponent(filename || '')}`);
+            tryPaths.push(`/api/instructor-notes?teacherAuthUserId=${teacherAuthUserId}`);
+            tryPaths.push(`/api/instructor-notes?teacherId=${teacherAuthUserId}`);
+            tryPaths.push('/api/instructor-notes');
+
+            response = await this.apiGetFirst(tryPaths);
+        } catch (err) {
+            console.warn('[TBD Logger] Failed to load instructor notes:', err);
+            return [];
+        }
+
+        const notesList = Array.isArray(response)
+            ? response
+            : Array.isArray(response?.data) ? response.data
+            : Array.isArray(response?.notes) ? response.notes
+            : [];
+
+        const meta: any = {
+            teacherAuthUserId: Number(teacherAuthUserId) || 0,
+            sessionId: parsedSessionId,
+            sessionEventId: parsedSessionEventId,
+            filename,
+            count: notesList.length,
+            notesList
+        };
+
+        // this.lastLoadLogNotesMeta = meta;
+
+        console.log('[TBD Logger] loadLogNotes fetched notes from API', meta);
+
+        const normalized: Array<{ sessionEventId: number; timestamp?: string; text: string }> = [];
+
+        for (const note of notesList) {
+            const sessionEventId = Number(note?.SessionEventId ?? note?.sessionEventId ?? note?.eventId ?? note?.EventId ?? 0);
+            const noteText = String(note?.noteText ?? note?.note ?? note?.text ?? '').trim();
+            const timestamp = String(note?.timestamp ?? note?.createdAt ?? note?.CreatedAt ?? '');
+            if (!sessionEventId || !noteText) {
+                continue;
+            }
+            normalized.push({ sessionEventId, timestamp, text: noteText });
+        }
+
+        return normalized;
     }
 
     async recordUnmonitoredWorkAlert(_payload: {

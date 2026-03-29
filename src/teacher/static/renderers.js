@@ -327,9 +327,15 @@ window.TeacherUI = {
       }
 
       const l = String(label || "").toLowerCase();
-      if (l === "high") {color = "#10b981";}
-      if (l === "medium") {color = "#f59e0b";}
-      if (l === "low") {color = "#ef4444";}
+      if (l === "high") {
+        color = "#10b981";
+      }
+      if (l === "medium") {
+        color = "#f59e0b";
+      }
+      if (l === "low") {
+        color = "#ef4444";
+      }
 
       dropdown.innerHTML += `
         <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
@@ -644,14 +650,23 @@ window.TeacherUI = {
           label = c;
         } else if (typeof c === "object" && c) {
           label = c.label || "Unknown";
-          if (c.description) {desc = c.description;}
-          else if (c.reason) {desc = c.reason;}
+          if (c.description) {
+            desc = c.description;
+          } else if (c.reason) {
+            desc = c.reason;
+          }
         }
 
         const l = String(label || "").toLowerCase();
-        if (l === "high") {color = "#10b981";}
-        if (l === "medium") {color = "#f59e0b";}
-        if (l === "low") {color = "#ef4444";}
+        if (l === "high") {
+          color = "#10b981";
+        }
+        if (l === "medium") {
+          color = "#f59e0b";
+        }
+        if (l === "low") {
+          color = "#ef4444";
+        }
 
         const confidenceDiv = document.createElement("div");
         confidenceDiv.className = "card";
@@ -1042,7 +1057,14 @@ window.TeacherUI = {
             const ts = row.dataset.eventTime || "";
             const text = input?.value || "";
             if (ts && text) {
-              allNotes.push({ timestamp: ts, text });
+              const notePayload = { timestamp: ts, text };
+              if (sessionEventId > 0) {
+                notePayload.sessionEventId = sessionEventId;
+              }
+              if (sessionId > 0) {
+                notePayload.sessionId = sessionId;
+              }
+              allNotes.push(notePayload);
             }
           });
 

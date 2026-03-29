@@ -1823,6 +1823,7 @@
         setTeacherConnectionState(false);
         return;
       }
+      hideAllClassSubViews();
       switchTab("dashboard");
       if (dashboardDataCache && dashboardDataCache.metrics) {
         UI.renderDashboard(dashboardDataCache, handlers);
@@ -1842,6 +1843,7 @@
         setTeacherConnectionState(false);
         return;
       }
+      hideAllClassSubViews();
       switchTab("logs");
       post("listLogs");
     });
@@ -2224,6 +2226,134 @@
               }
             }
           });
+
+          // Popup debug: list incoming notes and attached log row detail
+          const noteDetails = [];
+          const notesMeta = msg.notesMeta || null;
+          // Prefer raw API notes list to preserve all fields (like NoteText, Id, etc.)
+          const rawNotes = Array.isArray(notesMeta?.notesList)
+            ? notesMeta.notesList
+            : Array.isArray(msg.notes)
+              ? msg.notes
+              : [];
+
+          if (notesMeta) {
+            noteDetails.push(`sessionId = ${notesMeta.sessionId || "unknown"}`);
+            noteDetails.push(
+              `teacherAuthUserId = ${notesMeta.teacherAuthUserId || "unknown"}`,
+            );
+            noteDetails.push(`fetched notes = ${notesMeta.count || 0}`);
+            noteDetails.push("");
+          }
+
+          if (rawNotes.length > 0) {
+            rawNotes.forEach((note, index) => {
+              const noteId = Number(
+                note?.sessionEventId ??
+                  note?.SessionEventId ??
+                  note?.eventId ??
+                  note?.EventId ??
+                  note?.Id ??
+                  note?.id ??
+                  0,
+              );
+              const noteText = String(
+                note?.noteText ??
+                  note?.NoteText ??
+                  note?.text ??
+                  note?.note ??
+                  "",
+              );
+              const noteSessionId =
+                Number(
+                  note?.sessionId ??
+                    note?.SessionId ??
+                    notesMeta?.sessionId ??
+                    0,
+                ) ||
+                notesMeta?.sessionId ||
+                0;
+              const noteTeacherId =
+                Number(
+                  note?.teacherAuthUserId ??
+                    note?.TeacherAuthUserId ??
+                    notesMeta?.teacherAuthUserId ??
+                    0,
+                ) ||
+                notesMeta?.teacherAuthUserId ||
+                0;
+
+              const row = noteId
+                ? document.querySelector(
+                    `.session-log-row[data-session-event-id="${noteId}"]`,
+                  ) ||
+                  document.querySelector(
+                    `.event[data-session-event-id="${noteId}"]`,
+                  )
+                : null;
+
+              const rowMetaText =
+                row?.querySelector(".meta")?.textContent?.trim() || "";
+              const rowNumberMatch = rowMetaText.match(/Row\s*(\d+)/i);
+              const rowNumber = rowNumberMatch
+                ? rowNumberMatch[1]
+                : "(row # unknown)";
+
+              if (row) {
+                // Persist API note id so updates can use PUT when saving.
+                const apiNoteId = Number(note?.Id ?? note?.id ?? 0);
+                if (apiNoteId > 0) {
+                  row.dataset.noteId = String(apiNoteId);
+                }
+
+                // Insert a visible note text indicator into the row body
+                let noteLabel = row.querySelector(".loaded-note-text");
+                if (!noteLabel) {
+                  noteLabel = document.createElement("div");
+                  noteLabel.className = "loaded-note-text";
+                  noteLabel.style.cssText =
+                    "margin-top:6px;padding:6px;border-left:3px solid #4ade80;background:rgba(34,197,94,0.1);color:#9ae6b4;font-size:0.85rem;border-radius:4px;";
+                  row.appendChild(noteLabel);
+                }
+                noteLabel.textContent = `Teacher note: ${noteText}`;
+
+                const noteBtn =
+                  row.querySelector(".session-note-toggle") ||
+                  row.querySelector(".btn-notes");
+                if (noteBtn) {
+                  noteBtn.style.filter = "none";
+                  noteBtn.style.opacity = "1";
+                  noteBtn.dataset.hasNote = "true";
+                  const emptyIcon = noteBtn.querySelector(".note-icon-empty");
+                  const filledIcon = noteBtn.querySelector(".note-icon-filled");
+                  if (emptyIcon && filledIcon) {
+                    emptyIcon.style.display = "none";
+                    filledIcon.style.display = "inline";
+                  }
+                }
+
+                const noteTextarea =
+                  row.querySelector(".session-note-text") ||
+                  row.querySelector(".event-note-input");
+                if (noteTextarea) {
+                  noteTextarea.value = noteText;
+                }
+                const noteArea =
+                  row.querySelector(".session-note-area") ||
+                  row.querySelector(".event-notes-area");
+                if (noteArea) {
+                  noteArea.style.display = "none";
+                }
+              }
+
+              if (noteId && notesByEvent.has(noteId)) {
+                notesByEvent.set(noteId, noteText); // ensure mapping text from loaded note
+              }
+            });
+          } else {
+            // no notes
+          }
+
           break;
 
         case "rawData":
@@ -2690,6 +2820,8 @@
 
     // --- CLASS TAB LOGIC ---
     function loadClasses() {
+      hideAllClassSubViews();
+
       const listView = $("class-list-view");
       const emptyEl = $("class-list-empty");
       const loadingEl = $("class-list-loading");
@@ -3141,6 +3273,37 @@
         inClassDetail && currentClassDetailTab === "assignments"
           ? "inline-flex"
           : "none";
+    }
+
+    function hideAllClassSubViews() {
+      [
+        "class-detail-view",
+        "assignment-work-view",
+        "assignment-student-view",
+        "assignment-session-log-view",
+        "assignment-compare-view",
+        "class-assignments-list",
+        "class-assignments-empty",
+      ].forEach((id) => {
+        const el = $(id);
+        if (el) {
+          el.style.display = "none";
+        }
+      });
+
+      const listView = $("class-list-view");
+      if (listView) {
+        listView.style.display = "grid";
+      }
+      const emptyEl = $("class-list-empty");
+      if (emptyEl) {
+        emptyEl.style.display = "none";
+      }
+
+      setAssignmentFormVisible(false);
+      clearAssignmentComparisonSelection();
+      updateTopClassActionButton();
+      updateClassTabHeading();
     }
 
     function isInClassFlowView() {
@@ -3966,7 +4129,9 @@
       };
 
       const formatSessionDate = (value) => {
-        if (!value) return "Unknown time";
+        if (!value) {
+          return "Unknown time";
+        }
         const parsed = new Date(value);
         return Number.isNaN(parsed.getTime())
           ? String(value)
@@ -3992,8 +4157,12 @@
       }
 
       // Hide the parent view (student list)
-      if (workView) workView.style.display = "none";
-      if (logView) logView.style.display = "none";
+      if (workView) {
+        workView.style.display = "none";
+      }
+      if (logView) {
+        logView.style.display = "none";
+      }
 
       studentView.style.display = "block";
 
@@ -4054,7 +4223,7 @@
       }
       empty.style.display = "none";
 
-      // 1. Process all events
+      // 1. Process all events (Keep HEAD implementation here)
       const processedEvents = sessions.map((s, index) => {
         const sessionId = normalizeSessionValue(
           s,
@@ -4089,7 +4258,6 @@
           parsedData = rawDataStr;
         }
 
-        // Merge the main session object with the parsed event data to ensure we never miss a field
         const eventData = { ...s, ...parsedData };
 
         const eType = String(eventType).toLowerCase();
@@ -4154,7 +4322,7 @@
         opt.textContent = `Session ${id}`;
         filterSessionEl.appendChild(opt);
       });
-      // Maintain selection state if valid
+
       if (
         uniqueSessionIds.includes(currentSessionSelection) ||
         currentSessionSelection === "all"
@@ -4164,7 +4332,7 @@
         filterSessionEl.value = "all";
       }
 
-      // 3. Render and Filter Function
+      // 3. Render and Filter Function (Integrating incoming UI changes here)
       const renderList = () => {
         list.innerHTML = "";
         let filtered = processedEvents;
@@ -4195,7 +4363,8 @@
               return (
                 t.includes("ai-input") ||
                 t.includes("ai-insert") ||
-                (t.includes("ai") && t.includes("input"))
+                (t.includes("ai") && t.includes("input")) ||
+                t.includes("ai-paste")
               );
             if (eventVal === "ai-replace") return t.includes("ai-replace");
             if (eventVal === "ai-delete") return t.includes("ai-delete");
@@ -4250,32 +4419,27 @@
           sep.innerHTML = `<h3 style="margin:0; color:var(--accent); font-size: 1.25rem;">Session ${sid}</h3><span class="meta" style="font-weight:bold;">${groupEvents.length} events</span>`;
           list.appendChild(sep);
 
-          // Populate the events for this session
+          // Populate the events for this session (Incoming logic merged here)
           groupEvents.forEach((e) => {
             const row = document.createElement("div");
-            row.className = "card";
+            row.className = "card session-log-row event";
             row.style.cssText =
               "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
 
             const items = [];
             const ed = e.eventData;
 
-            // 1. View / File
-            const viewStr =
-              ed.View ??
-              ed.view ??
-              ed.fileView ??
-              ed.FileView ??
-              ed.file ??
-              ed.File ??
-              ed.fileName;
-            if (viewStr !== undefined && viewStr !== null && viewStr !== "") {
+            if (ed.file) {
               items.push(
-                `<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`,
+                `<span style="color: var(--muted)">File:</span> <strong>${ed.file}</strong>`,
+              );
+            }
+            if (ed.fileView && ed.fileView !== ed.file) {
+              items.push(
+                `<span style="color: var(--muted)">View:</span> <strong>${ed.fileView}</strong>`,
               );
             }
 
-            // 2. Chars Changed
             const charsChanged =
               ed.CharsChanged ??
               ed.charsChanged ??
@@ -4290,7 +4454,12 @@
               );
             }
 
-            // 3. Flight Time
+            if (ed.pasteCharCount !== undefined && ed.pasteCharCount !== null) {
+              items.push(
+                `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${ed.pasteCharCount}</strong>`,
+              );
+            }
+
             const flightTime = ed.FlightTime ?? ed.flightTime;
             if (flightTime !== undefined && flightTime !== null) {
               const ftStr = String(flightTime).endsWith("ms")
@@ -4301,7 +4470,6 @@
               );
             }
 
-            // 4. Window Focused
             const windowFocused =
               ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
             if (windowFocused !== undefined && windowFocused !== null) {
@@ -4310,7 +4478,6 @@
               );
             }
 
-            // 5. Workspace
             const workspace =
               ed.WorkspaceName ??
               ed.workspaceName ??
@@ -4326,36 +4493,174 @@
               );
             }
 
-            // Note/AI Warning
             let noteHtml = "";
             if (ed.possibleAiDetection) {
               noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;
             }
 
-            // Ensure the row number matches the backend row (or fallbacks to visual index)
             const rowNum = ed.Row ?? ed.row ?? e.index + 1;
+            const rawStringFallback =
+              typeof ed === "string" ? ed : JSON.stringify(ed);
 
-            // Construct Body
             let bodyHtml =
               items.length > 0
                 ? items.join(
                     ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
                   )
-                : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${JSON.stringify(ed)}</code>`;
+                : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${rawStringFallback}</code>`;
 
             row.innerHTML = `
-                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
-                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                      <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${e.badgeBg}; color: ${e.badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${e.eventType}</span>
-                      <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${e.sessionId}</strong> &bull; ${formatSessionDate(e.occurredAt)}</span>
-                    </div>
-                    <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${rowNum}</div>
-                  </div>
-                  <div style="font-size: 0.9rem; line-height: 1.5; color: var(--fg);">
-                    ${bodyHtml}
-                    ${noteHtml}
-                  </div>
-                `;
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${e.badgeBg}; color: ${e.badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${e.eventType}</span>
+                  <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${e.sessionId}</strong> &bull; ${formatSessionDate(e.occurredAt)}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap: 8px;">
+                  <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${rowNum}</div>
+                  <button type="button" class="btn btn-secondary session-note-toggle" style="height:28px; min-width:28px; width:28px; padding:0; font-size:0.85rem; display:flex; align-items:center; justify-content:center; filter: grayscale(100%) opacity(0.5);">✍️</button>
+                </div>
+              </div>
+              <div style="font-size: 0.9rem; line-height: 1.5; color: var(--fg);">
+                ${bodyHtml}
+                ${noteHtml}
+              </div>
+              <div class="session-note-area" style="display:none; margin-top:10px;">
+                <textarea class="session-note-text" placeholder="Teacher note..." style="width:100%; min-height:70px; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--fg);"></textarea>
+                <div style="display:flex; justify-content:flex-end; margin-top:6px; gap:8px;">
+                  <button type="button" class="btn btn-secondary session-note-cancel" style="padding:6px 12px;">Cancel</button>
+                  <button type="button" class="btn btn-primary session-note-save" style="padding:6px 12px;">Save Note</button>
+                </div>
+              </div>
+            `;
+
+            // Extract IDs safely for Note saving
+            const sessionEventId = Number(
+              ed.SessionEventId ??
+                ed.sessionEventId ??
+                ed.eventId ??
+                ed.EventId ??
+                0,
+            );
+
+            if (sessionEventId) {
+              row.dataset.sessionEventId = String(sessionEventId);
+            }
+            if (
+              e.sessionId &&
+              Number.isFinite(Number(e.sessionId)) &&
+              Number(e.sessionId) > 0
+            ) {
+              row.dataset.sessionId = String(e.sessionId);
+            }
+
+            // Click listener for loading notes
+            row.addEventListener("click", (evt) => {
+              if (
+                evt.target instanceof HTMLElement &&
+                evt.target.closest("button")
+              ) {
+                return;
+              }
+              const rowSessionId = Number(row.dataset.sessionId || 0);
+              const rowSessionEventId = Number(row.dataset.sessionEventId || 0);
+              if (rowSessionId > 0) {
+                post("loadLogNotes", {
+                  sessionId: rowSessionId,
+                  sessionEventId: rowSessionEventId,
+                });
+              }
+            });
+
+            // Note toggle UI logic
+            const noteToggle = row.querySelector(".session-note-toggle");
+            const noteArea = row.querySelector(".session-note-area");
+            const noteTextarea = row.querySelector(".session-note-text");
+            const noteSave = row.querySelector(".session-note-save");
+            const noteCancel = row.querySelector(".session-note-cancel");
+
+            // Safely look up notes loaded in the global object
+            const notesMap = window.__TBD_SESSION_NOTE_MAP__ || {};
+            if (sessionEventId && notesMap[sessionEventId]) {
+              const existingText = notesMap[sessionEventId];
+              if (noteToggle) {
+                noteToggle.style.filter = "none";
+                noteToggle.style.opacity = "1";
+              }
+              if (noteTextarea) {
+                noteTextarea.value = existingText;
+              }
+            }
+
+            noteToggle?.addEventListener("click", () => {
+              if (!noteArea) return;
+              const isVisible = noteArea.style.display !== "none";
+              noteArea.style.display = isVisible ? "none" : "block";
+              if (!isVisible) noteTextarea?.focus();
+            });
+
+            noteCancel?.addEventListener("click", () => {
+              if (!noteArea) return;
+              if (noteTextarea) noteTextarea.value = "";
+              noteArea.style.display = "none";
+            });
+
+            noteSave?.addEventListener("click", () => {
+              if (!noteArea || !noteTextarea || !noteToggle) return;
+
+              const text = String(noteTextarea.value || "").trim();
+              if (!text) {
+                alert("Please type a note before saving.");
+                return;
+              }
+
+              const targetEventId = Number(row.dataset.sessionEventId || 0);
+              const rowSessionId = Number(
+                row.dataset.sessionId || e.sessionId || 0,
+              );
+              const rowNoteId = Number(row.dataset.noteId || 0);
+              const payloadNote = { text };
+              const effectiveSessionId =
+                rowSessionId > 0 ? rowSessionId : Number(e.sessionId || 0);
+
+              if (targetEventId) {
+                payloadNote.sessionEventId = targetEventId;
+              }
+              if (effectiveSessionId > 0) {
+                payloadNote.sessionId = effectiveSessionId;
+              }
+              if (rowNoteId > 0) {
+                payloadNote.id = rowNoteId;
+              }
+
+              if (window.postTeacherMessage) {
+                window.postTeacherMessage("saveLogNotes", {
+                  filename: window.currentLogFilename || "",
+                  notes: [payloadNote],
+                });
+              }
+
+              // Update UI Cache
+              window.__TBD_SESSION_NOTE_MAP__ =
+                window.__TBD_SESSION_NOTE_MAP__ || {};
+              if (targetEventId) {
+                window.__TBD_SESSION_NOTE_MAP__[targetEventId] = text;
+              }
+
+              let noteLabel = row.querySelector(".loaded-note-text");
+              if (!noteLabel) {
+                noteLabel = document.createElement("div");
+                noteLabel.className = "loaded-note-text";
+                noteLabel.style.cssText =
+                  "margin-top:6px;padding:6px;border-left:3px solid #4ade80;background:rgba(34,197,94,0.1);color:#9ae6b4;font-size:0.85rem;border-radius:4px;";
+                row.appendChild(noteLabel);
+              }
+              noteLabel.textContent = `Teacher note: ${text}`;
+
+              noteArea.style.display = "none";
+              noteToggle.dataset.hasNote = "true";
+              noteToggle.style.filter = "none";
+              noteToggle.style.opacity = "1";
+            });
 
             list.appendChild(row);
           });
@@ -4370,8 +4675,6 @@
       // Initial Call
       renderList();
     }
-
-    // end renderAssignmentStudentSessions
     function parseLogText(text) {
       const lines = String(text || "")
         .trim()
@@ -4381,7 +4684,9 @@
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (!line) continue;
+        if (!line) {
+          continue;
+        }
 
         if (line.startsWith("Session ")) {
           if (currentEvent) events.push(currentEvent);
@@ -4506,34 +4811,41 @@
 
           if (evt.data) {
             const items = [];
-            if (evt.data.file)
+            if (evt.data.file) {
               items.push(
                 `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
               );
-            if (evt.data.fileView && evt.data.fileView !== evt.data.file)
+            }
+            if (evt.data.fileView && evt.data.fileView !== evt.data.file) {
               items.push(
                 `<span style="color: var(--muted)">View:</span> <strong>${evt.data.fileView}</strong>`,
               );
-            if (evt.data.charsAdded !== undefined)
+            }
+            if (evt.data.charsAdded !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
               );
-            if (evt.data.pasteCharCount !== undefined)
+            }
+            if (evt.data.pasteCharCount !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
               );
-            if (evt.data.flightTime !== undefined)
+            }
+            if (evt.data.flightTime !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
               );
-            if (evt.data.focused !== undefined)
+            }
+            if (evt.data.focused !== undefined) {
               items.push(
                 `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
               );
-            if (evt.data.workspaceName)
+            }
+            if (evt.data.workspaceName) {
               items.push(
                 `<span style="color: var(--muted)">Workspace:</span> <strong>${evt.data.workspaceName}</strong>`,
               );
+            }
 
             // Highlight AI or Interruption Notes
             if (evt.data.possibleAiDetection) {
@@ -4624,17 +4936,10 @@
     });
 
     $("btn-back-to-classes")?.addEventListener("click", () => {
-      if ($("class-detail-view")) {
-        $("class-detail-view").style.display = "none";
-      }
-      if ($("class-list-view")) {
-        $("class-list-view").style.display = "grid";
-      }
       currentClassDetailTab = "students";
       currentClassDisplayName = "";
-      setAssignmentFormVisible(false);
+      hideAllClassSubViews();
       updateTopClassActionButton();
-      updateClassTabHeading();
       updateClassPrimaryActionButton();
       loadClasses();
     });

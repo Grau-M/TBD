@@ -2085,6 +2085,115 @@
         dashOut.innerHTML = `<pre style="white-space:pre-wrap; margin:0; padding:10px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">${summaryText}</pre>`;
       }
     }
+// --- TIMELINE & BEHAVIORAL MODAL LOGIC ---
+    const sessionModal = $("session-selection-modal");
+    const sessionModalList = $("session-modal-list");
+    const sessionModalSelectAll = $("session-modal-select-all");
+    let currentModalAction = "";
+    let currentModalContext = "";
+
+    function openSessionModal(action, context) {
+      currentModalAction = action;
+      currentModalContext = context;
+
+      const title = action === "timeline" ? "Create Timeline" : "Analyze Behavioral Patterns";
+      if ($("session-modal-title")) $("session-modal-title").textContent = title;
+      if (sessionModalList) sessionModalList.innerHTML = "";
+
+      if (context === "raw") {
+        if ($("session-modal-desc")) $("session-modal-desc").textContent = "Select the raw log files to include:";
+        logNamesCache.forEach(logName => {
+          const label = document.createElement("label");
+          label.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer;";
+          label.innerHTML = `<input type="checkbox" class="session-modal-checkbox" value="${logName}" checked> ${logName}`;
+          sessionModalList.appendChild(label);
+        });
+      } else if (context === "student") {
+        if ($("session-modal-desc")) $("session-modal-desc").textContent = "Select the sessions to include for this student:";
+        const sessionDropdown = $("filter-session");
+        if (sessionDropdown) {
+          Array.from(sessionDropdown.options).forEach(opt => {
+            if (opt.value !== "all") {
+              const label = document.createElement("label");
+              label.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer;";
+              label.innerHTML = `<input type="checkbox" class="session-modal-checkbox" value="${opt.value}" checked> Session ${opt.value}`;
+              sessionModalList.appendChild(label);
+            }
+          });
+        }
+      } else if (context === "class") {
+        if ($("session-modal-desc")) $("session-modal-desc").textContent = "Select the students to include in this class analysis:";
+        currentAssignmentStudents.forEach(student => {
+          if (student.sessionCount > 0) {
+            const label = document.createElement("label");
+            label.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer;";
+            label.innerHTML = `<input type="checkbox" class="session-modal-checkbox" value="${student.authUserId}" checked> ${student.studentName} (${student.sessionCount} sessions)`;
+            sessionModalList.appendChild(label);
+          }
+        });
+      }
+
+      if (sessionModalSelectAll) sessionModalSelectAll.checked = true;
+      if (sessionModal) sessionModal.style.display = "flex";
+    }
+
+    if (sessionModalSelectAll) {
+        sessionModalSelectAll.addEventListener("change", (e) => {
+            document.querySelectorAll(".session-modal-checkbox").forEach(cb => {
+                cb.checked = e.target.checked;
+            });
+        });
+    }
+
+    // Use a Global Document click listener (Capture Phase) so the buttons ALWAYS work
+    document.addEventListener('click', (e) => {
+       const target = e.target;
+       const btnId = target.id || target.closest('.btn')?.id;
+
+       if (btnId === 'btn-class-timeline') { e.preventDefault(); e.stopPropagation(); openSessionModal('timeline', 'class'); }
+       if (btnId === 'btn-class-behavior') { e.preventDefault(); e.stopPropagation(); openSessionModal('behavior', 'class'); }
+       if (btnId === 'btn-student-timeline') { e.preventDefault(); e.stopPropagation(); openSessionModal('timeline', 'student'); }
+       if (btnId === 'btn-student-behavior') { e.preventDefault(); e.stopPropagation(); openSessionModal('behavior', 'student'); }
+       if (btnId === 'btn-raw-log-timeline') { e.preventDefault(); e.stopPropagation(); openSessionModal('timeline', 'raw'); }
+       if (btnId === 'btn-raw-log-behavior') { e.preventDefault(); e.stopPropagation(); openSessionModal('behavior', 'raw'); }
+
+       if (btnId === 'btn-cancel-session-selection') {
+           e.preventDefault();
+           if (sessionModal) sessionModal.style.display = "none";
+       }
+
+       if (btnId === 'btn-confirm-session-selection') {
+          e.preventDefault();
+          const selectedBoxes = Array.from(document.querySelectorAll(".session-modal-checkbox:checked"));
+          const selectedValues = selectedBoxes.map(cb => cb.value);
+
+          if (selectedValues.length === 0) {
+            if (status) status.textContent = "Error: Select at least 1 item to proceed.";
+            return;
+          }
+
+          if (currentModalAction === "behavior" && selectedValues.length < 2 && currentModalContext === "raw") {
+             if (status) status.textContent = "Error: Select at least 2 logs to build a profile.";
+             return;
+          }
+
+          if (sessionModal) sessionModal.style.display = "none";
+          if (status) status.textContent = `Generating ${currentModalAction}...`;
+
+          if (currentModalContext === "raw") {
+            const command = currentModalAction === "timeline" ? "generateTimeline" : "generateProfile";
+            post(command, { filenames: selectedValues });
+          } else {
+            const command = currentModalAction === "timeline" ? "generateDbTimeline" : "generateDbProfile";
+            post(command, {
+              context: currentModalContext,
+              classId: currentClassId,
+              assignmentId: currentAssignmentId,
+              selectionIds: selectedValues
+            });
+          }
+       }
+    }, true);
 
     // --- ROUTER (LISTEN FOR MESSAGES) ---
     window.addEventListener("message", (event) => {
@@ -2116,11 +2225,36 @@
           }
           break;
 
-        case "profileData":
-          UI.renderProfile(msg.data);
-          if (status) {
-            status.textContent = "Behavioral profile generated.";
-          }
+       case "profileData":
+          // 1. Force the UI to switch to the Logs Tab so you can actually see the chart!
+          document.querySelectorAll(".tab-pane").forEach((el) => el.classList.remove("active"));
+          document.querySelectorAll(".tab-btn").forEach((el) => el.classList.remove("active"));
+          if ($("logs-tab")) $("logs-tab").classList.add("active");
+          if ($("nav-logs")) $("nav-logs").classList.add("active");
+          
+          // 2. Ensure the viewer container is visible
+          if ($("logs-viewer-container")) $("logs-viewer-container").style.display = "block";
+          if ($("logs-log-name")) $("logs-log-name").textContent = "Generated Behavioral Profile";
+
+          // 3. Render it
+          if (window.TeacherUI && window.TeacherUI.renderProfile) window.TeacherUI.renderProfile(msg.data);
+          if (status) status.textContent = "Behavioral profile generated.";
+          break;
+
+        case "timelineData":
+          // 1. Force the UI to switch to the Logs Tab
+          document.querySelectorAll(".tab-pane").forEach((el) => el.classList.remove("active"));
+          document.querySelectorAll(".tab-btn").forEach((el) => el.classList.remove("active"));
+          if ($("logs-tab")) $("logs-tab").classList.add("active");
+          if ($("nav-logs")) $("nav-logs").classList.add("active");
+          
+          // 2. Ensure the viewer container is visible
+          if ($("logs-viewer-container")) $("logs-viewer-container").style.display = "block";
+          if ($("logs-log-name")) $("logs-log-name").textContent = "Generated Visual Timeline";
+
+          // 3. Render it
+          if (window.TeacherUI && window.TeacherUI.renderTimeline) window.TeacherUI.renderTimeline(msg.data);
+          if (status) status.textContent = "Timeline generated.";
           break;
 
         case "timelineData":
@@ -2525,9 +2659,14 @@
             }
           }
           // If class loading fails, stop spinner and show empty state instead of hanging.
+          const isDeepView = $("assignment-work-view")?.style.display === "block" || 
+                             $("assignment-student-view")?.style.display === "block" || 
+                             $("assignment-session-log-view")?.style.display === "block";
+
           if (
             currentTab === "class" &&
-            $("class-detail-view")?.style.display !== "block"
+            $("class-detail-view")?.style.display !== "block" &&
+            !isDeepView
           ) {
             setClassRefreshLoading(false);
             const loadingEl = $("class-list-loading");

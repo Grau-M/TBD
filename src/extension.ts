@@ -793,14 +793,11 @@ export async function activate(context: vscode.ExtensionContext) {
     const startSession = async (userId: number, projectId: number, sessionNumber: number): Promise<number | undefined> => {
         try {
             const currentSession = getWorkspaceAuthSession(context);
-            let studentWorkspaceAssignmentId = Number(currentSession?.studentWorkspaceAssignmentId ?? 0);
+            // 💡 ONLY use the true Workspace Link ID
+            const studentWorkspaceAssignmentId = Number(currentSession?.studentWorkspaceAssignmentId ?? 0);
             
-            if (!studentWorkspaceAssignmentId) {
-                studentWorkspaceAssignmentId = Number(currentSession?.workspaceLinkedAssignmentId ?? 0);
-            }
-
             if (!Number.isFinite(studentWorkspaceAssignmentId) || studentWorkspaceAssignmentId <= 0) {
-                throw new Error('Cannot start API session without a valid studentWorkspaceAssignmentId.');
+                throw new Error('Cannot start API session: Missing studentWorkspaceAssignmentId. Re-link required.');
             }
 
             const payload = {

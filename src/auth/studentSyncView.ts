@@ -209,6 +209,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 
                 const workspaceName = currentWorkspaceFolder.name;
                 const workspaceRootPath = currentWorkspaceFolder.uri.fsPath;
+                let newLinkId = 0;
                 await vscode.window.withProgress({
                     location: vscode.ProgressLocation.Notification,
                     title: "Linking workspace to assignment...",
@@ -227,6 +228,9 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
 
                 session.workspaceLinkedClassId = selectedClass.classId;
                 session.workspaceLinkedAssignmentId = selectedAssignment.assignmentId;
+                if (newLinkId) {
+                    session.studentWorkspaceAssignmentId = newLinkId; 
+                }
                 await context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
 
                 state.activeCourse = selectedClass.label;

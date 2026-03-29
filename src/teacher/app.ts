@@ -515,23 +515,40 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           }
 
           const selections = [];
-          for (const requested of requestedStudents) {
+         for (const requested of requestedStudents) {
             const studentAuthUserId = Number(requested?.studentAuthUserId);
             if (!Number.isFinite(studentAuthUserId) || studentAuthUserId <= 0) {continue;}
 
-            const sessions = await storageManager.listAssignmentStudentSessions(
+            // This returns a flat list of EVENTS, not sessions!
+            const events = await storageManager.listAssignmentStudentSessions(
               classId,
               assignmentId,
               studentAuthUserId,
               teacherId
             );
 
-            const limitedSessions = sessions.slice(0, 12);
+            // Group events by session ID so we can safely slice by SESSION limit
+            const sessionGroups = new Map();
+            for (const e of events) {
+                const sid = Number(e.sessionId ?? e.SessionId ?? e.id ?? 0);
+                if (!sessionGroups.has(sid)) sessionGroups.set(sid, []);
+                sessionGroups.get(sid).push(e);
+            }
+
+            // Get up to the 12 most recent sessions (highest IDs first)
+            const sortedSids = Array.from(sessionGroups.keys()).sort((a, b) => b - a).slice(0, 12);
+            
+            // Re-flatten the limited events to send to the comparison service
+            const limitedEvents = [];
+            for (const sid of sortedSids) {
+                limitedEvents.push(...sessionGroups.get(sid));
+            }
+
             selections.push({
               studentAuthUserId,
               studentName: String(requested?.studentName || 'Student'),
-              sessions: limitedSessions,
-              totalSessionCount: sessions.length
+              sessions: limitedEvents,
+              totalSessionCount: sessionGroups.size
             });
           }
 
@@ -565,7 +582,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
           break;
         }
 
-        // 🟢 NEW: DB Driven Timeline and Profile Resolvers
+        //  NEW: DB Driven Timeline and Profile Resolvers
         case 'generateDbTimeline':
         case 'generateDbProfile': {
           const teacherId = await getValidTeacherId();

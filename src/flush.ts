@@ -12,14 +12,20 @@ import { state, storageManager } from './state';
 // Intercepts and discards logs if the user is not an authenticated Student.
 
 export async function flushBuffer(context?: vscode.ExtensionContext): Promise<void> {
-    // 👉 The Ultimate Safeguard: Block non-students AND unauthenticated users
-    if (state.currentUserRole !== 'Student') {
+  // The Ultimate Safeguard: Block Teachers and Admins from uploading logs
+    if (state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') {
         if (state.sessionBuffer.length > 0) {
             console.log(`[TBD Logger] Flush aborted: User role is '${state.currentUserRole}'. Emptying buffer.`);
             // Clear the buffer so it doesn't grow infinitely in memory
             state.sessionBuffer.splice(0, state.sessionBuffer.length);
         }
-        return; // Abort the upload!
+        return; 
+    }
+
+    // If the role hasn't loaded yet ('None') or consent isn't given, just WAIT. 
+    // DO NOT clear the buffer, otherwise we lose the first 5 seconds of typing on boot!
+    if (state.currentUserRole !== 'Student' || !state.isConsentGiven) {
+        return;
     }
 
     if (state.isFlushing || state.sessionBuffer.length === 0) {

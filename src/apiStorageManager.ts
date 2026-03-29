@@ -478,8 +478,8 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         
         let currentSessionId = this.context.workspaceState.get<number>('sessionId') || null;
         
-        const studentWorkspaceAssignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
-        const projectId = Number(session?.workspaceLinkedClassId ?? 0); 
+        const studentWorkspaceAssignmentId = Number(session?.studentWorkspaceAssignmentId ?? 0);
+        const projectId = Number(session?.workspaceLinkedClassId ?? 0);
         const linkRecord = await this.getStudentWorkspaceLinkRecord();
 
         // 2. Format new events AND forcefully filter out 'file_edit' before upload
@@ -1102,6 +1102,7 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         assignmentId: number;
         assignmentName: string;
         workspaceRootPath: string;
+        studentWorkspaceAssignmentId?: number;
     } | null> {
         if (!workspaceRoot || !this.context) {
             return null;
@@ -1133,7 +1134,8 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
                     classId: Number(result.classId || result.ClassId),
                     assignmentId: Number(result.assignmentId || result.AssignmentId),
                     assignmentName: String(result.assignmentName || result.AssignmentName || result.WorkplaceName || result.workplaceName || 'Linked Assignment'),
-                    workspaceRootPath: workspaceRoot
+                    workspaceRootPath: workspaceRoot,
+                    studentWorkspaceAssignmentId: Number(result.id || result.Id || result.workspaceId || result.WorkspaceId || 0)
                 };
             }
         } catch (err) {

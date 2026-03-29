@@ -6,13 +6,7 @@ type AssignmentComparisonSelection = {
     studentAuthUserId: number;
     studentName: string;
     totalSessionCount?: number;
-    sessions: Array<{
-        sessionId: number;
-        filename: string;
-        startedAt: string;
-        ideUser: string;
-        workspaceName: string;
-    }>;
+    sessions: any[];
 };
 
 type ComparisonCategory = 'input' | 'edit' | 'paste' | 'ai' | 'focus' | 'run' | 'other';
@@ -119,78 +113,114 @@ async function buildAssignmentComparisonStudent(selection: AssignmentComparisonS
     const extensionVersions = new Set<string>();
     const vscodeVersions = new Set<string>();
     const categoryCounts: Record<ComparisonCategory, number> = {
-        input: 0,
-        edit: 0,
-        paste: 0,
-        ai: 0,
-        focus: 0,
-        run: 0,
-        other: 0
+        input: 0, edit: 0, paste: 0, ai: 0, focus: 0, run: 0, other: 0
     };
 
-    await Promise.all(selection.sessions.map(async (session) => {
-        try {
-            const uri = vscode.Uri.parse(`tbd-db://session/${session.sessionId}`);
-            const { parsed, partial } = await fetchAndParseLog(password, uri);
-            if (!parsed || !Array.isArray(parsed.events)) {
-                warnings.push(`Session ${session.filename} could not be parsed for comparison.`);
-                return;
+    const rawEvents = Array.isArray(selection.sessions) ? selection.sessions : [];
+
+    if (rawEvents.length === 0) {
+        warnings.push(`No synced session data is available for ${selection.studentName}.`);
+    }
+
+    // Group the raw database rows by session ID
+    const eventsBySession = new Map<number, any[]>();
+    for (const row of rawEvents) {
+        const sid = Number(row.sessionId ?? row.SessionId ?? row.id ?? 0);
+        if (sid > 0) {
+            if (!eventsBySession.has(sid)) eventsBySession.set(sid, []);
+            eventsBySession.get(sid)!.push(row);
+        }
+    }
+
+    let totalProcessedEvents = 0;
+    
+    // Process each session's events
+    for (const [sid, sessionEvents] of eventsBySession.entries()) {
+        const firstEvent = sessionEvents[0];
+        const project = String(firstEvent.workspaceName ?? firstEvent.WorkspaceName ?? '');
+        if (project) projects.add(project);
+
+        extensionVersions.add("Unknown");
+        vscodeVersions.add("Unknown");
+
+        const parsedEvents = sessionEvents.map((row: any, index: number) => {
+            let eType = String(row.eventType || row.EventType || row.event_type || row.type || 'unknown').toLowerCase().trim();
+            
+            let ed: any = {};
+            if (typeof row.eventData === 'string') {
+                try { ed = JSON.parse(row.eventData); } catch (e) {}
+            } else if (typeof row.EventData === 'string') {
+                try { ed = JSON.parse(row.EventData); } catch (e) {}
+            } else if (typeof row.eventData === 'object') {
+                ed = row.eventData || {};
             }
 
-            const metadata = parsed.sessionHeader?.metadata || {};
-            const extensionVersion = String(metadata.extensionVersion || '');
-            const vscodeVersion = String(metadata.vscodeVersion || '');
-            const project = String(parsed.sessionHeader?.project || session.workspaceName || '');
+            if (eType === 'unknown' && ed.eventType) {
+                eType = String(ed.eventType).toLowerCase().trim();
+            }
 
-            if (extensionVersion) {extensionVersions.add(extensionVersion);} else {warnings.push(`Session ${session.filename} is missing extension version metadata.`);}
-            if (vscodeVersion) {vscodeVersions.add(vscodeVersion);}
-            if (project) {projects.add(project);}
+            let category = toCategory(eType);
+            
+            // Find paste lengths robustly
+            let pasteLength = 0;
+            if (typeof ed.charsAdded === 'number') pasteLength = ed.charsAdded;
+            else if (typeof ed.pasteCharCount === 'number') pasteLength = ed.pasteCharCount;
+            else if (typeof ed.CharsChanged === 'number') pasteLength = ed.CharsChanged;
+            else if (typeof ed.length === 'number') pasteLength = ed.length;
 
-            const parsedEvents = parsed.events
-                .map((event: any, index: number) => {
-                    const timeMs = parseLogTime(event.time || '');
-                    const category = toCategory(event.eventType || '');
-                    const pasteLength = readPasteLength(event);
-                    const suspiciousPaste = category === 'paste' && (!pasteLength || pasteLength > pasteThreshold || event.source === 'external' || event.pastedFrom === 'external' || event.internal === false);
-                    const fileName = basenameish(event.fileEdit || event.fileView || event.file || event.filePath || '');
+            const isAi = eType.startsWith('ai') || eType.includes('-ai') || eType.includes('_ai') || ed.aiProvider;
+            if (isAi) category = 'ai';
 
-                    categoryCounts[category]++;
-                    return {
-                        key: `${session.sessionId}-${index}`,
-                        time: event.time || '',
-                        timeMs,
-                        category,
-                        eventType: String(event.eventType || 'unknown'),
-                        sessionId: session.sessionId,
-                        sessionLabel: session.filename,
-                        workspaceName: session.workspaceName || project || '',
-                        fileName,
-                        pasteLength,
-                        suspiciousPaste,
-                        flightTime: Number.parseInt(String(event.flightTime || '0'), 10) || 0,
-                        source: String(event.source || event.pastedFrom || ''),
-                        possibleAiDetection: String(event.possibleAiDetection || '')
-                    };
-                })
-                .sort((left: any, right: any) => left.timeMs - right.timeMs);
+            const source = String(ed.source || ed.pastedFrom || '');
+            const suspiciousPaste = category === 'paste' && (!pasteLength || pasteLength > pasteThreshold || source === 'external' || ed.internal === false);
+            
+            const fileName = basenameish(ed.fileEdit || ed.fileView || ed.file || ed.filePath || row.fileView || '');
 
-            timelineEvents.push(...parsedEvents);
-            sessionSummaries.push({
-                sessionId: session.sessionId,
-                filename: session.filename,
-                startedAt: session.startedAt,
-                ideUser: session.ideUser,
-                workspaceName: session.workspaceName,
-                eventCount: parsedEvents.length,
-                partial: !!partial,
-                extensionVersion,
-                vscodeVersion,
-                integrityVerified: metadata.integrityVerification?.verified !== false
-            });
-        } catch (err: any) {
-            warnings.push(`Session ${session.filename} failed to load: ${String(err?.message || err)}`);
-        }
-    }));
+            const timeStr = String(row.occurredAt || row.OccurredAt || row.timestamp || ed.time || '');
+            
+            // Safely parse timestamps from DB ISO formats
+            let timeMs = parseLogTime(timeStr);
+            if (!timeMs || isNaN(timeMs)) {
+                timeMs = new Date(timeStr).getTime();
+            }
+
+            categoryCounts[category]++;
+            totalProcessedEvents++;
+
+            return {
+                key: `${sid}-${index}`,
+                time: timeStr,
+                timeMs,
+                category,
+                eventType: eType,
+                sessionId: sid,
+                sessionLabel: `Session ${sid}`,
+                workspaceName: project,
+                fileName,
+                pasteLength,
+                suspiciousPaste,
+                flightTime: Number.parseInt(String(ed.flightTime || row.flightTimeMs || '0'), 10) || 0,
+                source,
+                possibleAiDetection: String(ed.possibleAiDetection || '')
+            };
+        }).filter((e: any) => e.timeMs > 0);
+        
+        parsedEvents.sort((left: any, right: any) => left.timeMs - right.timeMs);
+        timelineEvents.push(...parsedEvents);
+        
+        sessionSummaries.push({
+            sessionId: sid,
+            filename: `Session ${sid}`,
+            startedAt: parsedEvents.length > 0 ? parsedEvents[0].time : '',
+            ideUser: selection.studentName,
+            workspaceName: project,
+            eventCount: parsedEvents.length,
+            partial: false,
+            extensionVersion: "Unknown",
+            vscodeVersion: "Unknown",
+            integrityVerified: true
+        });
+    }
 
     timelineEvents.sort((left: any, right: any) => left.timeMs - right.timeMs);
     const validEventTimes = timelineEvents.map((event: any) => event.timeMs).filter((value: number) => value > 0);
@@ -208,25 +238,25 @@ async function buildAssignmentComparisonStudent(selection: AssignmentComparisonS
         event.offsetMs = event.timeMs > 0 && firstTime > 0 ? event.timeMs - firstTime : 0;
     }
 
-    const totalEvents = timelineEvents.length;
     const totalPasteEvents = timelineEvents.filter(event => event.category === 'paste').length;
     const suspiciousPasteCount = timelineEvents.filter(event => event.suspiciousPaste).length;
-    const synced = selection.sessions.length > 0 && totalEvents > 0;
-    if ((selection.totalSessionCount || selection.sessions.length) > selection.sessions.length) {
-        warnings.push(`Only the most recent ${selection.sessions.length} session(s) were analyzed for ${selection.studentName}.`);
+    const synced = timelineEvents.length > 0;
+    
+    if (selection.totalSessionCount && selection.totalSessionCount > eventsBySession.size) {
+        warnings.push(`Only the most recent ${eventsBySession.size} session(s) out of ${selection.totalSessionCount} were analyzed for ${selection.studentName}.`);
     }
 
     return {
         studentAuthUserId: selection.studentAuthUserId,
         studentName: selection.studentName,
         synced,
-        sessionCount: selection.sessions.length,
-        totalEvents,
+        sessionCount: eventsBySession.size,
+        totalEvents: totalProcessedEvents,
         totalPasteEvents,
         suspiciousPasteCount,
         activeSpanMs: firstTime > 0 && lastTime >= firstTime ? lastTime - firstTime : 0,
         averageGapMs: Math.round(average(gaps)),
-        pasteRate: totalEvents > 0 ? totalPasteEvents / totalEvents : 0,
+        pasteRate: totalProcessedEvents > 0 ? totalPasteEvents / totalProcessedEvents : 0,
         categoryCounts,
         projects: Array.from(projects),
         extensionVersions: Array.from(extensionVersions),

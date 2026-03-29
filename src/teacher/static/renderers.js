@@ -1,4 +1,4 @@
-// renderers.js (FULL FILE as you shared it, with the Confidence + Student Summary dropdown changes added)
+// renderers.js
 window.TeacherUI = {
   formatDuration(ms) {
     if (!ms || ms < 0) {
@@ -163,8 +163,8 @@ window.TeacherUI = {
       actionBtnsDiv.style.gap = "8px";
 
       const btnTimeline = document.createElement("button");
-      btnTimeline.className = "btn btn-primary";
-      btnTimeline.textContent = "Create Timeline";
+      btnTimeline.className = "btn btn-secondary";
+      btnTimeline.textContent = "⏱️ Visual Timeline";
       btnTimeline.addEventListener("click", handlers.onGenerateTimeline);
       actionBtnsDiv.appendChild(btnTimeline);
 
@@ -459,31 +459,50 @@ window.TeacherUI = {
       }
     }
 
-    let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><h2 style="margin:0; color:var(--accent);">Assignment Timeline: ${data.user}</h2><div class="meta">Project: ${data.project} &nbsp;|&nbsp; Total Analyzed Events: ${data.totalEvents}</div></div><button id="close-timeline" class="btn btn-secondary" style="padding:4px 8px;">Close</button></div><div style="margin-top: 16px;">`;
+    let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><h2 style="margin:0; color:var(--accent);">Visual Timeline: ${data.user}</h2><div class="meta">Project: ${data.project} &nbsp;|&nbsp; Total Analyzed Events: ${data.totalEvents}</div></div><button id="close-timeline" class="btn btn-secondary" style="padding:4px 8px;">Close</button></div><div style="margin-top: 16px;">`;
 
-    if (data.sparse || !data.periods || data.periods.length === 0) {
-      html += `<div class="meta" style="color: #f59e0b; padding:12px; border:1px solid #f59e0b; border-radius:4px;"><strong>Sparse Activity Detected:</strong> The timeline is incomplete because there are not enough recorded events.</div>`;
+    if (data.sparse && (!data.periods || data.periods.length === 0)) {
+      html += `<div class="meta" style="color: #f59e0b; padding:12px; border:1px solid #f59e0b; border-radius:4px; text-align: center;"><strong>Sparse Activity:</strong> The timeline is incomplete because there are not enough recorded events.</div>`;
     } else {
-      const formatTime = (ts) =>
-        new Date(ts).toLocaleString(undefined, {
+      const formatDateTime = (ts) => new Date(ts).toLocaleString(undefined, {
           month: "short",
           day: "numeric",
           hour: "2-digit",
           minute: "2-digit",
-        });
+      });
+
       data.periods.forEach((p, index) => {
         const durMs = p.endTime - p.startTime;
-        html += `<div style="display:flex; flex-direction:column; gap:4px; margin-bottom: 8px;"><div style="display:flex; justify-content:space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);"><div><strong style="font-size:1.1rem;">Work Period ${index + 1}</strong><div class="meta" style="margin-top:4px;">${formatTime(p.startTime)} &rarr; ${formatTime(p.endTime)}</div></div><div style="text-align: right;"><div style="font-weight:bold;">${durMs < 60000 ? "< 1m" : this.formatDuration(durMs)}</div><div class="meta">${p.eventCount} logged events</div></div></div></div>`;
+        const durationText = durMs < 60000 ? "< 1m" : this.formatDuration(durMs);
+
+        html += `
+          <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);">
+              <div>
+                <strong style="font-size: 1.1rem;">Work Period ${index + 1}</strong>
+                <div class="meta" style="margin-top: 6px; font-size: 0.9rem;">${formatDateTime(p.startTime)} &rarr; ${formatDateTime(p.endTime)}</div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-weight: bold; color: var(--fg);">${durationText}</div>
+                <div class="meta" style="margin-top: 4px;">${p.eventCount} logged events</div>
+              </div>
+            </div>
+          </div>`;
+
         if (index < data.periods.length - 1) {
           const gapMs = data.periods[index + 1].startTime - p.endTime;
+          const gapStart = formatDateTime(p.endTime);
+          const gapEnd = formatDateTime(data.periods[index + 1].startTime);
+
           if (gapMs > 4 * 60 * 60 * 1000) {
-            html += `<div class="meta" style="text-align:center; padding: 8px 0; color: #f59e0b;">⟐ <strong>Significant Gap: ${this.formatDuration(gapMs)}</strong> ⟐</div>`;
+            html += `<div class="meta" style="text-align: center; padding: 8px 0; color: #f59e0b; background: rgba(245, 158, 11, 0.05); border-radius: 4px; margin: 4px 0;">⟐ <strong>Significant Gap</strong> (${this.formatDuration(gapMs)})<br/><span style="font-size: 0.85rem; display: inline-block; margin-top: 4px;">${gapStart} &rarr; ${gapEnd}</span> ⟐</div>`;
           } else {
-            html += `<div class="meta" style="text-align:center; padding: 6px 0;">↓ Gap: ${this.formatDuration(gapMs)} ↓</div>`;
+            html += `<div class="meta" style="text-align: center; padding: 6px 0;">&darr; Gap: ${this.formatDuration(gapMs)}<br/><span style="font-size: 0.85rem; display: inline-block; margin-top: 4px;">${gapStart} &rarr; ${gapEnd}</span> &darr;</div>`;
           }
         }
       });
     }
+    
     html += `</div>`;
     tCard.innerHTML = html;
     document
@@ -1042,18 +1061,14 @@ window.TeacherUI = {
             const ts = row.dataset.eventTime || "";
             const text = input?.value || "";
             if (ts && text) {
-<<<<<<< HEAD
               const notePayload = { timestamp: ts, text };
-              if (sessionEventId > 0) {
+              if (typeof sessionEventId !== 'undefined' && sessionEventId > 0) {
                 notePayload.sessionEventId = sessionEventId;
               }
-              if (sessionId > 0) {
+              if (typeof sessionId !== 'undefined' && sessionId > 0) {
                 notePayload.sessionId = sessionId;
               }
               allNotes.push(notePayload);
-=======
-              allNotes.push({ timestamp: ts, text });
->>>>>>> 1b08fab8c6ad3178cc02b0f8557ce8ce166a70c9
             }
           });
 

@@ -2105,13 +2105,13 @@
           ? "Create Timeline"
           : "Analyze Behavioral Patterns";
       if ($("session-modal-title"))
-        $("session-modal-title").textContent = title;
-      if (sessionModalList) sessionModalList.innerHTML = "";
+        {$("session-modal-title").textContent = title;}
+      if (sessionModalList) {sessionModalList.innerHTML = "";}
 
       if (context === "raw") {
         if ($("session-modal-desc"))
-          $("session-modal-desc").textContent =
-            "Select the raw log files to include:";
+          {$("session-modal-desc").textContent =
+            "Select the raw log files to include:";}
         logNamesCache.forEach((logName) => {
           const label = document.createElement("label");
           label.style.cssText =
@@ -2121,8 +2121,8 @@
         });
       } else if (context === "student") {
         if ($("session-modal-desc"))
-          $("session-modal-desc").textContent =
-            "Select the sessions to include for this student:";
+          {$("session-modal-desc").textContent =
+            "Select the sessions to include for this student:";}
         const sessionDropdown = $("filter-session");
         if (sessionDropdown) {
           Array.from(sessionDropdown.options).forEach((opt) => {
@@ -2137,8 +2137,8 @@
         }
       } else if (context === "class") {
         if ($("session-modal-desc"))
-          $("session-modal-desc").textContent =
-            "Select the students to include in this class analysis:";
+          {$("session-modal-desc").textContent =
+            "Select the students to include in this class analysis:";}
         currentAssignmentStudents.forEach((student) => {
           if (student.sessionCount > 0) {
             const label = document.createElement("label");
@@ -2150,8 +2150,8 @@
         });
       }
 
-      if (sessionModalSelectAll) sessionModalSelectAll.checked = true;
-      if (sessionModal) sessionModal.style.display = "flex";
+      if (sessionModalSelectAll) {sessionModalSelectAll.checked = true;}
+      if (sessionModal) {sessionModal.style.display = "flex";}
     }
 
     if (sessionModalSelectAll) {
@@ -2202,7 +2202,7 @@
 
         if (btnId === "btn-cancel-session-selection") {
           e.preventDefault();
-          if (sessionModal) sessionModal.style.display = "none";
+          if (sessionModal) {sessionModal.style.display = "none";}
         }
 
         if (btnId === "btn-confirm-session-selection") {
@@ -2214,7 +2214,7 @@
 
           if (selectedValues.length === 0) {
             if (status)
-              status.textContent = "Error: Select at least 1 item to proceed.";
+              {status.textContent = "Error: Select at least 1 item to proceed.";}
             return;
           }
 
@@ -2224,14 +2224,14 @@
             currentModalContext === "raw"
           ) {
             if (status)
-              status.textContent =
-                "Error: Select at least 2 logs to build a profile.";
+              {status.textContent =
+                "Error: Select at least 2 logs to build a profile.";}
             return;
           }
 
-          if (sessionModal) sessionModal.style.display = "none";
+          if (sessionModal) {sessionModal.style.display = "none";}
           if (status)
-            status.textContent = `Generating ${currentModalAction}...`;
+            {status.textContent = `Generating ${currentModalAction}...`;}
 
           if (currentModalContext === "raw") {
             const command =
@@ -2270,6 +2270,76 @@
           );
           break;
 
+        case "logNotes": {
+          // 1. Safely unwrap the API response
+          let notesList = [];
+          if (Array.isArray(msg.notes)) {
+            notesList = msg.notes;
+          } else if (msg.notes && Array.isArray(msg.notes.data)) {
+            notesList = msg.notes.data;
+          } else if (msg.notes && Array.isArray(msg.notes.notes)) {
+            notesList = msg.notes.notes;
+          }
+
+          if (notesList.length === 0) {
+            break;
+          }
+          
+          const notesByEvent = new Map();
+          notesList.forEach((note) => {
+            // 2. Catch every possible capitalization the database might use
+            const id = Number(note?.sessionEventId || note?.SessionEventId || note?.eventId || note?.EventId || note?.Id || note?.id || 0);
+            const text = String(note?.noteText || note?.NoteText || note?.text || note?.Text || note?.note || note?.Note || note?.content || note?.Content || "");
+            
+            if (id && text) {
+              notesByEvent.set(id, text);
+            }
+          });
+
+          document.querySelectorAll('.event').forEach((row) => {
+            const rowId = Number(row.dataset.sessionEventId || 0);
+            if (!rowId || !notesByEvent.has(rowId)) {return;}
+
+            const noteText = notesByEvent.get(rowId);
+
+            // Hide the text area
+            const noteTextarea = row.querySelector('.event-note-input');
+            if (noteTextarea) {noteTextarea.value = noteText;}
+            const noteArea = row.querySelector('.event-notes-area');
+            if (noteArea) {noteArea.style.display = 'none';}
+
+            // Fill the icon
+            const noteBtn = row.querySelector('.btn-notes');
+            if (noteBtn) {
+              noteBtn.dataset.hasNote = 'true';
+              noteBtn.style.filter = 'none';
+              noteBtn.style.opacity = '1';
+              const emptyIcon = noteBtn.querySelector('.note-icon-empty');
+              const filledIcon = noteBtn.querySelector('.note-icon-filled');
+              if (emptyIcon && filledIcon) {
+                emptyIcon.style.display = 'none';
+                filledIcon.style.display = 'inline';
+              }
+            }
+
+            // Draw the green div
+            let noteLabel = row.querySelector(".loaded-note-text");
+            if (!noteLabel) {
+              noteLabel = document.createElement("div");
+              noteLabel.className = "loaded-note-text";
+              noteLabel.style.cssText = "margin-top:10px; padding:10px 14px; border-left:4px solid #10b981; background:rgba(16, 185, 129, 0.1); color:#10b981; font-size:0.9rem; border-radius:4px; font-weight: 500; font-family: monospace;";
+              
+              if (noteArea) {
+                row.insertBefore(noteLabel, noteArea);
+              } else {
+                row.appendChild(noteLabel);
+              }
+            }
+            noteLabel.innerHTML = `<strong>📝 Teacher note:</strong> ${noteText}`;
+          });
+          break;
+        }
+
         case "dashboardData":
           dashboardDataCache = msg.data || null;
           // NEW: Read the ping result from the dashboard sync logic
@@ -2294,19 +2364,19 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) $("logs-tab").classList.add("active");
-          if ($("nav-logs")) $("nav-logs").classList.add("active");
+          if ($("logs-tab")) {$("logs-tab").classList.add("active");}
+          if ($("nav-logs")) {$("nav-logs").classList.add("active");}
 
           // 2. Ensure the viewer container is visible
           if ($("logs-viewer-container"))
-            $("logs-viewer-container").style.display = "block";
+            {$("logs-viewer-container").style.display = "block";}
           if ($("logs-log-name"))
-            $("logs-log-name").textContent = "Generated Behavioral Profile";
+            {$("logs-log-name").textContent = "Generated Behavioral Profile";}
 
           // 3. Render it
           if (window.TeacherUI && window.TeacherUI.renderProfile)
-            window.TeacherUI.renderProfile(msg.data);
-          if (status) status.textContent = "Behavioral profile generated.";
+            {window.TeacherUI.renderProfile(msg.data);}
+          if (status) {status.textContent = "Behavioral profile generated.";}
           break;
 
         case "timelineData":
@@ -2317,26 +2387,19 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) $("logs-tab").classList.add("active");
-          if ($("nav-logs")) $("nav-logs").classList.add("active");
+          if ($("logs-tab")) {$("logs-tab").classList.add("active");}
+          if ($("nav-logs")) {$("nav-logs").classList.add("active");}
 
           // 2. Ensure the viewer container is visible
           if ($("logs-viewer-container"))
-            $("logs-viewer-container").style.display = "block";
+            {$("logs-viewer-container").style.display = "block";}
           if ($("logs-log-name"))
-            $("logs-log-name").textContent = "Generated Visual Timeline";
+            {$("logs-log-name").textContent = "Generated Visual Timeline";}
 
           // 3. Render it
           if (window.TeacherUI && window.TeacherUI.renderTimeline)
-            window.TeacherUI.renderTimeline(msg.data);
-          if (status) status.textContent = "Timeline generated.";
-          break;
-
-        case "timelineData":
-          UI.renderTimeline(msg.data);
-          if (status) {
-            status.textContent = "Timeline generated.";
-          }
+            {window.TeacherUI.renderTimeline(msg.data);}
+          if (status) {status.textContent = "Timeline generated.";}
           break;
 
         case "logData":
@@ -2383,169 +2446,6 @@
           }
           break;
         }
-
-        case "logNotes":
-          // Load notes into the event rows
-          const notesMap = {};
-          if (Array.isArray(msg.notes)) {
-            msg.notes.forEach((note) => {
-              notesMap[note.timestamp] = note.text;
-            });
-          }
-          // Populate notes into the textareas and update visual indicators
-          const eventRows = document.querySelectorAll(".event-notes-area");
-          eventRows.forEach((area) => {
-            const input = area.querySelector(".event-note-input");
-            const eventRow = area.closest(".event");
-            const timestamp = eventRow?.dataset.eventTime || "";
-            if (input && notesMap[timestamp]) {
-              input.value = notesMap[timestamp];
-              // Update the note button visual indicator
-              const noteBtn = eventRow?.querySelector(".btn-notes");
-              if (noteBtn) {
-                noteBtn.dataset.hasNote = "true";
-                const emptyIcon = noteBtn.querySelector(".note-icon-empty");
-                const filledIcon = noteBtn.querySelector(".note-icon-filled");
-                if (emptyIcon && filledIcon) {
-                  emptyIcon.style.display = "none";
-                  filledIcon.style.display = "inline";
-                }
-              }
-            }
-          });
-
-          // Popup debug: list incoming notes and attached log row detail
-          const noteDetails = [];
-          const notesMeta = msg.notesMeta || null;
-          // Prefer raw API notes list to preserve all fields (like NoteText, Id, etc.)
-          const rawNotes = Array.isArray(notesMeta?.notesList)
-            ? notesMeta.notesList
-            : Array.isArray(msg.notes)
-              ? msg.notes
-              : [];
-
-          if (notesMeta) {
-            noteDetails.push(`sessionId = ${notesMeta.sessionId || "unknown"}`);
-            noteDetails.push(
-              `teacherAuthUserId = ${notesMeta.teacherAuthUserId || "unknown"}`,
-            );
-            noteDetails.push(`fetched notes = ${notesMeta.count || 0}`);
-            noteDetails.push("");
-          }
-
-          if (rawNotes.length > 0) {
-            rawNotes.forEach((note, index) => {
-              const noteId = Number(
-                note?.sessionEventId ??
-                  note?.SessionEventId ??
-                  note?.eventId ??
-                  note?.EventId ??
-                  note?.Id ??
-                  note?.id ??
-                  0,
-              );
-              const noteText = String(
-                note?.noteText ??
-                  note?.NoteText ??
-                  note?.text ??
-                  note?.note ??
-                  "",
-              );
-              const noteSessionId =
-                Number(
-                  note?.sessionId ??
-                    note?.SessionId ??
-                    notesMeta?.sessionId ??
-                    0,
-                ) ||
-                notesMeta?.sessionId ||
-                0;
-              const noteTeacherId =
-                Number(
-                  note?.teacherAuthUserId ??
-                    note?.TeacherAuthUserId ??
-                    notesMeta?.teacherAuthUserId ??
-                    0,
-                ) ||
-                notesMeta?.teacherAuthUserId ||
-                0;
-
-              const row = noteId
-                ? document.querySelector(
-                    `.session-log-row[data-session-event-id="${noteId}"]`,
-                  ) ||
-                  document.querySelector(
-                    `.event[data-session-event-id="${noteId}"]`,
-                  )
-                : null;
-
-              const rowMetaText =
-                row?.querySelector(".meta")?.textContent?.trim() || "";
-              const rowNumberMatch = rowMetaText.match(/Row\s*(\d+)/i);
-              const rowNumber = rowNumberMatch
-                ? rowNumberMatch[1]
-                : "(row # unknown)";
-
-              if (row) {
-                // Persist API note id so updates can use PUT when saving.
-                const apiNoteId = Number(note?.Id ?? note?.id ?? 0);
-                if (apiNoteId > 0) {
-                  row.dataset.noteId = String(apiNoteId);
-                }
-
-                // Insert a visible note text indicator into the row body
-                let noteLabel = row.querySelector(".loaded-note-text");
-                if (!noteLabel) {
-                  noteLabel = document.createElement("div");
-                  noteLabel.className = "loaded-note-text";
-                  noteLabel.style.cssText =
-                    "margin-top:6px;padding:6px;border-left:3px solid #4ade80;background:rgba(34,197,94,0.1);color:#9ae6b4;font-size:0.85rem;border-radius:4px;";
-                  row.appendChild(noteLabel);
-                }
-                noteLabel.textContent = `Teacher note: ${noteText}`;
-
-                const noteBtn =
-                  row.querySelector(".session-note-toggle") ||
-                  row.querySelector(".btn-notes");
-                if (noteBtn) {
-                  noteBtn.style.filter = "none";
-                  noteBtn.style.opacity = "1";
-                  noteBtn.dataset.hasNote = "true";
-                  const emptyIcon = noteBtn.querySelector(".note-icon-empty");
-                  const filledIcon = noteBtn.querySelector(".note-icon-filled");
-                  if (emptyIcon && filledIcon) {
-                    emptyIcon.style.display = "none";
-                    filledIcon.style.display = "inline";
-                  }
-                }
-
-                const noteTextarea =
-                  row.querySelector(".session-note-text") ||
-                  row.querySelector(".event-note-input");
-                if (noteTextarea) {
-                  noteTextarea.value = noteText;
-                }
-                const noteArea =
-                  row.querySelector(".session-note-area") ||
-                  row.querySelector(".event-notes-area");
-                if (noteArea) {
-                  noteArea.style.display = "none";
-                }
-              }
-
-              // FIXED: Ensure notesByEvent is defined before trying to call .has()
-              try {
-                if (
-                  noteId &&
-                  typeof window.notesByEvent !== "undefined" &&
-                  window.notesByEvent.has(noteId)
-                ) {
-                  window.notesByEvent.set(noteId, noteText);
-                }
-              } catch (e) {}
-            });
-          }
-          break;
 
         case "rawData":
           if ($("logs-viewer-container")) {
@@ -2987,6 +2887,14 @@
           if (status) {
             status.textContent = "Student sessions loaded.";
           }
+          
+          // Ask the DB for the notes for all these sessions!
+          if (msg.data && Array.isArray(msg.data.sessions)) {
+             const uniqueIds = [...new Set(msg.data.sessions.map(s => s.SessionId || s.sessionId))].filter(id => id);
+             uniqueIds.forEach(id => {
+                post("loadLogNotes", { sessionId: Number(id) });
+             });
+          }
           break;
         }
 
@@ -3007,6 +2915,16 @@
 
         case "classSessionLogData": {
           renderAssignmentSessionLog(msg.data || {});
+          if (window.currentLogFilename) {
+            const match = String(window.currentLogFilename).match(/Session(\d+)/i);
+            const parsedSessionId = match ? Number(match[1]) : 0;
+            if (Number.isFinite(parsedSessionId) && parsedSessionId > 0) {
+              post("loadLogNotes", { sessionId: parsedSessionId });
+            } else {
+              post("loadLogNotes", { filename: window.currentLogFilename });
+            }
+          }
+
           if (status) {
             status.textContent = "Session log loaded.";
           }
@@ -4465,7 +4383,7 @@
       title.style.display = "none";
       const dynamicTitle = $("dynamic-student-title");
       if (dynamicTitle)
-        dynamicTitle.textContent = `${studentName} - Session Logs`;
+        {dynamicTitle.textContent = `${studentName} - Session Logs`;}
 
       // Set up Dual Containers inside the main list area
       list.innerHTML = `
@@ -4676,9 +4594,9 @@
 
       // 2. Helper to format large ms values into "Xh Ym" or "Xm"
       const formatDashDuration = (ms) => {
-        if (!ms || ms <= 0) return "0m";
+        if (!ms || ms <= 0) {return "0m";}
         const totalMins = Math.round(ms / 60000);
-        if (totalMins === 0) return "< 1m";
+        if (totalMins === 0) {return "< 1m";}
         const hours = Math.floor(totalMins / 60);
         const mins = totalMins % 60;
         return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
@@ -4806,12 +4724,12 @@
       }
 
       const formatDurationHelper = (ms) => {
-        if (!ms || ms < 0) return "0s";
+        if (!ms || ms < 0) {return "0s";}
         const totalSeconds = Math.floor(ms / 1000);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
-        if (hours > 0) return `${hours}h ${minutes}m`;
-        if (minutes > 0) return `${minutes}m`;
+        if (hours > 0) {return `${hours}h ${minutes}m`;}
+        if (minutes > 0) {return `${minutes}m`;}
         return `< 1m`;
       };
 
@@ -4833,29 +4751,29 @@
           filtered = filtered.filter((e) => {
             const t = e.eType;
             if (eventVal === "input")
-              return t.includes("input") && !t.includes("ai");
+              {return t.includes("input") && !t.includes("ai");}
             if (eventVal === "paste")
-              return t.includes("paste") && !t.includes("ai"); // NEW: Catch manual pastes
+              {return t.includes("paste") && !t.includes("ai");} // NEW: Catch manual pastes
             if (eventVal === "replace")
-              return t.includes("replace") && !t.includes("ai");
+              {return t.includes("replace") && !t.includes("ai");}
             if (eventVal === "delete")
-              return (
+              {return (
                 (t.includes("delete") || t.includes("backspace")) &&
                 !t.includes("ai")
-              );
+              );}
             if (eventVal === "ai-input")
-              return (
+              {return (
                 t.includes("ai-input") ||
                 t.includes("ai-insert") ||
                 (t.includes("ai") && t.includes("input"))
-              );
+              );}
             if (eventVal === "ai-paste")
-              return (
+              {return (
                 t.includes("ai-paste") ||
                 (t.includes("ai") && t.includes("paste"))
-              ); // NEW: Catch AI pastes
-            if (eventVal === "ai-replace") return t.includes("ai-replace");
-            if (eventVal === "ai-delete") return t.includes("ai-delete");
+              );} // NEW: Catch AI pastes
+            if (eventVal === "ai-replace") {return t.includes("ai-replace");}
+            if (eventVal === "ai-delete") {return t.includes("ai-delete");}
             return true;
           });
         }
@@ -4876,7 +4794,7 @@
         let currentPeriod = null;
 
         chronologicalEvents.forEach((evt) => {
-          if (!evt.timestampMs || isNaN(evt.timestampMs)) return;
+          if (!evt.timestampMs || isNaN(evt.timestampMs)) {return;}
           if (!currentPeriod) {
             currentPeriod = {
               startTime: evt.timestampMs,
@@ -4901,7 +4819,7 @@
             }
           }
         });
-        if (currentPeriod) periods.push(currentPeriod);
+        if (currentPeriod) {periods.push(currentPeriod);}
 
         if (periods.length === 0) {
           timelineContainer.innerHTML = `<div class="meta" style="padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px;">No significant work periods found.</div>`;
@@ -4975,23 +4893,23 @@
         filtered.sort((a, b) => {
           if (sortVal === "session-desc") {
             if (a.sessionId !== b.sessionId)
-              return Number(b.sessionId) - Number(a.sessionId);
+              {return Number(b.sessionId) - Number(a.sessionId);}
             return b.timestampMs - a.timestampMs;
           }
           if (sortVal === "session-asc") {
             if (a.sessionId !== b.sessionId)
-              return Number(a.sessionId) - Number(b.sessionId);
+              {return Number(a.sessionId) - Number(b.sessionId);}
             return a.timestampMs - b.timestampMs;
           }
-          if (sortVal === "time-desc") return b.timestampMs - a.timestampMs;
-          if (sortVal === "time-asc") return a.timestampMs - b.timestampMs;
+          if (sortVal === "time-desc") {return b.timestampMs - a.timestampMs;}
+          if (sortVal === "time-asc") {return a.timestampMs - b.timestampMs;}
           return 0;
         });
 
         // Group by Session for LIST view
         const groups = new Map();
         filtered.forEach((e) => {
-          if (!groups.has(e.sessionId)) groups.set(e.sessionId, []);
+          if (!groups.has(e.sessionId)) {groups.set(e.sessionId, []);}
           groups.get(e.sessionId).push(e);
         });
 
@@ -5005,82 +4923,59 @@
 
           groupEvents.forEach((e) => {
             const row = document.createElement("div");
-            row.className = "card";
+            row.className = "card event"; // ADDED 'event' class so saving works
             row.style.cssText =
               "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
 
             const items = [];
             const ed = e.eventData;
 
+            // Attach database IDs to the row so the save button can find them
+            row.dataset.sessionEventId = ed?.Id || ed?.eventId || ed?.sessionEventId || 0;
+            row.dataset.sessionId = e.sessionId || 0;
+            row.dataset.eventTime = e.occurredAt || "";
+
             const viewStr =
-              ed.View ??
-              ed.view ??
-              ed.fileView ??
-              ed.FileView ??
-              ed.file ??
-              ed.File ??
-              ed.fileName;
-            if (viewStr)
-              items.push(
-                `<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`,
-              );
+              ed.View ?? ed.view ?? ed.fileView ?? ed.FileView ?? ed.file ?? ed.File ?? ed.fileName;
+            if (viewStr) {items.push(`<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`);}
 
             const charsChanged =
-              ed.CharsChanged ??
-              ed.charsChanged ??
-              ed.CharsAdded ??
-              ed.charsAdded ??
-              ed.Length ??
-              ed.length ??
-              ed.pasteCharCount;
+              ed.CharsChanged ?? ed.charsChanged ?? ed.CharsAdded ?? ed.charsAdded ?? ed.Length ?? ed.length ?? ed.pasteCharCount;
             if (charsChanged !== undefined && charsChanged !== null)
-              items.push(
-                `<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`,
-              );
+              {items.push(`<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`);}
 
             const flightTime = ed.FlightTime ?? ed.flightTime;
             if (flightTime !== undefined && flightTime !== null) {
-              const ftStr = String(flightTime).endsWith("ms")
-                ? flightTime
-                : `${flightTime}ms`;
-              items.push(
-                `<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`,
-              );
+              const ftStr = String(flightTime).endsWith("ms") ? flightTime : `${flightTime}ms`;
+              items.push(`<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`);
             }
 
-            const windowFocused =
-              ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
+            const windowFocused = ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
             if (windowFocused !== undefined && windowFocused !== null)
-              items.push(
-                `<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`,
-              );
+              {items.push(`<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`);}
 
-            const workspace =
-              ed.WorkspaceName ??
-              ed.workspaceName ??
-              ed.Workspace ??
-              ed.workspace;
-            if (workspace)
-              items.push(
-                `<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`,
-              );
+            const workspace = ed.WorkspaceName ?? ed.workspaceName ?? ed.Workspace ?? ed.workspace;
+            if (workspace) {items.push(`<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`);}
 
             let noteHtml = "";
             if (ed.possibleAiDetection)
-              noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;
+              {noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;}
 
             const rowNum = ed.Row ?? ed.row ?? e.index + 1;
-            let bodyHtml =
-              items.length > 0
-                ? items.join(
-                    ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
-                  )
+            let bodyHtml = items.length > 0
+                ? items.join(' <span style="color: var(--border); margin: 0 6px;">|</span> ')
                 : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${JSON.stringify(ed)}</code>`;
 
             row.innerHTML = `
                   <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
                     <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                       <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${e.badgeBg}; color: ${e.badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${e.eventType}</span>
+                      
+                      <button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes">
+                        <span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span>
+                        <span class="note-icon-filled" style="display:none;">📝</span>
+                      </button>
+
                       <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${e.sessionId}</strong> &bull; ${formatSessionDate(e.occurredAt)}</span>
                     </div>
                     <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${rowNum}</div>
@@ -5089,12 +4984,91 @@
                     ${bodyHtml}
                     ${noteHtml}
                   </div>
+                  <div class="event-notes-area" style="display:none; margin-top:12px; padding-top:8px; border-top:1px solid var(--border);">
+                    <textarea class="event-note-input" placeholder="Add private instructor notes for this event..." style="width:100%; min-height:60px; padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); font-family:monospace; font-size:0.9rem;" rows="3"></textarea>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                      <button class="btn-save-note" style="background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Save Note</button>
+                      <button class="btn-close-notes" style="background:var(--border); color:var(--fg); border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Cancel</button>
+                    </div>
+                  </div>
                 `;
             listContainer.appendChild(row);
           });
         });
-      };
 
+        // ==============================================================
+        // LISTENERS GO HERE: INSIDE renderList, BUT AFTER THE LOOPS
+        // ==============================================================
+
+        listContainer.querySelectorAll(".btn-notes").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const eventRow = btn.closest(".event");
+            const notesArea = eventRow?.querySelector(".event-notes-area");
+            if (notesArea) {
+              const isVisible = notesArea.style.display !== "none";
+              notesArea.style.display = isVisible ? "none" : "block";
+              if (!isVisible) {
+                notesArea.querySelector(".event-note-input")?.focus();
+              }
+            }
+          });
+        });
+
+        listContainer.querySelectorAll(".btn-save-note").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const eventRow = btn.closest(".event");
+            const notesArea = eventRow?.querySelector(".event-notes-area");
+            const textarea = notesArea?.querySelector(".event-note-input");
+            const noteText = textarea?.value || "";
+
+            const allNotes = [];
+            document.querySelectorAll(".event").forEach((row) => {
+              const input = row.querySelector(".event-note-input");
+              const ts = row.dataset.eventTime || "";
+              const text = input?.value || "";
+              const sessionEventId = Number(row.dataset.sessionEventId || 0);
+              const sessionId = Number(row.dataset.sessionId || 0);
+
+              if (text && sessionEventId > 0) {
+                allNotes.push({ 
+                  timestamp: ts, 
+                  text: text,
+                  sessionEventId: sessionEventId,
+                  sessionId: sessionId 
+                });
+              }
+            });
+
+            if (window.postTeacherMessage) {
+              window.postTeacherMessage("saveLogNotes", {
+                filename: window.currentLogFilename || "db-session", 
+                notes: allNotes,
+              });
+            }
+
+            const noteBtn = eventRow?.querySelector(".btn-notes");
+            if (noteBtn) {
+              const isEmpty = !noteText || noteText.trim() === "";
+              noteBtn.dataset.hasNote = isEmpty ? "false" : "true";
+              noteBtn.querySelector(".note-icon-empty").style.display = isEmpty ? "inline" : "none";
+              noteBtn.querySelector(".note-icon-filled").style.display = isEmpty ? "none" : "inline";
+            }
+            if (notesArea) {notesArea.style.display = "none";}
+          });
+        });
+
+        listContainer.querySelectorAll(".btn-close-notes").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const notesArea = btn.closest(".event")?.querySelector(".event-notes-area");
+            if (notesArea) {notesArea.style.display = "none";}
+          });
+        });
+
+      }; // <--- THIS IS THE REAL END OF THE renderList FUNCTION
+
+      // ==============================================================
+      // THESE GO OUTSIDE OF renderList
+      // ==============================================================
       filterSessionEl.onchange = renderList;
       filterEventTypeEl.onchange = renderList;
       sortOrderEl.onchange = renderList;
@@ -5118,7 +5092,7 @@
         }
 
         if (line.startsWith("Session ")) {
-          if (currentEvent) events.push(currentEvent);
+          if (currentEvent) {events.push(currentEvent);}
           currentEvent = { session: line.replace("Session ", ""), rawJson: "" };
         } else if (currentEvent && line.includes(" • ")) {
           const parts = line.split(" • ");
@@ -5141,7 +5115,7 @@
           } catch (e) {}
         }
       }
-      if (currentEvent) events.push(currentEvent);
+      if (currentEvent) {events.push(currentEvent);}
       return events;
     }
 
@@ -5232,7 +5206,7 @@
       let currentPeriod = null;
 
       const parseEventTime = (timeStr) => {
-        if (!timeStr) return null;
+        if (!timeStr) {return null;}
         const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
         const d = new Date(cleanStr);
         return isNaN(d.getTime()) ? null : d.getTime();
@@ -5240,7 +5214,7 @@
 
       events.forEach((evt) => {
         const ts = parseEventTime(evt.timestamp);
-        if (!ts) return;
+        if (!ts) {return;}
 
         if (!currentPeriod) {
           currentPeriod = {
@@ -5266,16 +5240,16 @@
           }
         }
       });
-      if (currentPeriod) periods.push(currentPeriod);
+      if (currentPeriod) {periods.push(currentPeriod);}
 
       // --- FIXED: BULLETPROOF DURATION FORMATTER ---
       const formatDurationHelper = (ms) => {
-        if (!ms || ms < 0) return "0s";
+        if (!ms || ms < 0) {return "0s";}
         const totalSeconds = Math.floor(ms / 1000);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
-        if (hours > 0) return `${hours}h ${minutes}m`;
-        if (minutes > 0) return `${minutes}m`;
+        if (hours > 0) {return `${hours}h ${minutes}m`;}
+        if (minutes > 0) {return `${minutes}m`;}
         return `< 1m`;
       };
 
@@ -5338,6 +5312,11 @@
       // --- LIST VIEW RENDERING (Existing Logic) ---
       events.forEach((evt) => {
         const card = document.createElement("div");
+        card.className = "event"; // MUST have this class so the save logic finds it
+        card.dataset.sessionEventId = evt.data?.Id || evt.data?.eventId || 0;
+        card.dataset.sessionId = evt.session || 0;
+        card.dataset.eventTime = evt.timestamp || "";
+
         card.style.cssText =
           "background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;";
 
@@ -5374,11 +5353,26 @@
         typeBadge.style.cssText = `font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;`;
         typeBadge.textContent = evt.eventType || "Unknown Event";
 
+        // Wrap the badge and add the notes button next to it
+        const badgeWrapper = document.createElement("div");
+        badgeWrapper.style.display = "flex";
+        badgeWrapper.style.gap = "8px";
+        badgeWrapper.style.alignItems = "center";
+        badgeWrapper.appendChild(typeBadge);
+
+        const noteBtn = document.createElement("button");
+        noteBtn.className = "btn-notes";
+        noteBtn.dataset.hasNote = "false";
+        noteBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;";
+        noteBtn.title = "Add/view notes";
+        noteBtn.innerHTML = `<span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span>`;
+        badgeWrapper.appendChild(noteBtn);
+
         const timeSpan = document.createElement("span");
         timeSpan.style.cssText = "font-size: 0.8rem; color: var(--muted);";
         timeSpan.innerHTML = `<strong>Session ${evt.session}</strong> &bull; Row ${evt.row} &bull; ${evt.timestamp}`;
 
-        header.appendChild(typeBadge);
+        header.appendChild(badgeWrapper);
         header.appendChild(timeSpan);
         card.appendChild(header);
 
@@ -5388,25 +5382,25 @@
         if (evt.data) {
           const items = [];
           if (evt.data.file)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
-            );
+            );}
           if (evt.data.charsAdded !== undefined)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
-            );
+            );}
           if (evt.data.pasteCharCount !== undefined)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
-            );
+            );}
           if (evt.data.flightTime !== undefined)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
-            );
+            );}
           if (evt.data.focused !== undefined)
-            items.push(
+            {items.push(
               `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
-            );
+            );}
 
           if (evt.data.possibleAiDetection) {
             items.push(
@@ -5425,7 +5419,101 @@
         }
 
         card.appendChild(body);
+
+        // Add the hidden text box
+        const notesArea = document.createElement("div");
+        notesArea.className = "event-notes-area";
+        notesArea.style.cssText = "display:none; margin-top:12px; padding-top:8px; border-top:1px solid var(--border);";
+        notesArea.innerHTML = `<textarea class="event-note-input" placeholder="Add private instructor notes for this event..." style="width:100%; min-height:60px; padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); font-family:monospace; font-size:0.9rem;" rows="3"></textarea><div style="display:flex; gap:8px; margin-top:8px;"><button class="btn-save-note" style="background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Save Note</button><button class="btn-close-notes" style="background:var(--border); color:var(--fg); border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Cancel</button></div>`;
+        card.appendChild(notesArea);
+
         listContainer.appendChild(card);
+      });
+
+      // Wire up the buttons for this view
+      listContainer.querySelectorAll(".btn-notes").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          if (notesArea) {
+            const isVisible = notesArea.style.display !== "none";
+            notesArea.style.display = isVisible ? "none" : "block";
+            if (!isVisible) {
+              const textarea = notesArea.querySelector(".event-note-input");
+              if (textarea) {
+                textarea.focus();
+              }
+            }
+          }
+        });
+      });
+
+      listContainer.querySelectorAll(".btn-save-note").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          const textarea = notesArea?.querySelector(".event-note-input");
+          const noteText = textarea?.value || "";
+
+          if (!window.currentLogFilename) {
+            return;
+          }
+
+          const allNotes = [];
+          document.querySelectorAll(".event").forEach((row) => {
+            const area = row.querySelector(".event-notes-area");
+            const input = area?.querySelector(".event-note-input");
+            const ts = row.dataset.eventTime || "";
+            const text = input?.value || "";
+            
+            const sessionEventId = Number(row.dataset.sessionEventId || 0);
+            const sessionId = Number(row.dataset.sessionId || 0);
+
+            if (ts && text) {
+              const notePayload = { timestamp: ts, text };
+              if (sessionEventId > 0) {
+                notePayload.sessionEventId = sessionEventId;
+              }
+              if (sessionId > 0) {
+                notePayload.sessionId = sessionId;
+              }
+              allNotes.push(notePayload);
+            }
+          });
+
+          if (window.postTeacherMessage) {
+            window.postTeacherMessage("saveLogNotes", {
+              filename: window.currentLogFilename,
+              notes: allNotes,
+            });
+          }
+
+          const noteBtn = eventRow?.querySelector(".btn-notes");
+          if (noteBtn) {
+            const isEmpty = !noteText || noteText.trim() === "";
+            noteBtn.dataset.hasNote = isEmpty ? "false" : "true";
+            const emptyIcon = noteBtn.querySelector(".note-icon-empty");
+            const filledIcon = noteBtn.querySelector(".note-icon-filled");
+            if (emptyIcon && filledIcon) {
+              emptyIcon.style.display = isEmpty ? "inline" : "none";
+              filledIcon.style.display = isEmpty ? "none" : "inline";
+            }
+          }
+
+          if (notesArea) {
+            notesArea.style.display = "none";
+          }
+        });
+      });
+
+      listContainer.querySelectorAll(".btn-close-notes").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          if (notesArea) {
+            notesArea.style.display = "none";
+          }
+        });
       });
 
       view.style.display = "block";

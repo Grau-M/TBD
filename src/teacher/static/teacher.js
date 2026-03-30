@@ -2104,14 +2104,18 @@
         action === "timeline"
           ? "Create Timeline"
           : "Analyze Behavioral Patterns";
-      if ($("session-modal-title"))
-        {$("session-modal-title").textContent = title;}
-      if (sessionModalList) {sessionModalList.innerHTML = "";}
+      if ($("session-modal-title")) {
+        $("session-modal-title").textContent = title;
+      }
+      if (sessionModalList) {
+        sessionModalList.innerHTML = "";
+      }
 
       if (context === "raw") {
-        if ($("session-modal-desc"))
-          {$("session-modal-desc").textContent =
-            "Select the raw log files to include:";}
+        if ($("session-modal-desc")) {
+          $("session-modal-desc").textContent =
+            "Select the raw log files to include:";
+        }
         logNamesCache.forEach((logName) => {
           const label = document.createElement("label");
           label.style.cssText =
@@ -2120,9 +2124,10 @@
           sessionModalList.appendChild(label);
         });
       } else if (context === "student") {
-        if ($("session-modal-desc"))
-          {$("session-modal-desc").textContent =
-            "Select the sessions to include for this student:";}
+        if ($("session-modal-desc")) {
+          $("session-modal-desc").textContent =
+            "Select the sessions to include for this student:";
+        }
         const sessionDropdown = $("filter-session");
         if (sessionDropdown) {
           Array.from(sessionDropdown.options).forEach((opt) => {
@@ -2136,9 +2141,10 @@
           });
         }
       } else if (context === "class") {
-        if ($("session-modal-desc"))
-          {$("session-modal-desc").textContent =
-            "Select the students to include in this class analysis:";}
+        if ($("session-modal-desc")) {
+          $("session-modal-desc").textContent =
+            "Select the students to include in this class analysis:";
+        }
         currentAssignmentStudents.forEach((student) => {
           if (student.sessionCount > 0) {
             const label = document.createElement("label");
@@ -2150,8 +2156,12 @@
         });
       }
 
-      if (sessionModalSelectAll) {sessionModalSelectAll.checked = true;}
-      if (sessionModal) {sessionModal.style.display = "flex";}
+      if (sessionModalSelectAll) {
+        sessionModalSelectAll.checked = true;
+      }
+      if (sessionModal) {
+        sessionModal.style.display = "flex";
+      }
     }
 
     if (sessionModalSelectAll) {
@@ -2202,7 +2212,9 @@
 
         if (btnId === "btn-cancel-session-selection") {
           e.preventDefault();
-          if (sessionModal) {sessionModal.style.display = "none";}
+          if (sessionModal) {
+            sessionModal.style.display = "none";
+          }
         }
 
         if (btnId === "btn-confirm-session-selection") {
@@ -2213,8 +2225,9 @@
           const selectedValues = selectedBoxes.map((cb) => cb.value);
 
           if (selectedValues.length === 0) {
-            if (status)
-              {status.textContent = "Error: Select at least 1 item to proceed.";}
+            if (status) {
+              status.textContent = "Error: Select at least 1 item to proceed.";
+            }
             return;
           }
 
@@ -2223,15 +2236,19 @@
             selectedValues.length < 2 &&
             currentModalContext === "raw"
           ) {
-            if (status)
-              {status.textContent =
-                "Error: Select at least 2 logs to build a profile.";}
+            if (status) {
+              status.textContent =
+                "Error: Select at least 2 logs to build a profile.";
+            }
             return;
           }
 
-          if (sessionModal) {sessionModal.style.display = "none";}
-          if (status)
-            {status.textContent = `Generating ${currentModalAction}...`;}
+          if (sessionModal) {
+            sessionModal.style.display = "none";
+          }
+          if (status) {
+            status.textContent = `Generating ${currentModalAction}...`;
+          }
 
           if (currentModalContext === "raw") {
             const command =
@@ -2284,41 +2301,65 @@
           if (notesList.length === 0) {
             break;
           }
-          
+
           const notesByEvent = new Map();
           notesList.forEach((note) => {
             // 2. Catch every possible capitalization the database might use
-            const id = Number(note?.sessionEventId || note?.SessionEventId || note?.eventId || note?.EventId || note?.Id || note?.id || 0);
-            const text = String(note?.noteText || note?.NoteText || note?.text || note?.Text || note?.note || note?.Note || note?.content || note?.Content || "");
-            
+            const id = Number(
+              note?.sessionEventId ||
+                note?.SessionEventId ||
+                note?.eventId ||
+                note?.EventId ||
+                note?.Id ||
+                note?.id ||
+                0,
+            );
+            const text = String(
+              note?.noteText ||
+                note?.NoteText ||
+                note?.text ||
+                note?.Text ||
+                note?.note ||
+                note?.Note ||
+                note?.content ||
+                note?.Content ||
+                "",
+            );
+
             if (id && text) {
               notesByEvent.set(id, text);
             }
           });
 
-          document.querySelectorAll('.event').forEach((row) => {
+          document.querySelectorAll(".event").forEach((row) => {
             const rowId = Number(row.dataset.sessionEventId || 0);
-            if (!rowId || !notesByEvent.has(rowId)) {return;}
+            if (!rowId || !notesByEvent.has(rowId)) {
+              return;
+            }
 
             const noteText = notesByEvent.get(rowId);
 
             // Hide the text area
-            const noteTextarea = row.querySelector('.event-note-input');
-            if (noteTextarea) {noteTextarea.value = noteText;}
-            const noteArea = row.querySelector('.event-notes-area');
-            if (noteArea) {noteArea.style.display = 'none';}
+            const noteTextarea = row.querySelector(".event-note-input");
+            if (noteTextarea) {
+              noteTextarea.value = noteText;
+            }
+            const noteArea = row.querySelector(".event-notes-area");
+            if (noteArea) {
+              noteArea.style.display = "none";
+            }
 
             // Fill the icon
-            const noteBtn = row.querySelector('.btn-notes');
+            const noteBtn = row.querySelector(".btn-notes");
             if (noteBtn) {
-              noteBtn.dataset.hasNote = 'true';
-              noteBtn.style.filter = 'none';
-              noteBtn.style.opacity = '1';
-              const emptyIcon = noteBtn.querySelector('.note-icon-empty');
-              const filledIcon = noteBtn.querySelector('.note-icon-filled');
+              noteBtn.dataset.hasNote = "true";
+              noteBtn.style.filter = "none";
+              noteBtn.style.opacity = "1";
+              const emptyIcon = noteBtn.querySelector(".note-icon-empty");
+              const filledIcon = noteBtn.querySelector(".note-icon-filled");
               if (emptyIcon && filledIcon) {
-                emptyIcon.style.display = 'none';
-                filledIcon.style.display = 'inline';
+                emptyIcon.style.display = "none";
+                filledIcon.style.display = "inline";
               }
             }
 
@@ -2327,8 +2368,9 @@
             if (!noteLabel) {
               noteLabel = document.createElement("div");
               noteLabel.className = "loaded-note-text";
-              noteLabel.style.cssText = "margin-top:10px; padding:10px 14px; border-left:4px solid #10b981; background:rgba(16, 185, 129, 0.1); color:#10b981; font-size:0.9rem; border-radius:4px; font-weight: 500; font-family: monospace;";
-              
+              noteLabel.style.cssText =
+                "margin-top:10px; padding:10px 14px; border-left:4px solid #10b981; background:rgba(16, 185, 129, 0.1); color:#10b981; font-size:0.9rem; border-radius:4px; font-weight: 500; font-family: monospace;";
+
               if (noteArea) {
                 row.insertBefore(noteLabel, noteArea);
               } else {
@@ -2364,19 +2406,28 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) {$("logs-tab").classList.add("active");}
-          if ($("nav-logs")) {$("nav-logs").classList.add("active");}
+          if ($("logs-tab")) {
+            $("logs-tab").classList.add("active");
+          }
+          if ($("nav-logs")) {
+            $("nav-logs").classList.add("active");
+          }
 
           // 2. Ensure the viewer container is visible
-          if ($("logs-viewer-container"))
-            {$("logs-viewer-container").style.display = "block";}
-          if ($("logs-log-name"))
-            {$("logs-log-name").textContent = "Generated Behavioral Profile";}
+          if ($("logs-viewer-container")) {
+            $("logs-viewer-container").style.display = "block";
+          }
+          if ($("logs-log-name")) {
+            $("logs-log-name").textContent = "Generated Behavioral Profile";
+          }
 
           // 3. Render it
-          if (window.TeacherUI && window.TeacherUI.renderProfile)
-            {window.TeacherUI.renderProfile(msg.data);}
-          if (status) {status.textContent = "Behavioral profile generated.";}
+          if (window.TeacherUI && window.TeacherUI.renderProfile) {
+            window.TeacherUI.renderProfile(msg.data);
+          }
+          if (status) {
+            status.textContent = "Behavioral profile generated.";
+          }
           break;
 
         case "timelineData":
@@ -2387,19 +2438,28 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) {$("logs-tab").classList.add("active");}
-          if ($("nav-logs")) {$("nav-logs").classList.add("active");}
+          if ($("logs-tab")) {
+            $("logs-tab").classList.add("active");
+          }
+          if ($("nav-logs")) {
+            $("nav-logs").classList.add("active");
+          }
 
           // 2. Ensure the viewer container is visible
-          if ($("logs-viewer-container"))
-            {$("logs-viewer-container").style.display = "block";}
-          if ($("logs-log-name"))
-            {$("logs-log-name").textContent = "Generated Visual Timeline";}
+          if ($("logs-viewer-container")) {
+            $("logs-viewer-container").style.display = "block";
+          }
+          if ($("logs-log-name")) {
+            $("logs-log-name").textContent = "Generated Visual Timeline";
+          }
 
           // 3. Render it
-          if (window.TeacherUI && window.TeacherUI.renderTimeline)
-            {window.TeacherUI.renderTimeline(msg.data);}
-          if (status) {status.textContent = "Timeline generated.";}
+          if (window.TeacherUI && window.TeacherUI.renderTimeline) {
+            window.TeacherUI.renderTimeline(msg.data);
+          }
+          if (status) {
+            status.textContent = "Timeline generated.";
+          }
           break;
 
         case "logData":
@@ -2887,13 +2947,17 @@
           if (status) {
             status.textContent = "Student sessions loaded.";
           }
-          
+
           // Ask the DB for the notes for all these sessions!
           if (msg.data && Array.isArray(msg.data.sessions)) {
-             const uniqueIds = [...new Set(msg.data.sessions.map(s => s.SessionId || s.sessionId))].filter(id => id);
-             uniqueIds.forEach(id => {
-                post("loadLogNotes", { sessionId: Number(id) });
-             });
+            const uniqueIds = [
+              ...new Set(
+                msg.data.sessions.map((s) => s.SessionId || s.sessionId),
+              ),
+            ].filter((id) => id);
+            uniqueIds.forEach((id) => {
+              post("loadLogNotes", { sessionId: Number(id) });
+            });
           }
           break;
         }
@@ -2916,7 +2980,9 @@
         case "classSessionLogData": {
           renderAssignmentSessionLog(msg.data || {});
           if (window.currentLogFilename) {
-            const match = String(window.currentLogFilename).match(/Session(\d+)/i);
+            const match = String(window.currentLogFilename).match(
+              /Session(\d+)/i,
+            );
             const parsedSessionId = match ? Number(match[1]) : 0;
             if (Number.isFinite(parsedSessionId) && parsedSessionId > 0) {
               post("loadLogNotes", { sessionId: parsedSessionId });
@@ -4382,8 +4448,9 @@
       // Hide the original standalone title and use our embedded flexbox title
       title.style.display = "none";
       const dynamicTitle = $("dynamic-student-title");
-      if (dynamicTitle)
-        {dynamicTitle.textContent = `${studentName} - Session Logs`;}
+      if (dynamicTitle) {
+        dynamicTitle.textContent = `${studentName} - Session Logs`;
+      }
 
       // Set up Dual Containers inside the main list area
       list.innerHTML = `
@@ -4422,13 +4489,34 @@
       }
       empty.style.display = "none";
 
-      // 1. Process all events
-      const processedEvents = sessions.map((s, index) => {
-        const sessionId = normalizeSessionValue(
+      // 0. Map absolute database session IDs to relative (1, 2, 3...)
+      const rawSessionIds = new Set();
+      sessions.forEach((s) => {
+        const sid = normalizeSessionValue(
           s,
           ["SessionId", "sessionId", "id", "Id"],
           "Unknown",
         );
+        if (sid !== "Unknown") rawSessionIds.add(Number(sid));
+      });
+      const sortedRawIds = Array.from(rawSessionIds).sort((a, b) => a - b);
+      const relativeSessionMap = new Map();
+      sortedRawIds.forEach((sid, idx) => {
+        relativeSessionMap.set(String(sid), String(idx + 1));
+        relativeSessionMap.set(Number(sid), String(idx + 1));
+      });
+      relativeSessionMap.set("Unknown", "Unknown");
+
+      // 1. Process all events
+      const processedEvents = sessions.map((s, index) => {
+        const rawSessionId = normalizeSessionValue(
+          s,
+          ["SessionId", "sessionId", "id", "Id"],
+          "Unknown",
+        );
+        // Safely swap the raw ID for the sequential 1, 2, 3... ID
+        const sessionId = relativeSessionMap.get(rawSessionId) || rawSessionId;
+
         const occurredAt = normalizeSessionValue(
           s,
           [
@@ -4594,9 +4682,13 @@
 
       // 2. Helper to format large ms values into "Xh Ym" or "Xm"
       const formatDashDuration = (ms) => {
-        if (!ms || ms <= 0) {return "0m";}
+        if (!ms || ms <= 0) {
+          return "0m";
+        }
         const totalMins = Math.round(ms / 60000);
-        if (totalMins === 0) {return "< 1m";}
+        if (totalMins === 0) {
+          return "< 1m";
+        }
         const hours = Math.floor(totalMins / 60);
         const mins = totalMins % 60;
         return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
@@ -4724,12 +4816,18 @@
       }
 
       const formatDurationHelper = (ms) => {
-        if (!ms || ms < 0) {return "0s";}
+        if (!ms || ms < 0) {
+          return "0s";
+        }
         const totalSeconds = Math.floor(ms / 1000);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
-        if (hours > 0) {return `${hours}h ${minutes}m`;}
-        if (minutes > 0) {return `${minutes}m`;}
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        }
+        if (minutes > 0) {
+          return `${minutes}m`;
+        }
         return `< 1m`;
       };
 
@@ -4750,30 +4848,40 @@
         if (eventVal !== "all") {
           filtered = filtered.filter((e) => {
             const t = e.eType;
-            if (eventVal === "input")
-              {return t.includes("input") && !t.includes("ai");}
-            if (eventVal === "paste")
-              {return t.includes("paste") && !t.includes("ai");} // NEW: Catch manual pastes
-            if (eventVal === "replace")
-              {return t.includes("replace") && !t.includes("ai");}
-            if (eventVal === "delete")
-              {return (
+            if (eventVal === "input") {
+              return t.includes("input") && !t.includes("ai");
+            }
+            if (eventVal === "paste") {
+              return t.includes("paste") && !t.includes("ai");
+            } // NEW: Catch manual pastes
+            if (eventVal === "replace") {
+              return t.includes("replace") && !t.includes("ai");
+            }
+            if (eventVal === "delete") {
+              return (
                 (t.includes("delete") || t.includes("backspace")) &&
                 !t.includes("ai")
-              );}
-            if (eventVal === "ai-input")
-              {return (
+              );
+            }
+            if (eventVal === "ai-input") {
+              return (
                 t.includes("ai-input") ||
                 t.includes("ai-insert") ||
                 (t.includes("ai") && t.includes("input"))
-              );}
-            if (eventVal === "ai-paste")
-              {return (
+              );
+            }
+            if (eventVal === "ai-paste") {
+              return (
                 t.includes("ai-paste") ||
                 (t.includes("ai") && t.includes("paste"))
-              );} // NEW: Catch AI pastes
-            if (eventVal === "ai-replace") {return t.includes("ai-replace");}
-            if (eventVal === "ai-delete") {return t.includes("ai-delete");}
+              );
+            } // NEW: Catch AI pastes
+            if (eventVal === "ai-replace") {
+              return t.includes("ai-replace");
+            }
+            if (eventVal === "ai-delete") {
+              return t.includes("ai-delete");
+            }
             return true;
           });
         }
@@ -4794,7 +4902,9 @@
         let currentPeriod = null;
 
         chronologicalEvents.forEach((evt) => {
-          if (!evt.timestampMs || isNaN(evt.timestampMs)) {return;}
+          if (!evt.timestampMs || isNaN(evt.timestampMs)) {
+            return;
+          }
           if (!currentPeriod) {
             currentPeriod = {
               startTime: evt.timestampMs,
@@ -4819,7 +4929,9 @@
             }
           }
         });
-        if (currentPeriod) {periods.push(currentPeriod);}
+        if (currentPeriod) {
+          periods.push(currentPeriod);
+        }
 
         if (periods.length === 0) {
           timelineContainer.innerHTML = `<div class="meta" style="padding: 20px; text-align: center; border: 1px dashed var(--border); border-radius: 8px;">No significant work periods found.</div>`;
@@ -4892,24 +5004,32 @@
         // Apply Sort for LIST View
         filtered.sort((a, b) => {
           if (sortVal === "session-desc") {
-            if (a.sessionId !== b.sessionId)
-              {return Number(b.sessionId) - Number(a.sessionId);}
+            if (a.sessionId !== b.sessionId) {
+              return Number(b.sessionId) - Number(a.sessionId);
+            }
             return b.timestampMs - a.timestampMs;
           }
           if (sortVal === "session-asc") {
-            if (a.sessionId !== b.sessionId)
-              {return Number(a.sessionId) - Number(b.sessionId);}
+            if (a.sessionId !== b.sessionId) {
+              return Number(a.sessionId) - Number(b.sessionId);
+            }
             return a.timestampMs - b.timestampMs;
           }
-          if (sortVal === "time-desc") {return b.timestampMs - a.timestampMs;}
-          if (sortVal === "time-asc") {return a.timestampMs - b.timestampMs;}
+          if (sortVal === "time-desc") {
+            return b.timestampMs - a.timestampMs;
+          }
+          if (sortVal === "time-asc") {
+            return a.timestampMs - b.timestampMs;
+          }
           return 0;
         });
 
         // Group by Session for LIST view
         const groups = new Map();
         filtered.forEach((e) => {
-          if (!groups.has(e.sessionId)) {groups.set(e.sessionId, []);}
+          if (!groups.has(e.sessionId)) {
+            groups.set(e.sessionId, []);
+          }
           groups.get(e.sessionId).push(e);
         });
 
@@ -4931,39 +5051,79 @@
             const ed = e.eventData;
 
             // Attach database IDs to the row so the save button can find them
-            row.dataset.sessionEventId = ed?.Id || ed?.eventId || ed?.sessionEventId || 0;
+            row.dataset.sessionEventId =
+              ed?.Id || ed?.eventId || ed?.sessionEventId || 0;
             row.dataset.sessionId = e.sessionId || 0;
             row.dataset.eventTime = e.occurredAt || "";
 
             const viewStr =
-              ed.View ?? ed.view ?? ed.fileView ?? ed.FileView ?? ed.file ?? ed.File ?? ed.fileName;
-            if (viewStr) {items.push(`<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`);}
+              ed.View ??
+              ed.view ??
+              ed.fileView ??
+              ed.FileView ??
+              ed.file ??
+              ed.File ??
+              ed.fileName;
+            if (viewStr) {
+              items.push(
+                `<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`,
+              );
+            }
 
             const charsChanged =
-              ed.CharsChanged ?? ed.charsChanged ?? ed.CharsAdded ?? ed.charsAdded ?? ed.Length ?? ed.length ?? ed.pasteCharCount;
-            if (charsChanged !== undefined && charsChanged !== null)
-              {items.push(`<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`);}
+              ed.CharsChanged ??
+              ed.charsChanged ??
+              ed.CharsAdded ??
+              ed.charsAdded ??
+              ed.Length ??
+              ed.length ??
+              ed.pasteCharCount;
+            if (charsChanged !== undefined && charsChanged !== null) {
+              items.push(
+                `<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`,
+              );
+            }
 
             const flightTime = ed.FlightTime ?? ed.flightTime;
             if (flightTime !== undefined && flightTime !== null) {
-              const ftStr = String(flightTime).endsWith("ms") ? flightTime : `${flightTime}ms`;
-              items.push(`<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`);
+              const ftStr = String(flightTime).endsWith("ms")
+                ? flightTime
+                : `${flightTime}ms`;
+              items.push(
+                `<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`,
+              );
             }
 
-            const windowFocused = ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
-            if (windowFocused !== undefined && windowFocused !== null)
-              {items.push(`<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`);}
+            const windowFocused =
+              ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
+            if (windowFocused !== undefined && windowFocused !== null) {
+              items.push(
+                `<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`,
+              );
+            }
 
-            const workspace = ed.WorkspaceName ?? ed.workspaceName ?? ed.Workspace ?? ed.workspace;
-            if (workspace) {items.push(`<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`);}
+            const workspace =
+              ed.WorkspaceName ??
+              ed.workspaceName ??
+              ed.Workspace ??
+              ed.workspace;
+            if (workspace) {
+              items.push(
+                `<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`,
+              );
+            }
 
             let noteHtml = "";
-            if (ed.possibleAiDetection)
-              {noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;}
+            if (ed.possibleAiDetection) {
+              noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;
+            }
 
             const rowNum = ed.Row ?? ed.row ?? e.index + 1;
-            let bodyHtml = items.length > 0
-                ? items.join(' <span style="color: var(--border); margin: 0 6px;">|</span> ')
+            let bodyHtml =
+              items.length > 0
+                ? items.join(
+                    ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
+                  )
                 : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${JSON.stringify(ed)}</code>`;
 
             row.innerHTML = `
@@ -5030,18 +5190,18 @@
               const sessionId = Number(row.dataset.sessionId || 0);
 
               if (text && sessionEventId > 0) {
-                allNotes.push({ 
-                  timestamp: ts, 
+                allNotes.push({
+                  timestamp: ts,
                   text: text,
                   sessionEventId: sessionEventId,
-                  sessionId: sessionId 
+                  sessionId: sessionId,
                 });
               }
             });
 
             if (window.postTeacherMessage) {
               window.postTeacherMessage("saveLogNotes", {
-                filename: window.currentLogFilename || "db-session", 
+                filename: window.currentLogFilename || "db-session",
                 notes: allNotes,
               });
             }
@@ -5050,20 +5210,29 @@
             if (noteBtn) {
               const isEmpty = !noteText || noteText.trim() === "";
               noteBtn.dataset.hasNote = isEmpty ? "false" : "true";
-              noteBtn.querySelector(".note-icon-empty").style.display = isEmpty ? "inline" : "none";
-              noteBtn.querySelector(".note-icon-filled").style.display = isEmpty ? "none" : "inline";
+              noteBtn.querySelector(".note-icon-empty").style.display = isEmpty
+                ? "inline"
+                : "none";
+              noteBtn.querySelector(".note-icon-filled").style.display = isEmpty
+                ? "none"
+                : "inline";
             }
-            if (notesArea) {notesArea.style.display = "none";}
+            if (notesArea) {
+              notesArea.style.display = "none";
+            }
           });
         });
 
         listContainer.querySelectorAll(".btn-close-notes").forEach((btn) => {
           btn.addEventListener("click", () => {
-            const notesArea = btn.closest(".event")?.querySelector(".event-notes-area");
-            if (notesArea) {notesArea.style.display = "none";}
+            const notesArea = btn
+              .closest(".event")
+              ?.querySelector(".event-notes-area");
+            if (notesArea) {
+              notesArea.style.display = "none";
+            }
           });
         });
-
       }; // <--- THIS IS THE REAL END OF THE renderList FUNCTION
 
       // ==============================================================
@@ -5092,7 +5261,9 @@
         }
 
         if (line.startsWith("Session ")) {
-          if (currentEvent) {events.push(currentEvent);}
+          if (currentEvent) {
+            events.push(currentEvent);
+          }
           currentEvent = { session: line.replace("Session ", ""), rawJson: "" };
         } else if (currentEvent && line.includes(" • ")) {
           const parts = line.split(" • ");
@@ -5115,7 +5286,9 @@
           } catch (e) {}
         }
       }
-      if (currentEvent) {events.push(currentEvent);}
+      if (currentEvent) {
+        events.push(currentEvent);
+      }
       return events;
     }
 
@@ -5206,7 +5379,9 @@
       let currentPeriod = null;
 
       const parseEventTime = (timeStr) => {
-        if (!timeStr) {return null;}
+        if (!timeStr) {
+          return null;
+        }
         const cleanStr = timeStr.replace(/ [A-Z]{3,4}$/, "");
         const d = new Date(cleanStr);
         return isNaN(d.getTime()) ? null : d.getTime();
@@ -5214,7 +5389,9 @@
 
       events.forEach((evt) => {
         const ts = parseEventTime(evt.timestamp);
-        if (!ts) {return;}
+        if (!ts) {
+          return;
+        }
 
         if (!currentPeriod) {
           currentPeriod = {
@@ -5240,16 +5417,24 @@
           }
         }
       });
-      if (currentPeriod) {periods.push(currentPeriod);}
+      if (currentPeriod) {
+        periods.push(currentPeriod);
+      }
 
       // --- FIXED: BULLETPROOF DURATION FORMATTER ---
       const formatDurationHelper = (ms) => {
-        if (!ms || ms < 0) {return "0s";}
+        if (!ms || ms < 0) {
+          return "0s";
+        }
         const totalSeconds = Math.floor(ms / 1000);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
-        if (hours > 0) {return `${hours}h ${minutes}m`;}
-        if (minutes > 0) {return `${minutes}m`;}
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        }
+        if (minutes > 0) {
+          return `${minutes}m`;
+        }
         return `< 1m`;
       };
 
@@ -5363,7 +5548,8 @@
         const noteBtn = document.createElement("button");
         noteBtn.className = "btn-notes";
         noteBtn.dataset.hasNote = "false";
-        noteBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;";
+        noteBtn.style.cssText =
+          "background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;";
         noteBtn.title = "Add/view notes";
         noteBtn.innerHTML = `<span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span>`;
         badgeWrapper.appendChild(noteBtn);
@@ -5381,26 +5567,31 @@
 
         if (evt.data) {
           const items = [];
-          if (evt.data.file)
-            {items.push(
+          if (evt.data.file) {
+            items.push(
               `<span style="color: var(--muted)">File:</span> <strong>${evt.data.file}</strong>`,
-            );}
-          if (evt.data.charsAdded !== undefined)
-            {items.push(
+            );
+          }
+          if (evt.data.charsAdded !== undefined) {
+            items.push(
               `<span style="color: var(--muted)">Chars Added:</span> <strong>${evt.data.charsAdded}</strong>`,
-            );}
-          if (evt.data.pasteCharCount !== undefined)
-            {items.push(
+            );
+          }
+          if (evt.data.pasteCharCount !== undefined) {
+            items.push(
               `<span style="color: var(--muted)">Paste Length:</span> <strong style="color: #ef4444">${evt.data.pasteCharCount}</strong>`,
-            );}
-          if (evt.data.flightTime !== undefined)
-            {items.push(
+            );
+          }
+          if (evt.data.flightTime !== undefined) {
+            items.push(
               `<span style="color: var(--muted)">Flight Time:</span> <strong>${evt.data.flightTime}ms</strong>`,
-            );}
-          if (evt.data.focused !== undefined)
-            {items.push(
+            );
+          }
+          if (evt.data.focused !== undefined) {
+            items.push(
               `<span style="color: var(--muted)">Window Focused:</span> <strong>${evt.data.focused}</strong>`,
-            );}
+            );
+          }
 
           if (evt.data.possibleAiDetection) {
             items.push(
@@ -5423,7 +5614,8 @@
         // Add the hidden text box
         const notesArea = document.createElement("div");
         notesArea.className = "event-notes-area";
-        notesArea.style.cssText = "display:none; margin-top:12px; padding-top:8px; border-top:1px solid var(--border);";
+        notesArea.style.cssText =
+          "display:none; margin-top:12px; padding-top:8px; border-top:1px solid var(--border);";
         notesArea.innerHTML = `<textarea class="event-note-input" placeholder="Add private instructor notes for this event..." style="width:100%; min-height:60px; padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); font-family:monospace; font-size:0.9rem;" rows="3"></textarea><div style="display:flex; gap:8px; margin-top:8px;"><button class="btn-save-note" style="background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Save Note</button><button class="btn-close-notes" style="background:var(--border); color:var(--fg); border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Cancel</button></div>`;
         card.appendChild(notesArea);
 
@@ -5465,7 +5657,7 @@
             const input = area?.querySelector(".event-note-input");
             const ts = row.dataset.eventTime || "";
             const text = input?.value || "";
-            
+
             const sessionEventId = Number(row.dataset.sessionEventId || 0);
             const sessionId = Number(row.dataset.sessionId || 0);
 

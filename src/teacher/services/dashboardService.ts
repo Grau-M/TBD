@@ -132,10 +132,16 @@ async function buildAssignmentComparisonStudent(selection: AssignmentComparisonS
         }
     }
 
+    // Map absolute database session IDs to relative (1, 2, 3...)
+    const sortedUniqueSids = Array.from(eventsBySession.keys()).sort((a, b) => a - b);
+    const relativeSidMap = new Map<number, number>();
+    sortedUniqueSids.forEach((sid, idx) => relativeSidMap.set(sid, idx + 1));
+
     let totalProcessedEvents = 0;
     
     // Process each session's events
-    for (const [sid, sessionEvents] of eventsBySession.entries()) {
+    for (const [rawSid, sessionEvents] of eventsBySession.entries()) {
+        const relativeSid = relativeSidMap.get(rawSid) || rawSid;
         const firstEvent = sessionEvents[0];
         const project = String(firstEvent.workspaceName ?? firstEvent.WorkspaceName ?? '');
         if (project) projects.add(project);
@@ -188,13 +194,13 @@ async function buildAssignmentComparisonStudent(selection: AssignmentComparisonS
             totalProcessedEvents++;
 
             return {
-                key: `${sid}-${index}`,
+                key: `${relativeSid}-${index}`,
                 time: timeStr,
                 timeMs,
                 category,
                 eventType: eType,
-                sessionId: sid,
-                sessionLabel: `Session ${sid}`,
+                sessionId: relativeSid,
+                sessionLabel: `Session ${relativeSid}`,
                 workspaceName: project,
                 fileName,
                 pasteLength,
@@ -209,8 +215,8 @@ async function buildAssignmentComparisonStudent(selection: AssignmentComparisonS
         timelineEvents.push(...parsedEvents);
         
         sessionSummaries.push({
-            sessionId: sid,
-            filename: `Session ${sid}`,
+            sessionId: relativeSid,
+            filename: `Session ${relativeSid}`,
             startedAt: parsedEvents.length > 0 ? parsedEvents[0].time : '',
             ideUser: selection.studentName,
             workspaceName: project,

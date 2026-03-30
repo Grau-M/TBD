@@ -88,6 +88,11 @@
       {
         "command": "tbd-logger.openStudentSyncView",
         "title": "TBD Logger: Open Student Dashboard"
+      },
+      {
+        "command": "tbd-logger.repairWorkspaceLink",
+        "title": "TBD Logger: Repair Workspace Link",
+        "category": "TBD Logger"
       }
     ],
     "menus": {

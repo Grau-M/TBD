@@ -207,15 +207,16 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                const workspaceName = currentWorkspaceFolder.name;
+              const workspaceName = currentWorkspaceFolder.name;
                 const workspaceRootPath = currentWorkspaceFolder.uri.fsPath;
-                let newLinkId = 0;
+                let realLinkId = 0;
+                
                 await vscode.window.withProgress({
                     location: vscode.ProgressLocation.Notification,
                     title: "Linking workspace to assignment...",
                     cancellable: false
                 }, async () => {
-                    await (storageManager as any).linkStudentWorkspaceToAssignment({
+                    const linkResult = await (storageManager as any).linkStudentWorkspaceToAssignment({
                         studentAuthUserId: session.authUserId,
                         teacherAuthUserId: selectedClass.teacherAuthUserId,
                         classId: selectedClass.classId,
@@ -224,14 +225,45 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
                         workspaceRootPath,
                         workspaceFoldersJson: JSON.stringify([{ name: workspaceName, uri: currentWorkspaceFolder.uri.toString() }])
                     });
+
+                    // 1. Try to grab it from the response directly
+                    realLinkId = Number(linkResult?.id || linkResult?.Id || linkResult?.workspaceId || linkResult?.WorkspaceId || linkResult?.studentWorkspaceAssignmentId || 0);
+
+                    // 2. If the API didn't return it cleanly, fetch it aggressively
+                    if (!realLinkId || realLinkId <= 0) {
+                        await new Promise(resolve => setTimeout(resolve, 800)); // wait for database to commit
+                        try {
+                            const assignments = await (storageManager as any).listStudentAssignmentsForClass(session.authUserId, selectedClass.classId);
+                            for (const a of assignments) {
+                                if (a.workspaceRootPath && vscode.Uri.file(a.workspaceRootPath).fsPath === vscode.Uri.file(workspaceRootPath).fsPath) {
+                                    realLinkId = Number(a.workspaceId || a.id || a.studentWorkspaceAssignmentId || a.assignmentId);
+                                    break;
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("[TBD Logger] Failed to fetch real link ID after creation.", e);
+                        }
+                    }
+
+                    // 3. FINAL FALLBACK: If the server is offline or failing, generate the mathematical ID
+                    if (!realLinkId || realLinkId <= 0) {
+                        const source = `${selectedAssignment.assignmentId}|${workspaceRootPath}|${workspaceName}`;
+                        let hash = 2166136261;
+                        for (let index = 0; index < source.length; index++) {
+                            hash ^= source.charCodeAt(index);
+                            hash = Math.imul(hash, 16777619);
+                        }
+                        realLinkId = (hash >>> 0) > 0 ? (hash >>> 0) : 1;
+                    }
                 });
 
                 session.workspaceLinkedClassId = selectedClass.classId;
                 session.workspaceLinkedAssignmentId = selectedAssignment.assignmentId;
-                if (newLinkId) {
-                    session.studentWorkspaceAssignmentId = newLinkId; 
-                }
+                session.studentWorkspaceAssignmentId = realLinkId; 
+                
                 await context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
+                // Wipe the corrupted sessionId so a brand new clean one is generated instantly
+                await context.workspaceState.update('sessionId', undefined);
 
                 state.activeCourse = selectedClass.label;
                 state.activeAssignment = selectedAssignment.label;

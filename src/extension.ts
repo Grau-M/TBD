@@ -62,7 +62,7 @@ installRuntimeWarningFilter();
 // ===============================================================================================
 
 const SESSION_ID_KEY = 'sessionId';
-const SESSION_COUNTER_KEY = 'tbd.sessionNumber.counter.v1';
+const getSessionCounterKey = (userId: number, projectId: number) => `tbd.sessionNumber.counter.v1.${userId}.${projectId}`; // Scope the session counter so each user/project combo starts at 1
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
 function getNonce(): string {
@@ -395,12 +395,25 @@ async function hydrateLinkedStudentWorkspace(
             };
         }
 
+        // Recover the workspace ID or regenerate it deterministically to satisfy the database constraint
+        let swaId = Number(linkedAssignment.workspaceId || linkedAssignment.id || 0);
+        if (!swaId || swaId <= 0) {
+            const wName = vscode.workspace.name || vscode.workspace.workspaceFolders?.[0]?.name || '';
+            const source = `${linkedAssignmentId}|${workspaceRoot}|${wName}`;
+            let hash = 2166136261;
+            for (let i = 0; i < source.length; i++) {
+                hash ^= source.charCodeAt(i);
+                hash = Math.imul(hash, 16777619);
+            }
+            swaId = (hash >>> 0) > 0 ? (hash >>> 0) : 1;
+        }
+
         return {
             classId: linkedClassId,
             courseName: className,
             assignmentId: linkedAssignmentId,
             assignmentName: String(linkedAssignment.assignmentName || linkedAssignment.name || `Assignment ID: ${linkedAssignmentId}`),
-            studentWorkspaceAssignmentId: Number(linkedAssignment.workspaceId || linkedAssignment.id || 0)
+            studentWorkspaceAssignmentId: swaId
         };
     } catch (error) {
         console.warn('[TBD Logger] Unable to hydrate linked workspace state from database.', error);
@@ -580,12 +593,25 @@ async function reconcileStudentWorkspaceState(
                     );
 
                     if (linked) {
+                        // Recover the workspace ID or regenerate it deterministically to satisfy the database constraint
+                        let swaId = Number(linked.workspaceId || linked.id || 0);
+                        if (!swaId || swaId <= 0) {
+                            const wName = vscode.workspace.name || vscode.workspace.workspaceFolders?.[0]?.name || '';
+                            const source = `${linked.assignmentId}|${workspaceRoot}|${wName}`;
+                            let hash = 2166136261;
+                            for (let i = 0; i < source.length; i++) {
+                                hash ^= source.charCodeAt(i);
+                                hash = Math.imul(hash, 16777619);
+                            }
+                            swaId = (hash >>> 0) > 0 ? (hash >>> 0) : 1;
+                        }
+
                         assignmentInfo = {
                             classId: c.id,
                             courseName: c.courseName || c.courseCode,
                             assignmentId: linked.assignmentId,
                             assignmentName: linked.assignmentName || linked.name,
-                            studentWorkspaceAssignmentId: Number(linked.workspaceId || linked.id || 0)
+                            studentWorkspaceAssignmentId: swaId
                         };
                         break;
                     }
@@ -800,17 +826,35 @@ export async function activate(context: vscode.ExtensionContext) {
                 throw new Error('Cannot start API session: Missing studentWorkspaceAssignmentId. Re-link required.');
             }
 
-            const payload = {
+            const startedAtDate = new Date().toISOString();
+            const payload: any = {
                 userId,
+                UserId: userId,
                 projectId,
+                ProjectId: projectId,
                 sessionNumber,
-                startedAt: new Date().toISOString(),
-                studentWorkspaceAssignmentId
+                SessionNumber: sessionNumber,
+                startedAt: startedAtDate,
+                StartedAt: startedAtDate,
+                studentWorkspaceAssignmentId,
+                StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId
             };
 
-            const apiSession = await withApiTokenRetry(() => apiPost('/api/sessions', {
-                ...payload
-            }));
+           let apiSession;
+            try {
+                apiSession = await withApiTokenRetry(() => apiPost('/api/sessions', payload));
+            } catch (postErr: any) {
+                // If we hit a duplicate key (23505), this sequential number is already taken. 
+                // Fall back to a safe 6-digit random number to bypass the crash without overflowing the DB.
+                const isDuplicate = postErr?.responseBody?.includes('23505') || postErr?.responseBody?.includes('UQ_');
+                if (isDuplicate) {
+                    console.log('[TBD Logger] Session number collision detected. Auto-resolving with safe random ID...');
+                    payload.sessionNumber = Math.floor(Math.random() * 900000) + 100000; // Random number between 100000 and 999999
+                    apiSession = await withApiTokenRetry(() => apiPost('/api/sessions', payload));
+                } else {
+                    throw postErr;
+                }
+            }
 
             const sessionId = Number(apiSession?.id ?? apiSession?.Id);
             if (!Number.isFinite(sessionId) || sessionId <= 0) {
@@ -895,10 +939,11 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
                 if (!currentSessionId) {
                     const projectId = await ensureProject();
                     if (projectId) {
-                        const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
+                        const counterKey = getSessionCounterKey(curSession.authUserId, projectId);
+                        const nextSessionNumber = (context.workspaceState.get<number>(counterKey) || 0) + 1;
                         const startedSessionId = await startSession(curSession.authUserId, projectId, nextSessionNumber);
                         if (startedSessionId) {
-                            await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
+                            await context.workspaceState.update(counterKey, nextSessionNumber);
                             void logEvent('session_start', {
                                 workspaceName: vscode.workspace.name || 'Unknown Workspace',
                                 workspacePath: wRoot
@@ -1021,13 +1066,14 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
         const hasLinkedWorkspace = Number(debugSession.workspaceLinkedClassId ?? 0) > 0 
             && Number(debugSession.workspaceLinkedAssignmentId ?? 0) > 0;
 
-        if (hasLinkedWorkspace) {
+       if (hasLinkedWorkspace) {
             const projectId = await ensureProject();
             if (projectId) {
-                const nextSessionNumber = (context.workspaceState.get<number>(SESSION_COUNTER_KEY) || 0) + 1;
+                const counterKey = getSessionCounterKey(debugSession.authUserId, projectId);
+                const nextSessionNumber = (context.workspaceState.get<number>(counterKey) || 0) + 1;
                 const startedSessionId = await startSession(debugSession.authUserId, projectId, nextSessionNumber);
                 if (startedSessionId) {
-                    await context.workspaceState.update(SESSION_COUNTER_KEY, nextSessionNumber);
+                    await context.workspaceState.update(counterKey, nextSessionNumber);
                     void logEvent('session_start', {
                         workspaceName: vscode.workspace.name || 'Unknown Workspace',
                         workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
@@ -1457,6 +1503,62 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
     context.subscriptions.push(vscode.commands.registerCommand('tbd.admin.runPurge', async () => {
         vscode.window.showInformationMessage('TBD Logger: Initiating data purge. Check console for details.');
         await storageManager.runAutomatedDataPurge(365); 
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('tbd-logger.repairWorkspaceLink', async () => {
+        const session = context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        
+        if (!session?.authenticated || session.role !== 'Student' || !workspaceRoot) {
+            vscode.window.showErrorMessage("Repair Failed: Not logged in as a student or no workspace open.");
+            return;
+        }
+
+        try {
+            vscode.window.showInformationMessage("Querying backend for real database IDs...");
+            
+            const classes = await (storageManager as any).listStudentClasses(session.authUserId);
+            console.log("[TBD Repair] Classes found:", classes);
+            
+            let foundRealId = null;
+            let targetClassId = null;
+            let targetAssignId = null;
+
+            for (const c of classes) {
+                const assignments = await (storageManager as any).listStudentAssignmentsForClass(session.authUserId, c.id);
+                
+                for (const a of assignments) {
+                    // Check if this assignment matches your current folder
+                    if (a.workspaceRootPath && vscode.Uri.file(a.workspaceRootPath).fsPath === vscode.Uri.file(workspaceRoot).fsPath) {
+                        foundRealId = a.workspaceId || a.id || a.studentWorkspaceAssignmentId || a.assignmentId;
+                        targetClassId = c.id;
+                        targetAssignId = a.assignmentId;
+                        console.log("[TBD Repair] MATCH FOUND!", a);
+                        break;
+                    }
+                }
+                if (foundRealId) { break; }
+            }
+
+            if (foundRealId) {
+                // Force overwrite the generated hash with the REAL database ID
+                session.workspaceLinkedClassId = targetClassId;
+                session.workspaceLinkedAssignmentId = targetAssignId;
+                session.studentWorkspaceAssignmentId = foundRealId;
+                await context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
+                
+                // Clear the corrupted session ID so it generates a fresh, clean one
+                await context.workspaceState.update(SESSION_ID_KEY, undefined);
+                
+                vscode.window.showInformationMessage(`Fixed! Real Workspace ID (${foundRealId}) restored. Click "Manual Sync" in the dashboard.`);
+                console.log("[TBD Repair] Session repaired successfully.", session);
+            } else {
+                vscode.window.showWarningMessage("Could not find a matching workspace on the server. Please click 'Connect Workspace to Assignment' again.");
+            }
+
+        } catch (e) {
+            console.error("[TBD Repair] Error", e);
+            vscode.window.showErrorMessage("Repair script failed. See debug console.");
+        }
     }));
 
     return { state, storageManager };

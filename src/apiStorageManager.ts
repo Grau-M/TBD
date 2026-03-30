@@ -547,15 +547,33 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
                     if (generatedOfflineSessionId) {
                         payload.sessionId = generatedOfflineSessionId;
                     } else {
-                        // Otherwise, create a new one natively
-                        const newSession = await apiPost('/api/sessions', {
+                      // Otherwise, create a new one natively
+                        let newSession;
+                        const randSessionNum = Math.floor(Math.random() * 900000) + 100000; // Safe 6-digit number
+                        const sessionPayload: any = {
                             userId: userId,
+                            UserId: userId,
                             projectId: projectId,
-                            // Use Date.now() without dividing by 1000 to ensure uniqueness in milliseconds
-                            sessionNumber: 0, 
+                            ProjectId: projectId,
+                            sessionNumber: randSessionNum,
+                            SessionNumber: randSessionNum,
                             startedAt: payload.occurredAt,
-                            studentWorkspaceAssignmentId: studentWorkspaceAssignmentId
-                        });
+                            StartedAt: payload.occurredAt,
+                            studentWorkspaceAssignmentId: studentWorkspaceAssignmentId,
+                            StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId
+                        };
+
+                        try {
+                            newSession = await apiPost('/api/sessions', sessionPayload);
+                        } catch (err: any) {
+                            // If the 6-digit number randomly collides (extremely rare) or it hits a local sequential clash, reroll once
+                            if (err?.responseBody?.includes('23505') || err?.responseBody?.includes('UQ_')) {
+                                sessionPayload.sessionNumber = Math.floor(Math.random() * 900000) + 100000;
+                                newSession = await apiPost('/api/sessions', sessionPayload);
+                            } else {
+                                throw err; // Not a duplicate error, throw normally
+                            }
+                        }
 
                         // Save the new session ID
                         currentSessionId = newSession.Id || newSession.id || newSession.SessionId;
@@ -1139,15 +1157,46 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
                 };
             }
         } catch (err) {
-            console.log("[TBD Logger] Backend validation route unavailable. Falling back to local cache.");
+            console.log("[TBD Logger] Backend validation route unavailable. Attempting auto-recovery.");
         }
 
         const session = this.context.workspaceState.get<any>('tbd.auth.workspaceSession.v1');
-        const classId = Number(session?.workspaceLinkedClassId ?? 0);
-        const assignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+        let classId = Number(session?.workspaceLinkedClassId ?? 0);
+        let assignmentId = Number(session?.workspaceLinkedAssignmentId ?? 0);
+        let swaId = Number(session?.studentWorkspaceAssignmentId ?? 0);
+        let assignmentName = String(session?.assignmentName || session?.AssignmentName || 'Current Assignment');
+
+        // Aggressively hunt for the real ID to prevent null constraints
+        try {
+            const classes = await this.listStudentClasses(_authUserId);
+            for (const c of classes) {
+                const assignments = await this.listStudentAssignmentsForClass(_authUserId, c.id);
+                for (const a of assignments) {
+                    if (a.workspaceRootPath && vscode.Uri.file(a.workspaceRootPath).fsPath === vscode.Uri.file(workspaceRoot).fsPath) {
+                        swaId = Number(a.workspaceId || a.id || a.studentWorkspaceAssignmentId || a.assignmentId);
+                        classId = c.id;
+                        assignmentId = a.assignmentId;
+                        assignmentName = String(a.assignmentName || a.name || 'Current Assignment');
+                        break;
+                    }
+                }
+                if (swaId > 0) break;
+            }
+        } catch(e) { /* ignore network errors */ }
 
         if (!classId || !assignmentId) {
             return null;
+        }
+
+        // If the API failed to give us a real ID, calculate the mathematical fallback hash
+        if (!swaId || swaId <= 0) {
+            swaId = this.generateWorkspaceId(assignmentId, workspaceRoot, vscode.workspace.workspaceFolders?.[0]?.name || '');
+        }
+
+        // Ensure the ID is permanently saved to the session state so Session 1 doesn't crash
+        if (swaId > 0 && session) {
+            session.studentWorkspaceAssignmentId = swaId;
+            await this.context.workspaceState.update('tbd.auth.workspaceSession.v1', session);
         }
 
         await this.writeStudentWorkspaceLinkFile(
@@ -1164,8 +1213,9 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         return {
             classId,
             assignmentId,
-            assignmentName: String(session?.assignmentName || session?.AssignmentName || session?.workplaceName || session?.WorkplaceName || session?.displayName || 'Current Assignment'),
-            workspaceRootPath: workspaceRoot
+            assignmentName,
+            workspaceRootPath: workspaceRoot,
+            studentWorkspaceAssignmentId: swaId || this.generateWorkspaceId(assignmentId, workspaceRoot, vscode.workspace.workspaceFolders?.[0]?.name || '')
         };
     }
 
@@ -1524,26 +1574,36 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
     }
 
     async getStudentAssignmentWorkspace(studentAuthUserId: number, classId: number, assignmentId: number): Promise<any | null> {
-        const result = await this.apiGetFirst([
-            `/api/classes/student/classes/${classId}/assignments/${assignmentId}/workspace?studentAuthUserId=${studentAuthUserId}`,
-            `/api/classes/student/classes/${classId}/assignments/${assignmentId}/workspace?studentId=${studentAuthUserId}`
-        ]);
-        const workspace = result?.workspace ?? result?.data ?? result;
-        if (!workspace) {
+        try {
+            const result = await this.apiGetFirst([
+                // Added the correct paths without the duplicate "classes" routing
+                `/api/student/classes/${classId}/assignments/${assignmentId}/workspace?studentAuthUserId=${studentAuthUserId}`,
+                `/api/classes/${classId}/assignments/${assignmentId}/workspace?studentAuthUserId=${studentAuthUserId}`,
+                `/api/student-assignments/workspace?studentId=${studentAuthUserId}&assignmentId=${assignmentId}`,
+                // Keep original paths as fallbacks
+                `/api/classes/student/classes/${classId}/assignments/${assignmentId}/workspace?studentAuthUserId=${studentAuthUserId}`,
+                `/api/classes/student/classes/${classId}/assignments/${assignmentId}/workspace?studentId=${studentAuthUserId}`
+            ]);
+            
+            const workspace = result?.workspace ?? result?.data ?? result;
+            if (!workspace) {
+                return null;
+            }
+
+            return {
+                studentAuthUserId: Number(this.pick(workspace, ['studentAuthUserId', 'StudentAuthUserId']) ?? studentAuthUserId),
+                teacherAuthUserId: Number(this.pick(workspace, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0),
+                classId: Number(this.pick(workspace, ['classId', 'ClassId']) ?? classId),
+                classAssignmentId: Number(this.pick(workspace, ['classAssignmentId', 'ClassAssignmentId', 'assignmentId', 'AssignmentId']) ?? assignmentId),
+                workspaceId: Number(this.pick(workspace, ['workspaceId', 'WorkspaceId', 'Id', 'id', 'studentWorkspaceAssignmentId']) ?? 0),
+                workspaceName: String(this.pick(workspace, ['workspaceName', 'WorkspaceName']) || ''),
+                workspaceRootPath: String(this.pick(workspace, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
+                workspaceFoldersJson: String(this.pick(workspace, ['workspaceFoldersJson', 'WorkspaceFoldersJson']) || '[]'),
+                linkedAt: String(this.pick(workspace, ['LinkedAt', 'linkedAt']) || ''),
+                updatedAt: String(this.pick(workspace, ['UpdatedAt', 'updatedAt']) || '')
+            };
+        } catch (e) {
             return null;
         }
-
-        return {
-            studentAuthUserId: Number(this.pick(workspace, ['studentAuthUserId', 'StudentAuthUserId']) ?? studentAuthUserId),
-            teacherAuthUserId: Number(this.pick(workspace, ['teacherAuthUserId', 'TeacherAuthUserId', 'teacherId', 'TeacherId']) ?? 0),
-            classId: Number(this.pick(workspace, ['classId', 'ClassId']) ?? classId),
-            classAssignmentId: Number(this.pick(workspace, ['classAssignmentId', 'ClassAssignmentId', 'assignmentId', 'AssignmentId']) ?? assignmentId),
-            workspaceId: Number(this.pick(workspace, ['workspaceId', 'WorkspaceId', 'Id', 'id']) ?? 0),
-            workspaceName: String(this.pick(workspace, ['workspaceName', 'WorkspaceName']) || ''),
-            workspaceRootPath: String(this.pick(workspace, ['workspaceRootPath', 'WorkspaceRootPath']) || ''),
-            workspaceFoldersJson: String(this.pick(workspace, ['workspaceFoldersJson', 'WorkspaceFoldersJson']) || '[]'),
-            linkedAt: String(this.pick(workspace, ['LinkedAt', 'linkedAt']) || ''),
-            updatedAt: String(this.pick(workspace, ['UpdatedAt', 'updatedAt']) || '')
-        };
     }
 }

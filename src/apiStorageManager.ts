@@ -801,11 +801,18 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
                 try { eventData = JSON.parse(eventData); } catch(e) {}
             }
             
-            const merged = {
-                ...eventData,
-                time: eventData.time || row?.OccurredAt || row?.occurredAt,
-                eventType: eventType,
-            };
+           const merged = {
+  ...eventData,
+  time: eventData.time || row?.OccurredAt || row?.occurredAt,
+  eventType: eventType,
+  flightTime: eventData.flightTime ?? row?.FlightTimeMs ?? row?.flightTimeMs ?? row?.flightTime ?? null,
+  fileView: eventData.fileView ?? row?.FileView ?? row?.fileView ?? null,
+  fileEdit: eventData.fileEdit ?? row?.FileEdit ?? row?.fileEdit ?? null,
+  pasteCharCount: eventData.pasteCharCount ?? row?.PasteCharCount ?? row?.pasteCharCount ?? null,
+  charsAdded: eventData.charsAdded ?? row?.CharsAdded ?? row?.charsAdded ?? null,
+  workspaceName: eventData.workspaceName ?? row?.WorkspaceName ?? row?.workspaceName ?? null,
+  possibleAiDetection: eventData.possibleAiDetection ?? row?.PossibleAiDetection ?? row?.possibleAiDetection ?? null,
+};
             
             logText += JSON.stringify(merged) + '\n';
         }

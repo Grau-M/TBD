@@ -38,6 +38,14 @@
   let selectedComparisonStudentIds = [];
   let currentAssignmentComparison = null;
   let assignmentSummaryModalTimer = null;
+  let pendingGeneratedContext = null;
+  let pendingGeneratedSelectionIds = [];
+  let currentViewedStudentName = "";
+  let currentViewedStudentProject = "";
+  let currentViewedStudentAuthUserId = null;
+  let savedStudentLogsHtml = "";
+  let savedStudentLogsTitle = "";
+  let savedStudentViewerMode = "";
   let currentComparisonFilters = {
     input: true,
     edit: true,
@@ -2172,6 +2180,61 @@
       });
     }
 
+    function getGeneratedProfileLabels(context, selectionIds) {
+      const ids = Array.isArray(selectionIds) ? selectionIds.map(String) : [];
+
+      if (context === "student") {
+        return {
+          user: currentViewedStudentName || "Student",
+          project:
+            currentViewedStudentProject ||
+            currentAssignmentName ||
+            "Unknown Project",
+        };
+      }
+
+      if (context === "class") {
+        const selectedStudents = currentAssignmentStudents.filter((student) =>
+          ids.includes(String(student.authUserId)),
+        );
+
+        const workspaceNames = [
+          ...new Set(
+            selectedStudents
+              .map((student) => String(student.workspaceName || "").trim())
+              .filter(Boolean),
+          ),
+        ];
+
+        return {
+          user: "Entire Class",
+          project:
+            workspaceNames.length === 1
+              ? workspaceNames[0]
+              : workspaceNames.length > 1
+                ? "Multiple Project Folders"
+                : currentAssignmentName || "Unknown Project",
+        };
+      }
+
+      return {
+        user: "Unknown User",
+        project: "Unknown Project",
+      };
+    }
+
+    function applyGeneratedLabels(data) {
+      const labels = getGeneratedProfileLabels(
+        pendingGeneratedContext,
+        pendingGeneratedSelectionIds,
+      );
+
+      return {
+        ...data,
+        user: labels.user || data.user || "Unknown User",
+        project: labels.project || data.project || "Unknown Project",
+      };
+    }
     // Use a Global Document click listener (Capture Phase) so the buttons ALWAYS work
     document.addEventListener(
       "click",
@@ -2195,6 +2258,11 @@
           openSessionModal("timeline", "student");
         }
         if (btnId === "btn-student-behavior") {
+          e.preventDefault();
+          e.stopPropagation();
+          openSessionModal("behavior", "student");
+        }
+        if (btnId === "btn-student-behavior-inline") {
           e.preventDefault();
           e.stopPropagation();
           openSessionModal("behavior", "student");
@@ -2249,6 +2317,8 @@
           if (status) {
             status.textContent = `Generating ${currentModalAction}...`;
           }
+          pendingGeneratedContext = currentModalContext;
+          pendingGeneratedSelectionIds = selectedValues.slice();
 
           if (currentModalContext === "raw") {
             const command =
@@ -2265,6 +2335,10 @@
               context: currentModalContext,
               classId: currentClassId,
               assignmentId: currentAssignmentId,
+              studentAuthUserId:
+                currentModalContext === "student"
+                  ? currentViewedStudentAuthUserId
+                  : null,
               selectionIds: selectedValues,
             });
           }
@@ -2398,39 +2472,36 @@
           }
           break;
 
-        case "profileData":
-          // 1. Force the UI to switch to the Logs Tab so you can actually see the chart!
+        case "profileData": {
+          // 1. Force the UI to switch to the Logs Tab so you can actually see the chart
           document
             .querySelectorAll(".tab-pane")
             .forEach((el) => el.classList.remove("active"));
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) {
-            $("logs-tab").classList.add("active");
-          }
-          if ($("nav-logs")) {
-            $("nav-logs").classList.add("active");
-          }
+          if ($("logs-tab")) $("logs-tab").classList.add("active");
+          if ($("nav-logs")) $("nav-logs").classList.add("active");
 
           // 2. Ensure the viewer container is visible
-          if ($("logs-viewer-container")) {
+          if ($("logs-viewer-container"))
             $("logs-viewer-container").style.display = "block";
-          }
-          if ($("logs-log-name")) {
+          if ($("logs-log-name"))
             $("logs-log-name").textContent = "Generated Behavioral Profile";
-          }
 
-          // 3. Render it
+          // 3. Apply better labels, then render
+          const enrichedProfile = window.applyGeneratedLabels
+            ? window.applyGeneratedLabels(msg.data || {})
+            : msg.data;
           if (window.TeacherUI && window.TeacherUI.renderProfile) {
-            window.TeacherUI.renderProfile(msg.data);
+            window.TeacherUI.renderProfile(enrichedProfile);
           }
-          if (status) {
-            status.textContent = "Behavioral profile generated.";
-          }
-          break;
 
-        case "timelineData":
+          if (status) status.textContent = "Behavioral profile generated.";
+          break;
+        }
+
+        case "timelineData": {
           // 1. Force the UI to switch to the Logs Tab
           document
             .querySelectorAll(".tab-pane")
@@ -2438,29 +2509,26 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) {
-            $("logs-tab").classList.add("active");
-          }
-          if ($("nav-logs")) {
-            $("nav-logs").classList.add("active");
-          }
+          if ($("logs-tab")) $("logs-tab").classList.add("active");
+          if ($("nav-logs")) $("nav-logs").classList.add("active");
 
           // 2. Ensure the viewer container is visible
-          if ($("logs-viewer-container")) {
+          if ($("logs-viewer-container"))
             $("logs-viewer-container").style.display = "block";
-          }
-          if ($("logs-log-name")) {
+          if ($("logs-log-name"))
             $("logs-log-name").textContent = "Generated Visual Timeline";
+
+          // 3. Apply better labels, then render
+          const enrichedTimeline = window.applyGeneratedLabels
+            ? window.applyGeneratedLabels(msg.data || {})
+            : msg.data;
+          if (window.TeacherUI && window.TeacherUI.renderTimeline) {
+            window.TeacherUI.renderTimeline(enrichedTimeline);
           }
 
-          // 3. Render it
-          if (window.TeacherUI && window.TeacherUI.renderTimeline) {
-            window.TeacherUI.renderTimeline(msg.data);
-          }
-          if (status) {
-            status.textContent = "Timeline generated.";
-          }
+          if (status) status.textContent = "Timeline generated.";
           break;
+        }
 
         case "logData":
           currentLogFilename = msg.filename;
@@ -4344,6 +4412,15 @@
     function renderAssignmentStudentSessions(payload) {
       const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
       const studentName = payload.studentName || "Student";
+      currentViewedStudentAuthUserId = Number(payload.studentAuthUserId || 0);
+
+      const studentWorkspace =
+        payload.workspaceName ||
+        payload.project ||
+        payload.workspaceRootPath ||
+        "";
+      currentViewedStudentName = studentName;
+      currentViewedStudentProject = studentWorkspace;
 
       const normalizeSessionValue = (session, keys, fallback = "") => {
         for (const key of keys) {
@@ -5334,6 +5411,7 @@
       controlsDiv.innerHTML = `
         <button id="btn-view-list" class="btn btn-primary">📋 Event List</button>
         <button id="btn-view-timeline" class="btn btn-secondary">⏱️ Visual Timeline</button>
+        <button id="btn-student-behavior-inline" class="btn btn-secondary">🧠 Analyze Behavioral Patterns</button>
       `;
       content.appendChild(controlsDiv);
 

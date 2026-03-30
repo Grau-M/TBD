@@ -50,11 +50,11 @@ export async function fetchAndParseLog(password: string, uri: vscode.Uri) {
                         if (parsedLine.occurredAt && !parsedLine.time) {
                             parsedLine.time = parsedLine.occurredAt;
                         }
-                        if (parsedLine.sessionHeader) {
-                            parsedLine.sessionHeader = parsedLine.sessionHeader;
-                        } else {
-                            parsed.events.push(parsedLine);
-                        }
+                       if (parsedLine.sessionHeader) {
+  parsed.sessionHeader = parsedLine.sessionHeader;
+} else {
+  parsed.events.push(parsedLine);
+}
                     } catch(err) {
                         // Skip unparseable lines silently
                     }

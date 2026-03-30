@@ -981,6 +981,19 @@
           }
           break;
         }
+        case "setActiveView": {
+          if (msg.view === "classes") {
+            setActiveView("classes");
+          } else {
+            setActiveView("account");
+          }
+          break;
+        }
+        case "openJoinClass": {
+          setActiveView("classes");
+          setJoinPanelOpen(true);
+          break;
+        }
       }
     });
   });

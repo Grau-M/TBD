@@ -7,6 +7,11 @@ import { registerWebviewPanel } from '../../webviewRegistry';
 
 const WORKSPACE_AUTH_KEY = 'tbd.auth.workspaceSession.v1';
 
+interface OpenAccountViewOptions {
+    activeView?: 'account' | 'classes';
+    openJoinPanel?: boolean;
+}
+
 let accountPanel: vscode.WebviewPanel | undefined;
 let openingAccountPanel = false;
 
@@ -32,7 +37,8 @@ async function joinStudentClassByCode(storageManager: any, authUserId: number, j
 export async function openAccountView(
     context: vscode.ExtensionContext,
     storageManager: any,
-    details: { ideUser: string; workspaceName: string }
+    details: { ideUser: string; workspaceName: string },
+    options: OpenAccountViewOptions = {}
 ): Promise<WorkspaceAuthSession | undefined> {
     const currentPanel = accountPanel;
     if (currentPanel) {
@@ -113,6 +119,22 @@ export async function openAccountView(
         apiUnavailable,
         apiUnavailableMessage
     });
+
+    if (options.activeView || options.openJoinPanel) {
+        setTimeout(() => {
+            if (!accountPanel) {
+                return;
+            }
+
+            if (options.activeView) {
+                accountPanel.webview.postMessage({ command: 'setActiveView', view: options.activeView });
+            }
+
+            if (options.openJoinPanel) {
+                accountPanel.webview.postMessage({ command: 'openJoinClass' });
+            }
+        }, 200);
+    }
 
     accountPanel.onDidDispose(() => {
         accountPanel = undefined;

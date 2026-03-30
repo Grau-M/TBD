@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import { WorkspaceAuthSession } from '../auth';
+import { openAccountView } from './index';
 import { state, storageManager } from '../state';
 import { apiGet } from '../api';
 import { getUserFriendlyErrorMessage } from '../utils';
 import { updateApiKeyStatus } from '../statusBar';
 import { registerWebviewPanel } from '../webviewRegistry';
+import { getSessionInfo } from '../sessionInfo';
 
 interface ClassQuickPickItem extends vscode.QuickPickItem {
     classId: number;
@@ -174,7 +176,18 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
             try {
                 const classes = await (storageManager as any).listStudentClasses(session.authUserId);
                 if (!classes || classes.length === 0) {
-                    vscode.window.showInformationMessage("You are not currently enrolled in any active classes.");
+                    await vscode.window.showInformationMessage(
+                        "You are not currently enrolled in any active classes. Opening account Join Class panel..."
+                    );
+
+                    await openAccountView(context, storageManager, {
+                        ideUser: getSessionInfo().user,
+                        workspaceName: vscode.workspace.name || 'Unknown Workspace'
+                    }, {
+                        activeView: 'classes',
+                        openJoinPanel: true
+                    });
+
                     activePanel.webview.postMessage({ command: 'syncReset' });
                     return;
                 }

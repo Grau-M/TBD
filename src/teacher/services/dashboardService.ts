@@ -599,39 +599,65 @@ export async function handleCompareAssignmentStudents(
     });
     
 }
+type DbSessionRef = {
+  sessionId: number;
+  classId: number;
+  assignmentId: number;
+  studentId: number;
+  localNum?: number;
+};
 
-export async function handleGenerateDbTimeline(panel: vscode.WebviewPanel, password: string, sessionIds: number[], context?: vscode.ExtensionContext) {
+export async function handleGenerateDbTimeline(
+  panel: vscode.WebviewPanel,
+  password: string,
+  sessionRefs: DbSessionRef[],
+  context?: vscode.ExtensionContext
+) {
     try {
         let expectedUser: string | null = null;
         let expectedProject: string | null = null;
         let allEvents: any[] = [];
-        
-        for (const sid of sessionIds) {
-            if (!sid) continue;
+
+        for (const ref of sessionRefs) {
+            if (!ref?.sessionId) continue;
             try {
-                const uri = vscode.Uri.parse(`tbd-db://session/${sid}`);
+                const uri = vscode.Uri.parse(
+                    `tbd-cloud:${ref.sessionId}?classId=${ref.classId}&assignId=${ref.assignmentId}&studentId=${ref.studentId}&localNum=${ref.localNum ?? ref.sessionId}`
+                );
+
                 const { parsed } = await fetchAndParseLog(password, uri);
 
                 if (parsed && parsed.events && parsed.events.length > 0) {
-                    const sessionUser = parsed.sessionHeader?.startedBy || 'Unknown';
-                    const sessionProject = parsed.sessionHeader?.project || 'Unknown';
+                    const sessionUser =
+                        parsed.sessionHeader?.startedBy ||
+                        parsed.sessionHeader?.user ||
+                        'Unknown';
+
+                    const sessionProject =
+                        parsed.sessionHeader?.project ||
+                        parsed.sessionHeader?.workspaceName ||
+                        'Unknown';
 
                     if (expectedUser === null) expectedUser = sessionUser;
                     if (expectedProject === null) expectedProject = sessionProject;
 
-                    // When analyzing across a whole class, allow mixing students/projects 
                     if (expectedUser !== sessionUser) expectedUser = 'Multiple Students';
                     if (expectedProject !== sessionProject) expectedProject = 'Multiple Projects';
 
                     allEvents = allEvents.concat(parsed.events);
                 }
             } catch (err) {
-                console.warn(`Failed to fetch session ${sid}`, err);
+                console.warn(`Failed to fetch session ${ref.sessionId}`, err);
             }
         }
 
         allEvents.sort((a, b) => parseLogTime(a.time) - parseLogTime(b.time));
-        const gapThresholdMs = (context?.globalState?.get<any>('tbdSettings', { inactivityThreshold: 5 })?.inactivityThreshold || 5) * 60 * 1000;
+
+        const gapThresholdMs =
+            (context?.globalState?.get<any>('tbdSettings', { inactivityThreshold: 5 })?.inactivityThreshold || 5) *
+            60 *
+            1000;
+
         const periods: any[] = [];
         let currentPeriod: any = null;
 
@@ -639,8 +665,9 @@ export async function handleGenerateDbTimeline(panel: vscode.WebviewPanel, passw
             const t = parseLogTime(allEvents[i].time);
             if (t === 0) continue;
 
-            if (!currentPeriod) {currentPeriod = { startTime: t, endTime: t, eventCount: 1 };}
-            else {
+            if (!currentPeriod) {
+                currentPeriod = { startTime: t, endTime: t, eventCount: 1 };
+            } else {
                 if (t - currentPeriod.endTime > gapThresholdMs) {
                     periods.push(currentPeriod);
                     currentPeriod = { startTime: t, endTime: t, eventCount: 1 };
@@ -650,89 +677,181 @@ export async function handleGenerateDbTimeline(panel: vscode.WebviewPanel, passw
                 }
             }
         }
-        if (currentPeriod) {periods.push(currentPeriod);}
 
-        panel.webview.postMessage({ command: 'timelineData', data: { user: expectedUser, project: expectedProject, periods, totalEvents: allEvents.length, sparse: allEvents.length < 5 } });
+        if (currentPeriod) {
+            periods.push(currentPeriod);
+        }
+
+        panel.webview.postMessage({
+            command: 'timelineData',
+            data: {
+                user: expectedUser,
+                project: expectedProject,
+                periods,
+                totalEvents: allEvents.length,
+                sparse: allEvents.length < 5
+            }
+        });
     } catch (error: any) {
-        panel.webview.postMessage({ command: 'error', message: 'Backend DB Timeline Crash: ' + error.message });
+        panel.webview.postMessage({
+            command: 'error',
+            message: 'Backend DB Timeline Crash: ' + error.message
+        });
     }
 }
 
-export async function handleGenerateDbProfile(panel: vscode.WebviewPanel, password: string, sessionIds: number[], context?: vscode.ExtensionContext) {
+export async function handleGenerateDbProfile(
+  panel: vscode.WebviewPanel,
+  password: string,
+  sessionRefs: DbSessionRef[],
+  context?: vscode.ExtensionContext
+) {
     try {
         let expectedUser: string | null = null;
         let expectedProject: string | null = null;
-        let totalActiveMs = 0, totalWallMs = 0, keystrokes = 0, edits = 0, pastes = 0, externalPastes = 0, terminalRuns = 0;
+
+        let totalActiveMs = 0;
+        let totalWallMs = 0;
+        let keystrokes = 0;
+        let edits = 0;
+        let pastes = 0;
+        let externalPastes = 0;
+        let terminalRuns = 0;
         let pauseLengths: number[] = [];
 
-        for (const sid of sessionIds) {
-            if (!sid) continue;
+        for (const ref of sessionRefs) {
+            if (!ref?.sessionId) continue;
             try {
-                const uri = vscode.Uri.parse(`tbd-db://session/${sid}`);
+                const uri = vscode.Uri.parse(
+                    `tbd-cloud:${ref.sessionId}?classId=${ref.classId}&assignId=${ref.assignmentId}&studentId=${ref.studentId}&localNum=${ref.localNum ?? ref.sessionId}`
+                );
+
                 const { parsed } = await fetchAndParseLog(password, uri);
-                
+
                 if (parsed && parsed.events && parsed.events.length > 0) {
-                    const sessionUser = parsed.sessionHeader?.startedBy || 'Unknown';
-                    const sessionProject = parsed.sessionHeader?.project || 'Unknown';
+                    const sessionUser =
+                        parsed.sessionHeader?.startedBy ||
+                        parsed.sessionHeader?.user ||
+                        'Unknown';
+
+                    const sessionProject =
+                        parsed.sessionHeader?.project ||
+                        parsed.sessionHeader?.workspaceName ||
+                        'Unknown';
 
                     if (expectedUser === null) expectedUser = sessionUser;
                     if (expectedProject === null) expectedProject = sessionProject;
 
-                    // When analyzing across a whole class, allow mixing students/projects
                     if (expectedUser !== sessionUser) expectedUser = 'Multiple Students';
                     if (expectedProject !== sessionProject) expectedProject = 'Multiple Projects';
 
                     const events = parsed.events;
                     const firstTime = parseLogTime(events[0].time);
                     const lastTime = parseLogTime(events[events.length - 1].time);
-                    if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) {totalWallMs += (lastTime - firstTime);}
+
+                    if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) {
+                        totalWallMs += (lastTime - firstTime);
+                    }
 
                     let prevTime = 0;
+
                     for (const e of events) {
                         const t = parseLogTime(e.time);
+
                         if (prevTime > 0 && t > 0) {
                             const diff = t - prevTime;
-                            if (diff < 5 * 60 * 1000) {totalActiveMs += diff;}
-                            if (diff >= 5000 && diff <= 60000) {pauseLengths.push(diff);}
+                            if (diff < 5 * 60 * 1000) {
+                                totalActiveMs += diff;
+                            }
+                            if (diff >= 5000 && diff <= 60000) {
+                                pauseLengths.push(diff);
+                            }
                         }
-                        if (t > 0) {prevTime = t;}
+
+                        if (t > 0) {
+                            prevTime = t;
+                        }
 
                         const evType = (e.eventType || '').toLowerCase();
-                        if (evType === 'input' || evType === 'key' || evType === 'keystroke') {keystrokes++;}
-                        if (evType === 'replace' || evType === 'delete' || evType === 'backspace') {edits++;}
-                        if (evType === 'terminal' || evType === 'debug' || evType === 'run' || evType === 'terminalcommand') {terminalRuns++;}
-                        if (evType === 'paste' || evType === 'clipboard' || evType === 'pasteevent' || evType === 'ai-paste' || evType === 'external-paste') {
+
+                        if (
+                            evType === 'input' ||
+                            evType === 'key' ||
+                            evType === 'keystroke'
+                        ) {
+                            keystrokes++;
+                        }
+
+                        if (
+                            evType === 'replace' ||
+                            evType === 'delete' ||
+                            evType === 'backspace'
+                        ) {
+                            edits++;
+                        }
+
+                        if (
+                            evType === 'terminal' ||
+                            evType === 'debug' ||
+                            evType === 'run' ||
+                            evType === 'terminalcommand'
+                        ) {
+                            terminalRuns++;
+                        }
+
+                        if (
+                            evType === 'paste' ||
+                            evType === 'clipboard' ||
+                            evType === 'pasteevent' ||
+                            evType === 'ai-paste' ||
+                            evType === 'external-paste'
+                        ) {
                             pastes++;
-                            if (e.source === 'external' || e.pastedFrom === 'external' || evType === 'ai-paste' || evType === 'external-paste' || e.internal === false) {
+
+                            if (
+                                e.source === 'external' ||
+                                e.pastedFrom === 'external' ||
+                                evType === 'ai-paste' ||
+                                evType === 'external-paste' ||
+                                e.internal === false
+                            ) {
                                 externalPastes++;
                             }
                         }
                     }
                 }
             } catch (err) {
-                console.warn(`Failed to fetch session ${sid}`, err);
+                console.warn(`Failed to fetch session ${ref.sessionId}`, err);
             }
         }
 
         const activeMinsFloat = totalActiveMs / 60000;
-        const activeHoursFloat = activeMinsFloat / 60 || 0.01;
+        const activeHoursFloat = activeMinsFloat > 0 ? activeMinsFloat / 60 : 0.01;
 
         panel.webview.postMessage({
             command: 'profileData',
             data: {
-                user: expectedUser, project: expectedProject, sessionsAnalyzed: sessionIds.length,
+                user: expectedUser,
+                project: expectedProject,
+                sessionsAnalyzed: sessionRefs.length,
                 totalActiveMins: Math.max(0, Math.round(activeMinsFloat)),
                 totalWallMins: Math.max(0, Math.round(totalWallMs / 60000)),
                 wpm: activeMinsFloat > 0 ? Math.round((keystrokes / 5) / activeMinsFloat) : 0,
                 editRate: activeMinsFloat > 0 ? Math.round(edits / activeMinsFloat) : 0,
                 pasteFreq: Math.round(pastes / activeHoursFloat),
-                avgPauseMs: pauseLengths.length > 0 ? Math.round(pauseLengths.reduce((a,b)=>a+b,0)/pauseLengths.length) : 0,
+                avgPauseMs:
+                    pauseLengths.length > 0
+                        ? Math.round(pauseLengths.reduce((a, b) => a + b, 0) / pauseLengths.length)
+                        : 0,
                 externalPasteRatio: pastes > 0 ? Math.round((externalPastes / pastes) * 100) : 0,
                 internalPasteRatio: pastes > 0 ? Math.round(100 - ((externalPastes / pastes) * 100)) : 100,
                 debugRunFreq: Math.round(terminalRuns / activeHoursFloat)
             }
         });
     } catch (error: any) {
-        panel.webview.postMessage({ command: 'error', message: 'Backend DB Profile Crash: ' + error.message });
+        panel.webview.postMessage({
+            command: 'error',
+            message: 'Backend DB Profile Crash: ' + error.message
+        });
     }
 }

@@ -525,33 +525,94 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         // 🟢 NEW: DB Driven Timeline and Profile Resolvers
-        case 'generateDbTimeline':
-        case 'generateDbProfile': {
-          const teacherId = await getValidTeacherId();
-          const classId = Number(message.classId);
-          const assignmentId = Number(message.assignmentId);
-          const reqContext = message.context; // 'class' or 'student'
-          const selectionIds = message.selectionIds || [];
+        type DbSessionRef = {
+  sessionId: number;
+  classId: number;
+  assignmentId: number;
+  studentId: number;
+  localNum?: number;
+};
 
-          let sessionIds: number[] = [];
+case 'generateDbTimeline':
+case 'generateDbProfile': {
+  const teacherId = await getValidTeacherId();
+  const classId = Number(message.classId);
+  const assignmentId = Number(message.assignmentId);
+  const reqContext = String(message.context || '');
+  const selectionIds = Array.isArray(message.selectionIds) ? message.selectionIds.map(Number) : [];
+  const studentAuthUserId = Number(message.studentAuthUserId || 0);
 
-          if (reqContext === 'student') {
-            sessionIds = selectionIds.map(Number);
-          } else if (reqContext === 'class') {
-            // For class view, selectionIds are student AuthUserIds. We need to fetch all their sessions.
-            for (const studentId of selectionIds) {
-              const sessions = await storageManager.listAssignmentStudentSessions(classId, assignmentId, Number(studentId), teacherId);
-              sessionIds.push(...sessions.map(s => s.sessionId));
-            }
-          }
+  const sessionRefs: DbSessionRef[] = [];
+  const seen = new Set<number>();
 
-          if (message.command === 'generateDbTimeline') {
-            if (panel) { await handleGenerateDbTimeline(panel, SECRET_PASSPHRASE, sessionIds, context); }
-          } else {
-            if (panel) { await handleGenerateDbProfile(panel, SECRET_PASSPHRASE, sessionIds, context); }
-          }
-          break;
+  if (reqContext === 'student') {
+    if (!studentAuthUserId) {
+      panel?.webview.postMessage({ command: 'error', message: 'Missing student ID for student session analysis.' });
+      break;
+    }
+
+    const rows = await storageManager.listAssignmentStudentSessions(
+      classId,
+      assignmentId,
+      studentAuthUserId,
+      teacherId
+    );
+
+    const wanted = new Set(selectionIds);
+
+    for (const row of rows) {
+      const sid = Number(row?.sessionId ?? row?.SessionId);
+      if (!sid || !wanted.has(sid) || seen.has(sid)) {
+        continue;
+      }
+      seen.add(sid);
+      sessionRefs.push({
+        sessionId: sid,
+        classId,
+        assignmentId,
+        studentId: studentAuthUserId
+      });
+    }
+  } else if (reqContext === 'class') {
+    for (const rawStudentId of selectionIds) {
+      const sidStudent = Number(rawStudentId);
+      if (!sidStudent) continue;
+
+      const rows = await storageManager.listAssignmentStudentSessions(
+        classId,
+        assignmentId,
+        sidStudent,
+        teacherId
+      );
+
+      for (const row of rows) {
+        const sid = Number(row?.sessionId ?? row?.SessionId);
+        if (!sid || seen.has(sid)) {
+          continue;
         }
+        seen.add(sid);
+        sessionRefs.push({
+          sessionId: sid,
+          classId,
+          assignmentId,
+          studentId: sidStudent
+        });
+      }
+    }
+  }
+
+  if (message.command === 'generateDbTimeline') {
+    if (panel) {
+      await handleGenerateDbTimeline(panel, SECRET_PASSPHRASE, sessionRefs, context);
+    }
+  } else {
+    if (panel) {
+      await handleGenerateDbProfile(panel, SECRET_PASSPHRASE, sessionRefs, context);
+    }
+  }
+
+  break;
+}
 
       }
     } catch (e: any) {

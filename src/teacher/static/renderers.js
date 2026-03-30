@@ -445,89 +445,170 @@ window.TeacherUI = {
     } catch (e) {}
   },
 
-  renderTimeline(data) {
-    let tCard = document.getElementById("timeline-card");
-    if (!tCard) {
-      tCard = document.createElement("div");
-      tCard.id = "timeline-card";
-      tCard.className = "card";
-      tCard.style.borderLeft = "6px solid var(--accent)";
-      tCard.style.marginTop = "12px";
-      const filesSection = document.getElementById("per-file-section");
-      if (filesSection) {
-        filesSection.parentElement.insertAdjacentElement("beforebegin", tCard);
-      }
-    }
-
-    let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><h2 style="margin:0; color:var(--accent);">Visual Timeline: ${data.user}</h2><div class="meta">Project: ${data.project} &nbsp;|&nbsp; Total Analyzed Events: ${data.totalEvents}</div></div><button id="close-timeline" class="btn btn-secondary" style="padding:4px 8px;">Close</button></div><div style="margin-top: 16px;">`;
-
-    if (data.sparse && (!data.periods || data.periods.length === 0)) {
-      html += `<div class="meta" style="color: #f59e0b; padding:12px; border:1px solid #f59e0b; border-radius:4px; text-align: center;"><strong>Sparse Activity:</strong> The timeline is incomplete because there are not enough recorded events.</div>`;
-    } else {
-      const formatDateTime = (ts) => new Date(ts).toLocaleString(undefined, {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-      });
-
-      data.periods.forEach((p, index) => {
-        const durMs = p.endTime - p.startTime;
-        const durationText = durMs < 60000 ? "< 1m" : this.formatDuration(durMs);
-
-        html += `
-          <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px;">
-            <div style="display: flex; justify-content: space-between; background: var(--bg); padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; border-left: 4px solid var(--accent);">
-              <div>
-                <strong style="font-size: 1.1rem;">Work Period ${index + 1}</strong>
-                <div class="meta" style="margin-top: 6px; font-size: 0.9rem;">${formatDateTime(p.startTime)} &rarr; ${formatDateTime(p.endTime)}</div>
-              </div>
-              <div style="text-align: right;">
-                <div style="font-weight: bold; color: var(--fg);">${durationText}</div>
-                <div class="meta" style="margin-top: 4px;">${p.eventCount} logged events</div>
-              </div>
-            </div>
-          </div>`;
-
-        if (index < data.periods.length - 1) {
-          const gapMs = data.periods[index + 1].startTime - p.endTime;
-          const gapStart = formatDateTime(p.endTime);
-          const gapEnd = formatDateTime(data.periods[index + 1].startTime);
-
-          if (gapMs > 4 * 60 * 60 * 1000) {
-            html += `<div class="meta" style="text-align: center; padding: 8px 0; color: #f59e0b; background: rgba(245, 158, 11, 0.05); border-radius: 4px; margin: 4px 0;">⟐ <strong>Significant Gap</strong> (${this.formatDuration(gapMs)})<br/><span style="font-size: 0.85rem; display: inline-block; margin-top: 4px;">${gapStart} &rarr; ${gapEnd}</span> ⟐</div>`;
-          } else {
-            html += `<div class="meta" style="text-align: center; padding: 6px 0;">&darr; Gap: ${this.formatDuration(gapMs)}<br/><span style="font-size: 0.85rem; display: inline-block; margin-top: 4px;">${gapStart} &rarr; ${gapEnd}</span> &darr;</div>`;
-          }
-        }
-      });
-    }
-    
-    html += `</div>`;
-    tCard.innerHTML = html;
-    document
-      .getElementById("close-timeline")
-      .addEventListener("click", () => tCard.remove());
-  },
-
   renderProfile(data) {
-    let pCard = document.getElementById("profile-card");
-    if (!pCard) {
-      pCard = document.createElement("div");
-      pCard.id = "profile-card";
-      pCard.className = "card";
-      pCard.style.borderLeft = "6px solid var(--accent-2)";
-      pCard.style.marginTop = "12px";
-      const filesSection = document.getElementById("per-file-section");
-      if (filesSection) {
-        filesSection.parentElement.insertAdjacentElement("beforebegin", pCard);
-      }
-    }
-    pCard.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><h2 style="margin:0; color:var(--accent-2);">Behavioral Profile: ${data.user}</h2><div class="meta">Project: ${data.project} | Sessions Analyzed: ${data.sessionsAnalyzed} | Active Time: ${data.totalActiveMins} mins | Total Time in VS Code: ${data.totalWallMins} mins</div></div><button id="close-profile" class="btn btn-secondary" style="padding:4px 8px;">Close</button></div><div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-top:20px;"><div><div style="font-weight:700; font-size:1.5rem;">${data.wpm}</div><div class="meta">Avg WPM</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.editRate}</div><div class="meta">Edits/min (Code Churn)</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.pasteFreq}</div><div class="meta">Pastes/hr</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.avgPauseMs > 0 ? (data.avgPauseMs / 1000).toFixed(1) + "s" : "N/A"}</div><div class="meta">Avg Micro-Pause (Thinking Time)</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.internalPasteRatio}% <span style="font-size:1rem; color:var(--muted)">Int</span> / ${data.externalPasteRatio}% <span style="font-size:1rem; color:var(--muted)">Ext</span></div><div class="meta">Internal vs External Paste Ratio</div></div><div><div style="font-weight:700; font-size:1.5rem;">${data.debugRunFreq}</div><div class="meta">Terminal Runs/hr (Testing Freq)</div></div></div><div class="meta" style="margin-top:16px; border-top:1px solid var(--border); padding-top:12px;"><strong>Pedagogical Insight:</strong> This establishes the student's unique workflow.</div>`;
-    document
-      .getElementById("close-profile")
-      .addEventListener("click", () => pCard.remove());
-  },
+  const logsView = document.getElementById("logs-view");
+  const logsViewerContainer = document.getElementById("logs-viewer-container");
+  const logsLogName = document.getElementById("logs-log-name");
+
+  if (logsViewerContainer) {
+    logsViewerContainer.style.display = "block";
+  }
+
+  if (logsLogName) {
+    logsLogName.textContent = "Generated Behavioral Profile";
+  }
+
+  // Remove old timeline/profile cards if they exist
+  document.getElementById("profile-card")?.remove();
+  document.getElementById("timeline-card")?.remove();
+
+  const pCard = document.createElement("div");
+  pCard.id = "profile-card";
+  pCard.className = "card";
+  pCard.style.borderLeft = "6px solid var(--accent-2)";
+  pCard.style.marginTop = "12px";
+
+  pCard.innerHTML = `
+    <h2>Behavioral Profile: ${data.user ?? "Unknown User"}</h2>
+    <p>
+      Project: ${data.project ?? "Unknown"} |
+      Sessions Analyzed: ${data.sessionsAnalyzed ?? 0} |
+      Active Time: ${data.totalActiveMins ?? 0} mins |
+      Total Time in VS Code: ${data.totalWallMins ?? 0} mins
+    </p>
+
+    <button id="close-profile" class="btn btn-secondary">Close</button>
+
+    <div class="profile-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px;">
+      <div class="metric-card">
+        <div class="metric-value">${data.wpm ?? 0}</div>
+        <div class="metric-label">Avg WPM</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-value">${data.editRate ?? 0}</div>
+        <div class="metric-label">Edits/min (Code Churn)</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-value">${data.pasteFreq ?? 0}</div>
+        <div class="metric-label">Pastes/hr</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-value">
+          ${data.avgPauseMs > 0 ? (data.avgPauseMs / 1000).toFixed(1) + "s" : "N/A"}
+        </div>
+        <div class="metric-label">Avg Micro-Pause</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-value">${data.internalPasteRatio ?? 0}% Int / ${data.externalPasteRatio ?? 0}% Ext</div>
+        <div class="metric-label">Internal vs External Paste Ratio</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-value">${data.debugRunFreq ?? 0}</div>
+        <div class="metric-label">Terminal Runs/hr</div>
+      </div>
+    </div>
+
+    <p style="margin-top:16px;">
+      Pedagogical Insight: This establishes the student's unique workflow.
+    </p>
+  `;
+
+ if (logsView) {
+  if (!window.__savedStudentLogsHtml) {
+    window.__savedStudentLogsHtml = logsView.innerHTML;
+  }
+
+  const logsLogName = document.getElementById("logs-log-name");
+  if (logsLogName && !window.__savedStudentLogsTitle) {
+    window.__savedStudentLogsTitle = logsLogName.textContent || "";
+  }
+
+  logsView.innerHTML = "";
+  logsView.appendChild(pCard);
+}
+
+ document.getElementById("close-profile")?.addEventListener("click", () => {
+  const logsView = document.getElementById("logs-view");
+  const logsLogName = document.getElementById("logs-log-name");
+
+  if (logsView && window.__savedStudentLogsHtml) {
+    logsView.innerHTML = window.__savedStudentLogsHtml;
+  }
+
+  if (logsLogName && window.__savedStudentLogsTitle) {
+    logsLogName.textContent = window.__savedStudentLogsTitle;
+  }
+
+  window.__savedStudentLogsHtml = "";
+  window.__savedStudentLogsTitle = "";
+});
+},
+
+renderTimeline(data) {
+  const logsView = document.getElementById("logs-view");
+  const logsViewerContainer = document.getElementById("logs-viewer-container");
+  const logsLogName = document.getElementById("logs-log-name");
+
+  if (logsViewerContainer) {
+    logsViewerContainer.style.display = "block";
+  }
+
+  if (logsLogName) {
+    logsLogName.textContent = "Generated Timeline";
+  }
+
+  // Remove old timeline/profile cards if they exist
+  document.getElementById("timeline-card")?.remove();
+  document.getElementById("profile-card")?.remove();
+
+  const timelineCard = document.createElement("div");
+  timelineCard.id = "timeline-card";
+  timelineCard.className = "card";
+  timelineCard.style.marginTop = "12px";
+
+  const events = Array.isArray(data?.events) ? data.events : [];
+
+  const eventHtml = events.length
+    ? events.map(event => `
+        <div class="timeline-event" style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div><strong>${event.time ?? "Unknown time"}</strong></div>
+          <div>${event.label ?? "No label"}</div>
+          ${event.details ? `<div style="opacity:0.8;font-size:0.95em;">${event.details}</div>` : ""}
+        </div>
+      `).join("")
+    : `<p>No timeline events were generated.</p>`;
+
+  timelineCard.innerHTML = `
+    <h2>Behavioral Timeline</h2>
+    <button id="close-timeline" class="btn btn-secondary">Close</button>
+    <div style="margin-top:16px;">
+      ${eventHtml}
+    </div>
+  `;
+
+  if (logsView) {
+  if (!window.__savedStudentLogsHtml) {
+    window.__savedStudentLogsHtml = logsView.innerHTML;
+  }
+
+  const logsLogName = document.getElementById("logs-log-name");
+  if (logsLogName && !window.__savedStudentLogsTitle) {
+    window.__savedStudentLogsTitle = logsLogName.textContent || "";
+  }
+
+  logsView.innerHTML = "";
+  logsView.appendChild(timelineCard);
+}
+
+  document.getElementById("close-timeline")?.addEventListener("click", () => {
+    timelineCard.remove();
+  });
+},
 
   renderParsedInLogs(parsed, filename, currentSettings, handlers) {
     const logsView = document.getElementById("logs-view");

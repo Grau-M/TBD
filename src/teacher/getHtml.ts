@@ -86,10 +86,12 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     .spinner { width: 36px; height: 36px; border-radius: 50%; border: 4px solid rgba(0,0,0,0.08); border-top-color: var(--accent); animation: spin 1s linear infinite; margin: 12px auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px var(--card-shadow); min-width: 0; }
-    .class-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 280px; transition: transform 0.22s ease, box-shadow 0.22s ease; }
+    .class-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 280px; transition: transform 0.22s ease, box-shadow 0.22s ease; min-width: 0; }
     .class-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(2,6,23,0.35); }
     .class-card .class-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
     .class-card .class-meta-grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top: 10px; }
+    #class-list-view { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important; max-width: 1400px; width: 100%; }
+    @media (max-width: 780px) { #class-list-view { grid-template-columns: 1fr !important; gap: 12px; padding: 0 10px; } }
     .class-card .class-meta-grid > div { font-size: 0.88rem; }
     .class-card .class-meta-grid .label { color: var(--muted); font-weight: 600; }
     .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; min-width: 0; gap: 12px; }
@@ -173,6 +175,8 @@ export function getHtml(webview: vscode.Webview, context: vscode.ExtensionContex
     .meeting-day-label input:checked::after { content:''; width:8px; height:8px; border-radius:2px; background:white; display:block; }
     .meeting-day-label input:focus-visible, .meeting-day-label:focus-visible { outline: none; }
     .meeting-day-label.focused { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35); background: rgba(37, 99, 235, 0.12); }
+    .top-cards, .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .top-cards .card, .stats-row .card { width: 100%; min-width: auto; }
     /* Deletions responsive rows */
     .deletion-row { display:flex; flex-direction:column; gap:8px; }
     .deletion-row .meta { margin-top:0; }

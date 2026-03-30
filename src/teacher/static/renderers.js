@@ -84,8 +84,9 @@ window.TeacherUI = {
 
     const m = data.metrics;
     const top = document.createElement("div");
+    top.className = "top-cards";
     top.style.display = "grid";
-    top.style.gridTemplateColumns = "1fr 1fr 1fr 1fr";
+    top.style.gridTemplateColumns = "repeat(auto-fit, minmax(220px, 1fr))";
     top.style.gap = "12px";
     const makeCard = (title, value, subtitle) => {
       const c = document.createElement("div");
@@ -109,7 +110,9 @@ window.TeacherUI = {
     top.appendChild(makeCard("AI Probability", m.aiProbability + "%"));
 
     const statsRow = document.createElement("div");
-    statsRow.style.display = "flex";
+    statsRow.className = "stats-row";
+    statsRow.style.display = "grid";
+    statsRow.style.gridTemplateColumns = "repeat(auto-fit, minmax(220px, 1fr))";
     statsRow.style.gap = "12px";
     statsRow.style.marginTop = "12px";
     statsRow.appendChild(

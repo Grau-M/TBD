@@ -2298,15 +2298,15 @@
 
           document.querySelectorAll('.event').forEach((row) => {
             const rowId = Number(row.dataset.sessionEventId || 0);
-            if (!rowId || !notesByEvent.has(rowId)) return;
+            if (!rowId || !notesByEvent.has(rowId)) {return;}
 
             const noteText = notesByEvent.get(rowId);
 
             // Hide the text area
             const noteTextarea = row.querySelector('.event-note-input');
-            if (noteTextarea) noteTextarea.value = noteText;
+            if (noteTextarea) {noteTextarea.value = noteText;}
             const noteArea = row.querySelector('.event-notes-area');
-            if (noteArea) noteArea.style.display = 'none';
+            if (noteArea) {noteArea.style.display = 'none';}
 
             // Fill the icon
             const noteBtn = row.querySelector('.btn-notes');

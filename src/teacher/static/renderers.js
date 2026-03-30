@@ -465,8 +465,8 @@ window.TeacherUI = {
       }
     }
 
-    let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><h2 style="margin:0; color:var(--accent);">Visual Timeline: ${data.user}</h2><div class="meta">Project: ${data.project} &nbsp;|&nbsp; Total Analyzed Events: ${data.totalEvents}</div></div><button id="close-timeline" class="btn btn-secondary" style="padding:4px 8px;">Close</button></div><div style="margin-top: 16px;">`;
-
+    let html = `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="display:flex; gap:8px; align-items:center;"><strong>${e.eventType || "Unknown"}</strong>${flagReason}<button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes"><span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span></button></div><span class="meta">${e.time || ""}</span></div>`;
+    
     if (data.sparse && (!data.periods || data.periods.length === 0)) {
       html += `<div class="meta" style="color: #f59e0b; padding:12px; border:1px solid #f59e0b; border-radius:4px; text-align: center;"><strong>Sparse Activity:</strong> The timeline is incomplete because there are not enough recorded events.</div>`;
     } else {
@@ -929,6 +929,16 @@ window.TeacherUI = {
           row.dataset.filterCategory = filterCat;
           row.dataset.eventTime = e.time || "";
 
+          const parsedSessionEventId = Number(e.Id || e.sessionEventId || e.eventId || e.SessionEventId || e.EventId || 0) || 0;
+          if (parsedSessionEventId > 0) {
+            row.dataset.sessionEventId = String(parsedSessionEventId);
+          }
+
+          const parsedSessionId = Number(e.sessionId || e.SessionId || 0) || 0;
+          if (parsedSessionId > 0) {
+            row.dataset.sessionId = String(parsedSessionId);
+          }
+
           // Forced css to ensure dark mode doesn't swallow the styles
           if (isAiEvent) {
             row.style.cssText +=
@@ -959,7 +969,6 @@ window.TeacherUI = {
           });
 
           html += `<div class="event-notes-area" style="display:none; margin-top:12px; padding-top:8px; border-top:1px solid var(--border);"><textarea class="event-note-input" placeholder="Add private instructor notes for this event..." style="width:100%; min-height:60px; padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); font-family:monospace; font-size:0.9rem;" rows="3"></textarea><div style="display:flex; gap:8px; margin-top:8px;"><button class="btn-save-note" style="background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Save Note</button><button class="btn-close-notes" style="background:var(--border); color:var(--fg); border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Cancel</button></div></div>`;
-
           row.innerHTML = html;
           rowElements.push(row);
         }
@@ -1077,16 +1086,20 @@ window.TeacherUI = {
             const input = area?.querySelector(".event-note-input");
             const ts = row.dataset.eventTime || "";
             const text = input?.value || "";
+            
+            // Correctly grab IDs from the row dataset we added in step 1
+            const sessionEventId = Number(row.dataset.sessionEventId || 0);
+            const sessionId = Number(row.dataset.sessionId || 0);
+
             if (ts && text) {
               const notePayload = { timestamp: ts, text };
-              if (typeof sessionEventId !== "undefined" && sessionEventId > 0) {
+              if (sessionEventId > 0) {
                 notePayload.sessionEventId = sessionEventId;
               }
-              if (typeof sessionId !== "undefined" && sessionId > 0) {
+              if (sessionId > 0) {
                 notePayload.sessionId = sessionId;
               }
               allNotes.push(notePayload);
-              allNotes.push({ timestamp: ts, text });
             }
           });
 

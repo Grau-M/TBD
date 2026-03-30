@@ -2270,6 +2270,56 @@
           );
           break;
 
+        case "logNotes":
+          if (!Array.isArray(msg.notes) || msg.notes.length === 0) {
+            break;
+          }
+          const notesByEvent = new Map();
+          msg.notes.forEach((note) => {
+            const id = Number(
+              note?.sessionEventId ?? note?.SessionEventId ?? note?.eventId ?? note?.EventId ?? note?.Id ?? note?.id ?? 0
+            );
+            if (id) {
+              notesByEvent.set(id, String(note?.text ?? note?.noteText ?? note?.note ?? ""));
+            }
+          });
+
+          const noteEventRows = document.querySelectorAll('.event');
+          noteEventRows.forEach((row) => {
+            const rowId = Number(row.dataset.sessionEventId || 0);
+            if (!rowId) {return;}
+
+            const noteBtn = row.querySelector('.btn-notes');
+            const noteArea = row.querySelector('.event-notes-area');
+            const noteTextarea = row.querySelector('.event-note-input');
+            const emptyIcon = row.querySelector('.note-icon-empty');
+            const filledIcon = row.querySelector('.note-icon-filled');
+
+            if (notesByEvent.has(rowId)) {
+              const noteText = notesByEvent.get(rowId);
+
+              if (noteBtn) {
+                noteBtn.dataset.hasNote = 'true';
+                noteBtn.style.filter = 'none';
+                noteBtn.style.opacity = '1';
+              }
+
+              if (emptyIcon && filledIcon) {
+                emptyIcon.style.display = 'none';
+                filledIcon.style.display = 'inline';
+              }
+
+              if (noteTextarea) {
+                noteTextarea.value = noteText || '';
+              }
+
+              if (noteArea) {
+                noteArea.style.display = 'none';
+              }
+            }
+          });
+          break;
+
         case "dashboardData":
           dashboardDataCache = msg.data || null;
           // NEW: Read the ping result from the dashboard sync logic
@@ -3007,6 +3057,16 @@
 
         case "classSessionLogData": {
           renderAssignmentSessionLog(msg.data || {});
+          if (window.currentLogFilename) {
+            const match = String(window.currentLogFilename).match(/Session(\d+)/i);
+            const parsedSessionId = match ? Number(match[1]) : 0;
+            if (Number.isFinite(parsedSessionId) && parsedSessionId > 0) {
+              post("loadLogNotes", { sessionId: parsedSessionId });
+            } else {
+              post("loadLogNotes", { filename: window.currentLogFilename });
+            }
+          }
+
           if (status) {
             status.textContent = "Session log loaded.";
           }

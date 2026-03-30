@@ -2270,55 +2270,75 @@
           );
           break;
 
-        case "logNotes":
-          if (!Array.isArray(msg.notes) || msg.notes.length === 0) {
+        case "logNotes": {
+          // 1. Safely unwrap the API response
+          let notesList = [];
+          if (Array.isArray(msg.notes)) {
+            notesList = msg.notes;
+          } else if (msg.notes && Array.isArray(msg.notes.data)) {
+            notesList = msg.notes.data;
+          } else if (msg.notes && Array.isArray(msg.notes.notes)) {
+            notesList = msg.notes.notes;
+          }
+
+          if (notesList.length === 0) {
             break;
           }
+          
           const notesByEvent = new Map();
-          msg.notes.forEach((note) => {
-            const id = Number(
-              note?.sessionEventId ?? note?.SessionEventId ?? note?.eventId ?? note?.EventId ?? note?.Id ?? note?.id ?? 0
-            );
-            if (id) {
-              notesByEvent.set(id, String(note?.text ?? note?.noteText ?? note?.note ?? ""));
+          notesList.forEach((note) => {
+            // 2. Catch every possible capitalization the database might use
+            const id = Number(note?.sessionEventId || note?.SessionEventId || note?.eventId || note?.EventId || note?.Id || note?.id || 0);
+            const text = String(note?.noteText || note?.NoteText || note?.text || note?.Text || note?.note || note?.Note || note?.content || note?.Content || "");
+            
+            if (id && text) {
+              notesByEvent.set(id, text);
             }
           });
 
-          const noteEventRows = document.querySelectorAll('.event');
-          noteEventRows.forEach((row) => {
+          document.querySelectorAll('.event').forEach((row) => {
             const rowId = Number(row.dataset.sessionEventId || 0);
-            if (!rowId) {return;}
+            if (!rowId || !notesByEvent.has(rowId)) return;
 
-            const noteBtn = row.querySelector('.btn-notes');
-            const noteArea = row.querySelector('.event-notes-area');
+            const noteText = notesByEvent.get(rowId);
+
+            // Hide the text area
             const noteTextarea = row.querySelector('.event-note-input');
-            const emptyIcon = row.querySelector('.note-icon-empty');
-            const filledIcon = row.querySelector('.note-icon-filled');
+            if (noteTextarea) noteTextarea.value = noteText;
+            const noteArea = row.querySelector('.event-notes-area');
+            if (noteArea) noteArea.style.display = 'none';
 
-            if (notesByEvent.has(rowId)) {
-              const noteText = notesByEvent.get(rowId);
-
-              if (noteBtn) {
-                noteBtn.dataset.hasNote = 'true';
-                noteBtn.style.filter = 'none';
-                noteBtn.style.opacity = '1';
-              }
-
+            // Fill the icon
+            const noteBtn = row.querySelector('.btn-notes');
+            if (noteBtn) {
+              noteBtn.dataset.hasNote = 'true';
+              noteBtn.style.filter = 'none';
+              noteBtn.style.opacity = '1';
+              const emptyIcon = noteBtn.querySelector('.note-icon-empty');
+              const filledIcon = noteBtn.querySelector('.note-icon-filled');
               if (emptyIcon && filledIcon) {
                 emptyIcon.style.display = 'none';
                 filledIcon.style.display = 'inline';
               }
+            }
 
-              if (noteTextarea) {
-                noteTextarea.value = noteText || '';
-              }
-
+            // Draw the green div
+            let noteLabel = row.querySelector(".loaded-note-text");
+            if (!noteLabel) {
+              noteLabel = document.createElement("div");
+              noteLabel.className = "loaded-note-text";
+              noteLabel.style.cssText = "margin-top:10px; padding:10px 14px; border-left:4px solid #10b981; background:rgba(16, 185, 129, 0.1); color:#10b981; font-size:0.9rem; border-radius:4px; font-weight: 500; font-family: monospace;";
+              
               if (noteArea) {
-                noteArea.style.display = 'none';
+                row.insertBefore(noteLabel, noteArea);
+              } else {
+                row.appendChild(noteLabel);
               }
             }
+            noteLabel.innerHTML = `<strong>📝 Teacher note:</strong> ${noteText}`;
           });
           break;
+        }
 
         case "dashboardData":
           dashboardDataCache = msg.data || null;
@@ -2866,6 +2886,14 @@
           renderAssignmentStudentSessions(msg.data || {});
           if (status) {
             status.textContent = "Student sessions loaded.";
+          }
+          
+          // Ask the DB for the notes for all these sessions!
+          if (msg.data && Array.isArray(msg.data.sessions)) {
+             const uniqueIds = [...new Set(msg.data.sessions.map(s => s.SessionId || s.sessionId))].filter(id => id);
+             uniqueIds.forEach(id => {
+                post("loadLogNotes", { sessionId: Number(id) });
+             });
           }
           break;
         }
@@ -4895,82 +4923,59 @@
 
           groupEvents.forEach((e) => {
             const row = document.createElement("div");
-            row.className = "card";
+            row.className = "card event"; // ADDED 'event' class so saving works
             row.style.cssText =
               "border:1px solid var(--border); background:var(--surface); padding:12px; margin-bottom:10px; border-radius:8px;";
 
             const items = [];
             const ed = e.eventData;
 
+            // Attach database IDs to the row so the save button can find them
+            row.dataset.sessionEventId = ed?.Id || ed?.eventId || ed?.sessionEventId || 0;
+            row.dataset.sessionId = e.sessionId || 0;
+            row.dataset.eventTime = e.occurredAt || "";
+
             const viewStr =
-              ed.View ??
-              ed.view ??
-              ed.fileView ??
-              ed.FileView ??
-              ed.file ??
-              ed.File ??
-              ed.fileName;
-            if (viewStr)
-              {items.push(
-                `<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`,
-              );}
+              ed.View ?? ed.view ?? ed.fileView ?? ed.FileView ?? ed.file ?? ed.File ?? ed.fileName;
+            if (viewStr) {items.push(`<span style="color: var(--muted)">View:</span> <strong>${viewStr}</strong>`);}
 
             const charsChanged =
-              ed.CharsChanged ??
-              ed.charsChanged ??
-              ed.CharsAdded ??
-              ed.charsAdded ??
-              ed.Length ??
-              ed.length ??
-              ed.pasteCharCount;
+              ed.CharsChanged ?? ed.charsChanged ?? ed.CharsAdded ?? ed.charsAdded ?? ed.Length ?? ed.length ?? ed.pasteCharCount;
             if (charsChanged !== undefined && charsChanged !== null)
-              {items.push(
-                `<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`,
-              );}
+              {items.push(`<span style="color: var(--muted)">Chars Changed:</span> <strong>${charsChanged}</strong>`);}
 
             const flightTime = ed.FlightTime ?? ed.flightTime;
             if (flightTime !== undefined && flightTime !== null) {
-              const ftStr = String(flightTime).endsWith("ms")
-                ? flightTime
-                : `${flightTime}ms`;
-              items.push(
-                `<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`,
-              );
+              const ftStr = String(flightTime).endsWith("ms") ? flightTime : `${flightTime}ms`;
+              items.push(`<span style="color: var(--muted)">Flight Time:</span> <strong>${ftStr}</strong>`);
             }
 
-            const windowFocused =
-              ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
+            const windowFocused = ed.WindowFocused ?? ed.windowFocused ?? ed.focused ?? ed.Focused;
             if (windowFocused !== undefined && windowFocused !== null)
-              {items.push(
-                `<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`,
-              );}
+              {items.push(`<span style="color: var(--muted)">Window Focused:</span> <strong>${windowFocused}</strong>`);}
 
-            const workspace =
-              ed.WorkspaceName ??
-              ed.workspaceName ??
-              ed.Workspace ??
-              ed.workspace;
-            if (workspace)
-              {items.push(
-                `<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`,
-              );}
+            const workspace = ed.WorkspaceName ?? ed.workspaceName ?? ed.Workspace ?? ed.workspace;
+            if (workspace) {items.push(`<span style="color: var(--muted)">Workspace:</span> <strong>${workspace}</strong>`);}
 
             let noteHtml = "";
             if (ed.possibleAiDetection)
               {noteHtml = `<div style="margin-top: 10px; width: 100%; padding: 10px 12px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; color: #b45309; font-size: 0.85rem; border-radius: 0 6px 6px 0;"><strong>Notice:</strong> ${ed.possibleAiDetection}</div>`;}
 
             const rowNum = ed.Row ?? ed.row ?? e.index + 1;
-            let bodyHtml =
-              items.length > 0
-                ? items.join(
-                    ' <span style="color: var(--border); margin: 0 6px;">|</span> ',
-                  )
+            let bodyHtml = items.length > 0
+                ? items.join(' <span style="color: var(--border); margin: 0 6px;">|</span> ')
                 : `<code style="background: var(--bg); padding: 4px 6px; border-radius: 4px; font-size: 0.8rem; word-break: break-all; color: var(--muted);">${JSON.stringify(ed)}</code>`;
 
             row.innerHTML = `
                   <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
                     <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                       <span style="font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; background: ${e.badgeBg}; color: ${e.badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">${e.eventType}</span>
+                      
+                      <button class="btn-notes" data-has-note="false" style="background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;" title="Add/view notes">
+                        <span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span>
+                        <span class="note-icon-filled" style="display:none;">📝</span>
+                      </button>
+
                       <span style="font-size: 0.85rem; color: var(--muted);"><strong>Session ${e.sessionId}</strong> &bull; ${formatSessionDate(e.occurredAt)}</span>
                     </div>
                     <div class="meta" style="font-size:0.75rem; white-space:nowrap; background: var(--bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Row ${rowNum}</div>
@@ -4979,12 +4984,91 @@
                     ${bodyHtml}
                     ${noteHtml}
                   </div>
+                  <div class="event-notes-area" style="display:none; margin-top:12px; padding-top:8px; border-top:1px solid var(--border);">
+                    <textarea class="event-note-input" placeholder="Add private instructor notes for this event..." style="width:100%; min-height:60px; padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); font-family:monospace; font-size:0.9rem;" rows="3"></textarea>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                      <button class="btn-save-note" style="background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Save Note</button>
+                      <button class="btn-close-notes" style="background:var(--border); color:var(--fg); border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Cancel</button>
+                    </div>
+                  </div>
                 `;
             listContainer.appendChild(row);
           });
         });
-      };
 
+        // ==============================================================
+        // LISTENERS GO HERE: INSIDE renderList, BUT AFTER THE LOOPS
+        // ==============================================================
+
+        listContainer.querySelectorAll(".btn-notes").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const eventRow = btn.closest(".event");
+            const notesArea = eventRow?.querySelector(".event-notes-area");
+            if (notesArea) {
+              const isVisible = notesArea.style.display !== "none";
+              notesArea.style.display = isVisible ? "none" : "block";
+              if (!isVisible) {
+                notesArea.querySelector(".event-note-input")?.focus();
+              }
+            }
+          });
+        });
+
+        listContainer.querySelectorAll(".btn-save-note").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const eventRow = btn.closest(".event");
+            const notesArea = eventRow?.querySelector(".event-notes-area");
+            const textarea = notesArea?.querySelector(".event-note-input");
+            const noteText = textarea?.value || "";
+
+            const allNotes = [];
+            document.querySelectorAll(".event").forEach((row) => {
+              const input = row.querySelector(".event-note-input");
+              const ts = row.dataset.eventTime || "";
+              const text = input?.value || "";
+              const sessionEventId = Number(row.dataset.sessionEventId || 0);
+              const sessionId = Number(row.dataset.sessionId || 0);
+
+              if (text && sessionEventId > 0) {
+                allNotes.push({ 
+                  timestamp: ts, 
+                  text: text,
+                  sessionEventId: sessionEventId,
+                  sessionId: sessionId 
+                });
+              }
+            });
+
+            if (window.postTeacherMessage) {
+              window.postTeacherMessage("saveLogNotes", {
+                filename: window.currentLogFilename || "db-session", 
+                notes: allNotes,
+              });
+            }
+
+            const noteBtn = eventRow?.querySelector(".btn-notes");
+            if (noteBtn) {
+              const isEmpty = !noteText || noteText.trim() === "";
+              noteBtn.dataset.hasNote = isEmpty ? "false" : "true";
+              noteBtn.querySelector(".note-icon-empty").style.display = isEmpty ? "inline" : "none";
+              noteBtn.querySelector(".note-icon-filled").style.display = isEmpty ? "none" : "inline";
+            }
+            if (notesArea) {notesArea.style.display = "none";}
+          });
+        });
+
+        listContainer.querySelectorAll(".btn-close-notes").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const notesArea = btn.closest(".event")?.querySelector(".event-notes-area");
+            if (notesArea) {notesArea.style.display = "none";}
+          });
+        });
+
+      }; // <--- THIS IS THE REAL END OF THE renderList FUNCTION
+
+      // ==============================================================
+      // THESE GO OUTSIDE OF renderList
+      // ==============================================================
       filterSessionEl.onchange = renderList;
       filterEventTypeEl.onchange = renderList;
       sortOrderEl.onchange = renderList;
@@ -5228,6 +5312,11 @@
       // --- LIST VIEW RENDERING (Existing Logic) ---
       events.forEach((evt) => {
         const card = document.createElement("div");
+        card.className = "event"; // MUST have this class so the save logic finds it
+        card.dataset.sessionEventId = evt.data?.Id || evt.data?.eventId || 0;
+        card.dataset.sessionId = evt.session || 0;
+        card.dataset.eventTime = evt.timestamp || "";
+
         card.style.cssText =
           "background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;";
 
@@ -5264,11 +5353,26 @@
         typeBadge.style.cssText = `font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;`;
         typeBadge.textContent = evt.eventType || "Unknown Event";
 
+        // Wrap the badge and add the notes button next to it
+        const badgeWrapper = document.createElement("div");
+        badgeWrapper.style.display = "flex";
+        badgeWrapper.style.gap = "8px";
+        badgeWrapper.style.alignItems = "center";
+        badgeWrapper.appendChild(typeBadge);
+
+        const noteBtn = document.createElement("button");
+        noteBtn.className = "btn-notes";
+        noteBtn.dataset.hasNote = "false";
+        noteBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:1.1rem; padding:0 4px; position:relative;";
+        noteBtn.title = "Add/view notes";
+        noteBtn.innerHTML = `<span class="note-icon-empty" style="filter: grayscale(100%) opacity(0.5);">📝</span><span class="note-icon-filled" style="display:none;">📝</span>`;
+        badgeWrapper.appendChild(noteBtn);
+
         const timeSpan = document.createElement("span");
         timeSpan.style.cssText = "font-size: 0.8rem; color: var(--muted);";
         timeSpan.innerHTML = `<strong>Session ${evt.session}</strong> &bull; Row ${evt.row} &bull; ${evt.timestamp}`;
 
-        header.appendChild(typeBadge);
+        header.appendChild(badgeWrapper);
         header.appendChild(timeSpan);
         card.appendChild(header);
 
@@ -5315,7 +5419,101 @@
         }
 
         card.appendChild(body);
+
+        // Add the hidden text box
+        const notesArea = document.createElement("div");
+        notesArea.className = "event-notes-area";
+        notesArea.style.cssText = "display:none; margin-top:12px; padding-top:8px; border-top:1px solid var(--border);";
+        notesArea.innerHTML = `<textarea class="event-note-input" placeholder="Add private instructor notes for this event..." style="width:100%; min-height:60px; padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--bg); color:var(--fg); font-family:monospace; font-size:0.9rem;" rows="3"></textarea><div style="display:flex; gap:8px; margin-top:8px;"><button class="btn-save-note" style="background:var(--accent); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Save Note</button><button class="btn-close-notes" style="background:var(--border); color:var(--fg); border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.9rem;">Cancel</button></div>`;
+        card.appendChild(notesArea);
+
         listContainer.appendChild(card);
+      });
+
+      // Wire up the buttons for this view
+      listContainer.querySelectorAll(".btn-notes").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          if (notesArea) {
+            const isVisible = notesArea.style.display !== "none";
+            notesArea.style.display = isVisible ? "none" : "block";
+            if (!isVisible) {
+              const textarea = notesArea.querySelector(".event-note-input");
+              if (textarea) {
+                textarea.focus();
+              }
+            }
+          }
+        });
+      });
+
+      listContainer.querySelectorAll(".btn-save-note").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          const textarea = notesArea?.querySelector(".event-note-input");
+          const noteText = textarea?.value || "";
+
+          if (!window.currentLogFilename) {
+            return;
+          }
+
+          const allNotes = [];
+          document.querySelectorAll(".event").forEach((row) => {
+            const area = row.querySelector(".event-notes-area");
+            const input = area?.querySelector(".event-note-input");
+            const ts = row.dataset.eventTime || "";
+            const text = input?.value || "";
+            
+            const sessionEventId = Number(row.dataset.sessionEventId || 0);
+            const sessionId = Number(row.dataset.sessionId || 0);
+
+            if (ts && text) {
+              const notePayload = { timestamp: ts, text };
+              if (sessionEventId > 0) {
+                notePayload.sessionEventId = sessionEventId;
+              }
+              if (sessionId > 0) {
+                notePayload.sessionId = sessionId;
+              }
+              allNotes.push(notePayload);
+            }
+          });
+
+          if (window.postTeacherMessage) {
+            window.postTeacherMessage("saveLogNotes", {
+              filename: window.currentLogFilename,
+              notes: allNotes,
+            });
+          }
+
+          const noteBtn = eventRow?.querySelector(".btn-notes");
+          if (noteBtn) {
+            const isEmpty = !noteText || noteText.trim() === "";
+            noteBtn.dataset.hasNote = isEmpty ? "false" : "true";
+            const emptyIcon = noteBtn.querySelector(".note-icon-empty");
+            const filledIcon = noteBtn.querySelector(".note-icon-filled");
+            if (emptyIcon && filledIcon) {
+              emptyIcon.style.display = isEmpty ? "inline" : "none";
+              filledIcon.style.display = isEmpty ? "none" : "inline";
+            }
+          }
+
+          if (notesArea) {
+            notesArea.style.display = "none";
+          }
+        });
+      });
+
+      listContainer.querySelectorAll(".btn-close-notes").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventRow = btn.closest(".event");
+          const notesArea = eventRow?.querySelector(".event-notes-area");
+          if (notesArea) {
+            notesArea.style.display = "none";
+          }
+        });
       });
 
       view.style.display = "block";

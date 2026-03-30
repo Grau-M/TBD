@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { storageManager, state } from '../state';
 import { getHtml } from './getHtml';
 import { requireRoleAccess, getWorkspaceAuthSession } from '../auth';
-import { apiGet } from '../api';
+import { apiGet, apiPut } from '../api';
 import { fetchAndParseLog } from './utilis/LogHelpers';
 import { 
   handleAnalyzeLogs, 
@@ -158,13 +158,48 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
         }
 
         case 'loadLogNotes': {
-          if (panel) { await handleLoadLogNotes(panel, SECRET_PASSPHRASE, message.filename); }
-          break;
+            try {
+                if (message.sessionId) {
+                    // Using your exact GET endpoint
+                    const notes = await apiGet(`/api/notes/instructor-notes?sessionId=${message.sessionId}`);
+                    panel?.webview.postMessage({ command: 'logNotes', notes: notes });
+                }
+            } catch (err) {
+                console.error("Failed to load notes", err);
+            }
+            break;
         }
 
         case 'saveLogNotes': {
-          if (panel) { await handleSaveLogNotes(panel, SECRET_PASSPHRASE, message.filename, message.notes); }
-          break;
+            try {
+                // Grab the current teacher's ID from the workspace session (fallback to 1 if missing)
+                const session = getWorkspaceAuthSession(context) as any;
+                const teacherId = Number(session?.authUserId || 1);
+
+                // Loop through the notes array sent from the UI and PUT each one
+                for (const note of message.notes) {
+                    if (!note.text) {continue;}
+                    
+                    // Using your exact PUT payload structure
+                    await apiPut('/api/notes/instructor-notes', {
+                        sessionEventId: note.sessionEventId,
+                        sessionId: note.sessionId || message.notes[0]?.sessionId,
+                        teacherAuthUserId: teacherId,
+                        noteText: note.text
+                    });
+                }
+
+                panel?.webview.postMessage({ command: 'success', message: 'Notes saved to database.' });
+                
+                // Immediately ask the DB for the notes back using the GET route so the green div draws!
+                if (message.notes && message.notes.length > 0 && message.notes[0].sessionId) {
+                    const updatedNotes = await apiGet(`/api/notes/instructor-notes?sessionId=${message.notes[0].sessionId}`);
+                    panel?.webview.postMessage({ command: 'logNotes', notes: updatedNotes });
+                }
+            } catch (err: any) {
+                panel?.webview.postMessage({ command: 'error', message: 'Failed to save notes to database.' });
+            }
+            break;
         }
 
         case 'generateStudentSummary': {
@@ -531,7 +566,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             const sessionGroups = new Map();
             for (const e of events) {
                 const sid = Number(e.sessionId ?? e.SessionId ?? e.id ?? 0);
-                if (!sessionGroups.has(sid)) sessionGroups.set(sid, []);
+                if (!sessionGroups.has(sid)) {sessionGroups.set(sid, []);}
                 sessionGroups.get(sid).push(e);
             }
 

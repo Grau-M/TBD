@@ -444,6 +444,12 @@ export class ApiStorageManager {
         this.context = context;
         this.syncStatus.state = 'synced';
         this.syncStatus.lastError = null;
+        
+        // Restore the last synced time from permanent storage
+        const savedSyncTime = context.workspaceState.get<string>('tbd.lastSyncedAt');
+        if (savedSyncTime) {
+            this.syncStatus.lastSyncedAt = savedSyncTime;
+        }
            
         try {
             await this.ensureStudentWorkspaceLinkFile();
@@ -614,11 +620,15 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
             throw error; 
         }
 
-        // 7. Resolve status
+       // 7. Resolve status
         if (!isOffline) {
-            this.syncStatus.lastSyncedAt = new Date().toISOString();
+            const nowIso = new Date().toISOString();
+            this.syncStatus.lastSyncedAt = nowIso;
             this.syncStatus.state = 'synced';
             this.syncStatus.lastError = null;
+            
+            // Save the timestamp to permanent storage so it survives a reload
+            await this.context.workspaceState.update('tbd.lastSyncedAt', nowIso);
         }
 
         // 8. Teammate's Beautiful Console Output Grouping

@@ -127,22 +127,36 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     ).toString();
 
     const render = () => {
+        // Fetch the background sync status to get the last synced time
+        const syncStatus = (storageManager as any).getBackgroundSyncStatus();
+        let lastSyncedStr = 'Never';
+        if (syncStatus?.lastSyncedAt) {
+            lastSyncedStr = new Date(syncStatus.lastSyncedAt).toLocaleString();
+        }
+
         // 4. SWAP TO REAL UI ONCE READY
-        activePanel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus, logoImageUri);
+        activePanel.webview.html = getDashboardHtml(session, assignmentInfo, apiStatus, logoImageUri, lastSyncedStr);
     };
 
     render();
 
     activePanel.webview.onDidReceiveMessage(async (message) => {
-        if (message.command === 'forceSync') {
+       if (message.command === 'forceSync') {
             try {
                 await vscode.commands.executeCommand('tbd-logger.forceSync');
-                activePanel.webview.postMessage({ command: 'syncComplete' });
+                
+                // Grab the fresh timestamp after the sync finishes
+                const newStatus = (storageManager as any).getBackgroundSyncStatus();
+                const updatedTime = newStatus?.lastSyncedAt 
+                    ? new Date(newStatus.lastSyncedAt).toLocaleString() 
+                    : new Date().toLocaleString();
+
+                activePanel.webview.postMessage({ command: 'syncComplete', lastSynced: updatedTime });
             } catch (err) {
                 vscode.window.showErrorMessage("Sync Failed.");
                 activePanel.webview.postMessage({ command: 'syncError' });
             }
-        } 
+        }
         
         else if (message.command === 'triggerManualSync') {
             if (!currentWorkspaceFolder) {
@@ -307,7 +321,7 @@ export async function openStudentSyncView(context: vscode.ExtensionContext) {
     openingPanel = false;
 }
 
-function getDashboardHtml(session: any, assignment: any, apiStatus: string, logoImageUri: string) {
+function getDashboardHtml(session: any, assignment: any, apiStatus: string, logoImageUri: string, lastSyncedStr: string = 'Never') {
     const isOnline = apiStatus === 'Online';
     const statusColor = isOnline ? 'var(--success)' : 'var(--error)';
     const syncStatusText = isOnline ? 'Sync Online' : 'Sync Offline';
@@ -365,6 +379,10 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string, logo
                     <div class="field">
                         <div class="label">Workspace Path</div>
                         <div class="value">${assignment.workspaceRootPath || 'N/A'}</div>
+                    </div>
+                    <div class="field" style="background: rgba(22, 163, 74, 0.05); border-color: rgba(22, 163, 74, 0.2);">
+                        <div class="label">Last Synced</div>
+                        <div class="value" id="lastSyncedValue" style="color: var(--success); font-family: monospace;">${lastSyncedStr}</div>
                     </div>
                 </div>
                 <button id="forceSyncBtn" class="btn-sync" ${isOnline ? '' : 'disabled title="Manual sync is unavailable while the API is offline."'}>
@@ -508,6 +526,13 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string, logo
                 forceBtn.disabled = false;
                 forceBtn.innerText = '✅ Sync Successful';
                 forceBtn.style.background = 'var(--success)';
+                
+                // Dynamically update the Last Synced text without refreshing the panel
+                const lastSyncedEl = document.getElementById('lastSyncedValue');
+                if (lastSyncedEl && message.lastSynced) {
+                    lastSyncedEl.innerText = message.lastSynced;
+                }
+
                 setTimeout(() => { 
                     forceBtn.innerText = 'Manual Sync';
                     forceBtn.style.background = 'var(--accent)';

@@ -455,7 +455,7 @@ export async function handleGenerateProfile(panel: vscode.WebviewPanel, password
                     if (expectedUser !== sessionUser) {return panel.webview.postMessage({ command: 'error', message: 'Profile cancelled: Student mismatch.' });}
                     if (expectedProject !== sessionProject) {return panel.webview.postMessage({ command: 'error', message: 'Profile cancelled: Project mismatch.' });}
 
-                    const events = parsed.events;
+                    const events = [...parsed.events].sort((a, b) => parseLogTime(a.time) - parseLogTime(b.time));
                     const firstTime = parseLogTime(events[0].time);
                     const lastTime = parseLogTime(events[events.length - 1].time);
                     if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) {totalWallMs += (lastTime - firstTime);}
@@ -465,7 +465,7 @@ export async function handleGenerateProfile(panel: vscode.WebviewPanel, password
                         const t = parseLogTime(e.time);
                         if (prevTime > 0 && t > 0) {
                             const diff = t - prevTime;
-                            if (diff < 5 * 60 * 1000) {totalActiveMs += diff;}
+                            if (diff >= 0 && diff < 5 * 60 * 1000) {totalActiveMs += diff;}
                             if (diff >= 5000 && diff <= 60000) {pauseLengths.push(diff);}
                         }
                         if (t > 0) {prevTime = t;}
@@ -669,16 +669,17 @@ export async function handleGenerateDbTimeline(
                         parsed.sessionHeader?.user ||
                         'Unknown';
 
-                    const sessionProject =
+                   const sessionProject =
                         parsed.sessionHeader?.project ||
                         parsed.sessionHeader?.workspaceName ||
+                        (parsed.events[0]?.workspaceName || parsed.events[0]?.WorkspaceName) ||
                         'Unknown';
 
                     if (expectedUser === null) expectedUser = sessionUser;
                     if (expectedProject === null) expectedProject = sessionProject;
 
-                    if (expectedUser !== sessionUser) expectedUser = 'Multiple Students';
-                    if (expectedProject !== sessionProject) expectedProject = 'Multiple Projects';
+                    if (expectedUser !== sessionUser && expectedUser !== 'Multiple Students') expectedUser = 'Multiple Students';
+                    if (expectedProject !== sessionProject && expectedProject !== 'Multiple Projects') expectedProject = 'Multiple Projects';
 
                     allEvents = allEvents.concat(parsed.events);
                 }
@@ -687,7 +688,21 @@ export async function handleGenerateDbTimeline(
             }
         }
 
-        allEvents.sort((a, b) => parseLogTime(a.time) - parseLogTime(b.time));
+        // Helper to safely extract DB time from varying column names
+        const getTimeMs = (row: any) => {
+            let ed: any = {};
+            if (typeof row.eventData === 'string') {
+                try { ed = JSON.parse(row.eventData); } catch (e) {}
+            } else if (row.eventData && typeof row.eventData === 'object') {
+                ed = row.eventData;
+            }
+            const timeStr = String(row.time || row.occurredAt || row.OccurredAt || row.timestamp || ed.time || '');
+            let ms = parseLogTime(timeStr);
+            if (!ms || isNaN(ms)) ms = new Date(timeStr).getTime();
+            return ms || 0;
+        };
+
+        allEvents.sort((a, b) => getTimeMs(a) - getTimeMs(b));
 
         const gapThresholdMs =
             (context?.globalState?.get<any>('tbdSettings', { inactivityThreshold: 5 })?.inactivityThreshold || 5) *
@@ -698,7 +713,7 @@ export async function handleGenerateDbTimeline(
         let currentPeriod: any = null;
 
         for (let i = 0; i < allEvents.length; i++) {
-            const t = parseLogTime(allEvents[i].time);
+            const t = getTimeMs(allEvents[i]);
             if (t === 0) continue;
 
             if (!currentPeriod) {
@@ -770,20 +785,55 @@ export async function handleGenerateDbProfile(
                         parsed.sessionHeader?.user ||
                         'Unknown';
 
-                    const sessionProject =
-                        parsed.sessionHeader?.project ||
-                        parsed.sessionHeader?.workspaceName ||
-                        'Unknown';
+                    const getTimeMs = (row: any) => {
+                        let ed: any = {};
+                        if (typeof row.eventData === 'string') {
+                            try { ed = JSON.parse(row.eventData); } catch (e) {}
+                        } else if (row.eventData && typeof row.eventData === 'object') {
+                            ed = row.eventData;
+                        }
+                        const timeStr = String(row.time || row.occurredAt || row.OccurredAt || row.timestamp || ed.time || '');
+                        let ms = parseLogTime(timeStr);
+                        if (!ms || isNaN(ms)) ms = new Date(timeStr).getTime();
+                        return ms || 0;
+                    };
+
+                    const events = [...parsed.events].sort((a, b) => getTimeMs(a) - getTimeMs(b));
+                // FIND PROJECT ROBUSTLY: Look through events if header is missing or says "Unknown"
+                    let proj = parsed.sessionHeader?.project || parsed.sessionHeader?.workspaceName || null;
+                    
+                    if (!proj || proj.toLowerCase().includes('unknown')) {
+                        for (const evt of events) {
+                            let ed: any = {};
+                            if (typeof evt.eventData === 'string') {
+                                try { ed = JSON.parse(evt.eventData); } catch(e){}
+                            } else if (typeof evt.EventData === 'string') {
+                                try { ed = JSON.parse(evt.EventData); } catch(e){}
+                            } else if (evt.eventData && typeof evt.eventData === 'object') {
+                                ed = evt.eventData;
+                            }
+                            
+                            // Check all common database property variations
+                            const p = evt.workspaceName || evt.WorkspaceName || evt.project || 
+                                      ed.workspaceName || ed.WorkspaceName || ed.project || ed.Project;
+                                      
+                            if (p && typeof p === 'string' && p.trim() !== '' && !p.toLowerCase().includes('unknown')) {
+                                proj = p.trim();
+                                break; // Found a valid name, stop searching
+                            }
+                        }
+                    }
+                    
+                    const sessionProject = (proj && !proj.toLowerCase().includes('unknown')) ? proj : 'Unknown';
 
                     if (expectedUser === null) expectedUser = sessionUser;
                     if (expectedProject === null) expectedProject = sessionProject;
 
-                    if (expectedUser !== sessionUser) expectedUser = 'Multiple Students';
-                    if (expectedProject !== sessionProject) expectedProject = 'Multiple Projects';
+                    if (expectedUser !== sessionUser && expectedUser !== 'Multiple Students') expectedUser = 'Multiple Students';
+                    if (expectedProject !== sessionProject && expectedProject !== 'Multiple Projects') expectedProject = 'Multiple Projects';
 
-                    const events = parsed.events;
-                    const firstTime = parseLogTime(events[0].time);
-                    const lastTime = parseLogTime(events[events.length - 1].time);
+                    const firstTime = getTimeMs(events[0]);
+                    const lastTime = getTimeMs(events[events.length - 1]);
 
                     if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) {
                         totalWallMs += (lastTime - firstTime);
@@ -792,11 +842,11 @@ export async function handleGenerateDbProfile(
                     let prevTime = 0;
 
                     for (const e of events) {
-                        const t = parseLogTime(e.time);
+                        const t = getTimeMs(e);
 
                         if (prevTime > 0 && t > 0) {
                             const diff = t - prevTime;
-                            if (diff < 5 * 60 * 1000) {
+                            if (diff >= 0 && diff < 5 * 60 * 1000) {
                                 totalActiveMs += diff;
                             }
                             if (diff >= 5000 && diff <= 60000) {
@@ -808,14 +858,33 @@ export async function handleGenerateDbProfile(
                             prevTime = t;
                         }
 
-                        const evType = (e.eventType || '').toLowerCase();
+                        let ed: any = {};
+                        if (typeof e.eventData === 'string') {
+                            try { ed = JSON.parse(e.eventData); } catch (err) {}
+                        } else if (e.eventData && typeof e.eventData === 'object') {
+                            ed = e.eventData;
+                        }
+
+                        // Robustly search for the event type
+                        let evType = String(e.eventType || e.EventType || e.event_type || e.type || 'unknown').toLowerCase().trim();
+                        if (evType === 'unknown' && ed.eventType) {
+                            evType = String(ed.eventType).toLowerCase().trim();
+                        }
 
                         if (
                             evType === 'input' ||
                             evType === 'key' ||
                             evType === 'keystroke'
                         ) {
-                            keystrokes++;
+                            let chars = 1; // Default to 1 if missing
+                            if (typeof ed.charsAdded === 'number') chars = ed.charsAdded;
+                            else if (typeof ed.CharsChanged === 'number') chars = ed.CharsChanged;
+                            else if (typeof e.charsChanged === 'number') chars = e.charsChanged;
+                            else if (typeof e.CharsChanged === 'number') chars = e.CharsChanged;
+                            else if (typeof ed.length === 'number') chars = ed.length;
+                            else if (typeof ed.text === 'string') chars = ed.text.length;
+                            
+                            keystrokes += chars;
                         }
 
                         if (
@@ -844,12 +913,13 @@ export async function handleGenerateDbProfile(
                         ) {
                             pastes++;
 
+                            const source = String(e.source || e.pastedFrom || ed.source || ed.pastedFrom || '');
                             if (
-                                e.source === 'external' ||
-                                e.pastedFrom === 'external' ||
+                                source === 'external' ||
                                 evType === 'ai-paste' ||
                                 evType === 'external-paste' ||
-                                e.internal === false
+                                e.internal === false ||
+                                ed.internal === false
                             ) {
                                 externalPastes++;
                             }
@@ -872,8 +942,8 @@ export async function handleGenerateDbProfile(
                 sessionsAnalyzed: sessionRefs.length,
                 totalActiveMins: Math.max(0, Math.round(activeMinsFloat)),
                 totalWallMins: Math.max(0, Math.round(totalWallMs / 60000)),
-                wpm: activeMinsFloat > 0 ? Math.round((keystrokes / 5) / activeMinsFloat) : 0,
-                editRate: activeMinsFloat > 0 ? Math.round(edits / activeMinsFloat) : 0,
+                wpm: activeMinsFloat > 0 ? Number(((keystrokes / 5) / activeMinsFloat).toFixed(1)) : 0,
+                editRate: activeMinsFloat > 0 ? Number((edits / activeMinsFloat).toFixed(1)) : 0,
                 pasteFreq: Math.round(pastes / activeHoursFloat),
                 avgPauseMs:
                     pauseLengths.length > 0

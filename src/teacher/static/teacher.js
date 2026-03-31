@@ -2140,10 +2140,12 @@
         if (sessionDropdown) {
           Array.from(sessionDropdown.options).forEach((opt) => {
             if (opt.value !== "all") {
+              // Read the raw database session ID stored on the option element
+              const rawId = opt.dataset.rawSessionId || opt.value;
               const label = document.createElement("label");
               label.style.cssText =
                 "display: flex; align-items: center; gap: 8px; cursor: pointer;";
-              label.innerHTML = `<input type="checkbox" class="session-modal-checkbox" value="${opt.value}" checked> Session ${opt.value}`;
+              label.innerHTML = `<input type="checkbox" class="session-modal-checkbox" value="${rawId}" checked> Session ${opt.value}`;
               sessionModalList.appendChild(label);
             }
           });
@@ -2480,14 +2482,20 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) {$("logs-tab").classList.add("active");}
-          if ($("nav-logs")) {$("nav-logs").classList.add("active");}
+          if ($("logs-tab")) {
+            $("logs-tab").classList.add("active");
+          }
+          if ($("nav-logs")) {
+            $("nav-logs").classList.add("active");
+          }
 
           // 2. Ensure the viewer container is visible
-          if ($("logs-viewer-container"))
-            {$("logs-viewer-container").style.display = "block";}
-          if ($("logs-log-name"))
-            {$("logs-log-name").textContent = "Generated Behavioral Profile";}
+          if ($("logs-viewer-container")) {
+            $("logs-viewer-container").style.display = "block";
+          }
+          if ($("logs-log-name")) {
+            $("logs-log-name").textContent = "Generated Behavioral Profile";
+          }
 
           // 3. Apply better labels, then render
           const enrichedProfile = window.applyGeneratedLabels
@@ -2497,7 +2505,9 @@
             window.TeacherUI.renderProfile(enrichedProfile);
           }
 
-          if (status) {status.textContent = "Behavioral profile generated.";}
+          if (status) {
+            status.textContent = "Behavioral profile generated.";
+          }
           break;
         }
 
@@ -2509,14 +2519,20 @@
           document
             .querySelectorAll(".tab-btn")
             .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) {$("logs-tab").classList.add("active");}
-          if ($("nav-logs")) {$("nav-logs").classList.add("active");}
+          if ($("logs-tab")) {
+            $("logs-tab").classList.add("active");
+          }
+          if ($("nav-logs")) {
+            $("nav-logs").classList.add("active");
+          }
 
           // 2. Ensure the viewer container is visible
-          if ($("logs-viewer-container"))
-            {$("logs-viewer-container").style.display = "block";}
-          if ($("logs-log-name"))
-            {$("logs-log-name").textContent = "Generated Visual Timeline";}
+          if ($("logs-viewer-container")) {
+            $("logs-viewer-container").style.display = "block";
+          }
+          if ($("logs-log-name")) {
+            $("logs-log-name").textContent = "Generated Visual Timeline";
+          }
 
           // 3. Apply better labels, then render
           const enrichedTimeline = window.applyGeneratedLabels
@@ -2526,7 +2542,9 @@
             window.TeacherUI.renderTimeline(enrichedTimeline);
           }
 
-          if (status) {status.textContent = "Timeline generated.";}
+          if (status) {
+            status.textContent = "Timeline generated.";
+          }
           break;
         }
 
@@ -4574,7 +4592,9 @@
           ["SessionId", "sessionId", "id", "Id"],
           "Unknown",
         );
-        if (sid !== "Unknown") {rawSessionIds.add(Number(sid));}
+        if (sid !== "Unknown") {
+          rawSessionIds.add(Number(sid));
+        }
       });
       const sortedRawIds = Array.from(rawSessionIds).sort((a, b) => a - b);
       const relativeSessionMap = new Map();
@@ -4879,6 +4899,17 @@
       uniqueSessionIds.forEach((id) => {
         const opt = document.createElement("option");
         opt.value = id;
+
+        // Locate the raw database ID corresponding to this relative ID
+        let rawId = id;
+        for (const [rId, relId] of relativeSessionMap.entries()) {
+          if (String(relId) === String(id) && rId !== "Unknown") {
+            rawId = rId;
+            break;
+          }
+        }
+        opt.dataset.rawSessionId = rawId; // Store the real database ID for the backend
+
         opt.textContent = `Session ${id}`;
         filterSessionEl.appendChild(opt);
       });

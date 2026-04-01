@@ -2475,38 +2475,90 @@
           break;
 
         case "profileData": {
-          // 1. Force the UI to switch to the Logs Tab so you can actually see the chart
-          document
-            .querySelectorAll(".tab-pane")
-            .forEach((el) => el.classList.remove("active"));
-          document
-            .querySelectorAll(".tab-btn")
-            .forEach((el) => el.classList.remove("active"));
-          if ($("logs-tab")) {
-            $("logs-tab").classList.add("active");
-          }
-          if ($("nav-logs")) {
-            $("nav-logs").classList.add("active");
-          }
-
-          // 2. Ensure the viewer container is visible
-          if ($("logs-viewer-container")) {
-            $("logs-viewer-container").style.display = "block";
-          }
-          if ($("logs-log-name")) {
-            $("logs-log-name").textContent = "Generated Behavioral Profile";
-          }
-
-          // 3. Apply better labels, then render
           const enrichedProfile = window.applyGeneratedLabels
             ? window.applyGeneratedLabels(msg.data || {})
             : msg.data;
-          if (window.TeacherUI && window.TeacherUI.renderProfile) {
-            window.TeacherUI.renderProfile(enrichedProfile);
-          }
 
-          if (status) {
-            status.textContent = "Behavioral profile generated.";
+          // INLINE STUDENT BEHAVIORAL PROFILE TAB
+          if (
+            pendingGeneratedContext === "student" &&
+            $("db-session-behavior-container")
+          ) {
+            const container = $("db-session-behavior-container");
+            const btn = $("btn-db-view-behavior");
+
+            container.innerHTML = `
+                <div class="card" style="padding: 20px; border: 1px solid var(--border); border-top: 4px solid var(--accent); background: var(--surface); margin-top: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 16px;">
+                        <div>
+                            <h2 style="margin: 0 0 8px 0; color: var(--fg);">Behavioral Profile: ${enrichedProfile.user || "Student"}</h2>
+                            <div class="meta" style="font-size: 0.95rem;">
+                                Project: <strong>${enrichedProfile.project || "Unknown"}</strong> | Sessions Analyzed: <strong>${enrichedProfile.sessionsAnalyzed || 0}</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                        <div style="background: var(--bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                            <div style="font-size: 2rem; font-weight: 800; color: var(--accent);">${enrichedProfile.wpm || 0}</div>
+                            <div class="meta" style="margin-top: 8px; font-weight: bold; text-transform: uppercase;">Avg WPM</div>
+                        </div>
+                        <div style="background: var(--bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                            <div style="font-size: 2rem; font-weight: 800; color: #0891b2;">${enrichedProfile.editRate || 0}</div>
+                            <div class="meta" style="margin-top: 8px; font-weight: bold; text-transform: uppercase;">Edits/min (Code Churn)</div>
+                        </div>
+                        <div style="background: var(--bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                            <div style="font-size: 2rem; font-weight: 800; color: #f59e0b;">${enrichedProfile.pasteFreq || 0}</div>
+                            <div class="meta" style="margin-top: 8px; font-weight: bold; text-transform: uppercase;">Pastes/hr</div>
+                        </div>
+                        <div style="background: var(--bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                            <div style="font-size: 2rem; font-weight: 800; color: #10b981;">${enrichedProfile.avgPauseMs ? (enrichedProfile.avgPauseMs / 1000).toFixed(1) + "s" : "N/A"}</div>
+                            <div class="meta" style="margin-top: 8px; font-weight: bold; text-transform: uppercase;">Avg Micro-Pause</div>
+                        </div>
+                        <div style="background: var(--bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: 800; color: #8b5cf6;">${enrichedProfile.internalPasteRatio || 0}% Int<br>${enrichedProfile.externalPasteRatio || 0}% Ext</div>
+                            <div class="meta" style="margin-top: 8px; font-weight: bold; text-transform: uppercase;">Int vs Ext Paste</div>
+                        </div>
+                        <div style="background: var(--bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border); text-align: center;">
+                            <div style="font-size: 2rem; font-weight: 800; color: #ef4444;">${enrichedProfile.debugRunFreq || 0}</div>
+                            <div class="meta" style="margin-top: 8px; font-weight: bold; text-transform: uppercase;">Terminal Runs/hr</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            if (btn && btn.className !== "btn btn-primary") {
+              btn.click(); // Ensure the tab is active visually if returning from background
+            }
+            if (status) {
+              status.textContent = "Behavioral profile generated inline.";
+            }
+          }
+          // FALLBACK FOR CLASS VIEW OR RAW FILE VIEW
+          else {
+            document
+              .querySelectorAll(".tab-pane")
+              .forEach((el) => el.classList.remove("active"));
+            document
+              .querySelectorAll(".tab-btn")
+              .forEach((el) => el.classList.remove("active"));
+            if ($("logs-tab")) {
+              $("logs-tab").classList.add("active");
+            }
+            if ($("nav-logs")) {
+              $("nav-logs").classList.add("active");
+            }
+            if ($("logs-viewer-container")) {
+              $("logs-viewer-container").style.display = "block";
+            }
+            if ($("logs-log-name")) {
+              $("logs-log-name").textContent = "Generated Behavioral Profile";
+            }
+
+            if (window.TeacherUI && window.TeacherUI.renderProfile) {
+              window.TeacherUI.renderProfile(enrichedProfile);
+            }
+            if (status) {
+              status.textContent = "Behavioral profile generated.";
+            }
           }
           break;
         }
@@ -4532,9 +4584,10 @@
                     <option value="time-asc">Time (Oldest -> Newest)</option>
                 </select>
             </div>
-            <div style="display:flex; align-items:center; gap:8px; width: 100%; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 12px;">
+          <div style="display:flex; align-items:center; gap:8px; width: 100%; margin-top: 8px; border-top: 1px solid var(--border); padding-top: 12px;">
                 <button id="btn-db-view-list" class="btn btn-primary">📋 Event List</button>
                 <button id="btn-db-view-timeline" class="btn btn-secondary">⏱️ Visual Timeline</button>
+                <button id="btn-db-view-behavior" class="btn btn-secondary">🧠 Behavioral Profile</button>
             </div>
         `;
         list.parentNode.insertBefore(controls, list);
@@ -4547,10 +4600,11 @@
         dynamicTitle.textContent = `${studentName} - Session Logs`;
       }
 
-      // Set up Dual Containers inside the main list area
+      // Set up Containers inside the main list area
       list.innerHTML = `
         <div id="db-session-list-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
         <div id="db-session-timeline-container" style="display: none; flex-direction: column; gap: 12px;"></div>
+        <div id="db-session-behavior-container" style="display: none; flex-direction: column; gap: 12px;"></div>
       `;
 
       const listContainer = document.getElementById(
@@ -4559,24 +4613,73 @@
       const timelineContainer = document.getElementById(
         "db-session-timeline-container",
       );
+      const behaviorContainer = document.getElementById(
+        "db-session-behavior-container",
+      );
 
       // Toggle Logic
       const btnViewList = document.getElementById("btn-db-view-list");
       const btnViewTimeline = document.getElementById("btn-db-view-timeline");
+      const btnViewBehavior = document.getElementById("btn-db-view-behavior");
 
       btnViewList.onclick = (e) => {
         e.target.className = "btn btn-primary";
         btnViewTimeline.className = "btn btn-secondary";
+        if (btnViewBehavior) btnViewBehavior.className = "btn btn-secondary";
         listContainer.style.display = "flex";
         timelineContainer.style.display = "none";
+        behaviorContainer.style.display = "none";
       };
 
       btnViewTimeline.onclick = (e) => {
         e.target.className = "btn btn-primary";
         btnViewList.className = "btn btn-secondary";
+        if (btnViewBehavior) btnViewBehavior.className = "btn btn-secondary";
         listContainer.style.display = "none";
         timelineContainer.style.display = "flex";
+        behaviorContainer.style.display = "none";
       };
+
+      if (btnViewBehavior) {
+        btnViewBehavior.onclick = (e) => {
+          e.target.className = "btn btn-primary";
+          btnViewList.className = "btn btn-secondary";
+          btnViewTimeline.className = "btn btn-secondary";
+          listContainer.style.display = "none";
+          timelineContainer.style.display = "none";
+          behaviorContainer.style.display = "flex";
+
+          // Auto-generate the profile for all sessions if it hasn't been loaded yet
+          if (!behaviorContainer.hasAttribute("data-loaded")) {
+            behaviorContainer.innerHTML =
+              "<div class='meta' style='padding: 20px; text-align: center;'>Loading behavioral profile...</div>";
+            behaviorContainer.setAttribute("data-loaded", "true");
+
+            const filterSessionEl = document.getElementById("filter-session");
+            const allSessionIds = [];
+            if (filterSessionEl) {
+              Array.from(filterSessionEl.options).forEach((opt) => {
+                if (opt.value !== "all") {
+                  allSessionIds.push(opt.dataset.rawSessionId || opt.value);
+                }
+              });
+            }
+
+            pendingGeneratedContext = "student";
+            pendingGeneratedSelectionIds = allSessionIds;
+
+            if (window.postTeacherMessage) {
+              window.postTeacherMessage("generateDbProfile", {
+                context: "student",
+                classId: currentClassId,
+                assignmentId: currentAssignmentId,
+                studentAuthUserId: currentViewedStudentAuthUserId,
+                selectionIds: allSessionIds,
+              });
+            }
+          }
+        };
+      }
 
       if (!sessions.length) {
         empty.style.display = "block";

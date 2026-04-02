@@ -4754,6 +4754,14 @@
           badgeColor = "#ef4444";
           badgeBg = "rgba(239, 68, 68, 0.12)";
         } else if (
+          eType.includes("terminal") ||
+          eType.includes("debug") ||
+          eType === "run" ||
+          eType === "run-script"
+        ) {
+          badgeColor = "#db2777";
+          badgeBg = "rgba(219, 39, 119, 0.12)";
+        } else if (
           eType.includes("input") ||
           eType.includes("edit") ||
           eType.includes("replace") ||
@@ -5729,6 +5737,14 @@
         if (eType.includes("paste")) {
           badgeColor = "#ef4444";
           badgeBg = "rgba(239, 68, 68, 0.1)";
+        } else if (
+          eType.includes("terminal") ||
+          eType.includes("debug") ||
+          eType === "run" ||
+          eType === "run-script"
+        ) {
+          badgeColor = "#db2777";
+          badgeBg = "rgba(219, 39, 119, 0.1)";
         } else if (
           eType.includes("input") ||
           eType.includes("edit") ||

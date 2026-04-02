@@ -16,9 +16,9 @@ function toCategory(eventType: string): ComparisonCategory {
     if (lowered === 'input' || lowered === 'key' || lowered === 'keystroke' || lowered === 'keypress') {return 'input';}
     if (lowered === 'replace' || lowered === 'delete' || lowered === 'backspace' || lowered === 'undo') {return 'edit';}
     if (lowered === 'paste' || lowered === 'clipboard' || lowered === 'pasteevent' || lowered === 'external-paste') {return 'paste';}
-    if (lowered.startsWith('ai-') || lowered === 'ai' || lowered === 'ai-assist') {return 'ai';}
+   if (lowered.startsWith('ai-') || lowered === 'ai' || lowered === 'ai-assist') {return 'ai';}
     if (lowered === 'focuschange' || lowered === 'focusduration' || lowered === 'save') {return 'focus';}
-    if (lowered === 'terminal' || lowered === 'debug' || lowered === 'run' || lowered === 'terminalcommand') {return 'run';}
+    if (lowered.includes('terminal') || lowered.includes('debug') || lowered === 'run' || lowered === 'run-script') {return 'run';}
     return 'other';
 }
 
@@ -473,7 +473,7 @@ export async function handleGenerateProfile(panel: vscode.WebviewPanel, password
                         const evType = (e.eventType || '').toLowerCase();
                         if (evType === 'input' || evType === 'key' || evType === 'keystroke') {keystrokes++;}
                         if (evType === 'replace' || evType === 'delete' || evType === 'backspace') {edits++;}
-                        if (evType === 'terminal' || evType === 'debug' || evType === 'run' || evType === 'terminalcommand') {terminalRuns++;}
+                        if (evType.includes('terminal') || evType.includes('debug') || evType === 'run' || evType === 'run-script') {terminalRuns++;}
                         if (evType === 'paste' || evType === 'clipboard' || evType === 'pasteevent' || evType === 'ai-paste' || evType === 'external-paste') {
                             pastes++;
                             if (e.source === 'external' || e.pastedFrom === 'external' || evType === 'ai-paste' || evType === 'external-paste' || e.internal === false) {
@@ -895,11 +895,11 @@ export async function handleGenerateDbProfile(
                             edits++;
                         }
 
-                        if (
-                            evType === 'terminal' ||
-                            evType === 'debug' ||
+                       if (
+                            evType.includes('terminal') ||
+                            evType.includes('debug') ||
                             evType === 'run' ||
-                            evType === 'terminalcommand'
+                            evType === 'run-script'
                         ) {
                             terminalRuns++;
                         }

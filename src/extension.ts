@@ -840,7 +840,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId
             };
 
-           let apiSession;
+            let apiSession;
             try {
                 apiSession = await withApiTokenRetry(() => apiPost('/api/sessions', payload));
             } catch (postErr: any) {
@@ -849,7 +849,9 @@ export async function activate(context: vscode.ExtensionContext) {
                 const isDuplicate = postErr?.responseBody?.includes('23505') || postErr?.responseBody?.includes('UQ_');
                 if (isDuplicate) {
                     console.log('[TBD Logger] Session number collision detected. Auto-resolving with safe random ID...');
-                    payload.sessionNumber = Math.floor(Math.random() * 900000) + 100000; // Random number between 100000 and 999999
+                    const safeRand = Math.floor(Math.random() * 900000) + 100000; // Random number between 100000 and 999999
+                    payload.sessionNumber = safeRand; 
+                    payload.SessionNumber = safeRand; // <-- Fix: ensure both casing conventions are updated!
                     apiSession = await withApiTokenRetry(() => apiPost('/api/sessions', payload));
                 } else {
                     throw postErr;
@@ -1287,6 +1289,30 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
     context.subscriptions.push(createWindowStateListener());
     context.subscriptions.push(createSaveListener());
 
+    // 1. Track when a new terminal is opened (often happens when "Run Code" is clicked)
+    context.subscriptions.push(vscode.window.onDidOpenTerminal((terminal) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+        void logEvent('terminal_run', { fileView: terminal.name || 'Terminal Opened' });
+    }));
+
+    // 2. Track when a user clicks into the terminal (to manually type "python main.py")
+    context.subscriptions.push(vscode.window.onDidChangeActiveTerminal((terminal) => {
+        if (!terminal || state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+        void logEvent('terminal_run', { fileView: terminal.name || 'Terminal Focused' });
+    }));
+
+    // 3. Track when a Debugger/Run session is started (e.g., hitting F5)
+    context.subscriptions.push(vscode.debug.onDidStartDebugSession((session) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+        void logEvent('debug_start', { fileView: session.name || 'Debug Session' });
+    }));
+
+    // 4. Track when a VS Code Task is run
+    context.subscriptions.push(vscode.tasks.onDidStartTask((e) => {
+        if (state.isPersonalWorkspace || state.currentUserRole === 'Teacher' || state.currentUserRole === 'Admin') { return; }
+        void logEvent('run-script', { fileView: e.execution.task.name || 'Task Execution' });
+    }));
+
     let _authPromptShown = false;
     let _unmonitoredAlertCaptured = false;
 
@@ -1488,9 +1514,18 @@ const logEvent = async (eventType: string, data: any): Promise<void> => {
         
         try {
             await flushBuffer();
-            vscode.window.showInformationMessage(`Successfully synced to: ${assignmentLink.assignmentName}`);
+            const syncStatus = (storageManager as any).getBackgroundSyncStatus();
+            if (syncStatus?.state === 'offline' || syncStatus?.lastError) {
+                vscode.window.showWarningMessage("Sync queued locally. The database rejected the events or is offline.");
+                throw new Error("OfflineSync"); 
+            } else {
+                vscode.window.showInformationMessage(`Successfully synced to: ${assignmentLink.assignmentName}`);
+            }
         } catch (error) {
-            vscode.window.showErrorMessage("Sync failed. Check your network connection.");
+            if (!(error instanceof Error) || error.message !== "OfflineSync") {
+                vscode.window.showErrorMessage("Sync failed. Check your network connection.");
+            }
+            throw error; // Let the UI catch this to display the queued state
         } finally {
             isSyncing = false;
         }

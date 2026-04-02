@@ -552,8 +552,12 @@ function getDashboardHtml(session: any, assignment: any, apiStatus: string, logo
                 }, 3000);
             } else if (message.command === 'syncError' && forceBtn) {
                 forceBtn.disabled = false;
-                forceBtn.innerText = '❌ Sync Failed'; 
-                forceBtn.style.background = 'var(--error)';
+                forceBtn.innerText = '⚠️ Logs Queued Locally'; 
+                forceBtn.style.background = '#d97706'; // warning orange
+                setTimeout(() => { 
+                    forceBtn.innerText = 'Manual Sync';
+                    forceBtn.style.background = 'var(--accent)';
+                }, 4000);
             } else if (message.command === 'syncReset' && manualBtn) {
                 manualBtn.disabled = false;
                 manualBtn.innerText = '🔗 Connect Workspace to Assignment';

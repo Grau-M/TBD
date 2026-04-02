@@ -569,18 +569,19 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
                             StudentWorkspaceAssignmentId: studentWorkspaceAssignmentId
                         };
 
-                        try {
+                       try {
                             newSession = await apiPost('/api/sessions', sessionPayload);
                         } catch (err: any) {
                             // If the 6-digit number randomly collides (extremely rare) or it hits a local sequential clash, reroll once
                             if (err?.responseBody?.includes('23505') || err?.responseBody?.includes('UQ_')) {
-                                sessionPayload.sessionNumber = Math.floor(Math.random() * 900000) + 100000;
+                                const newRand = Math.floor(Math.random() * 900000) + 100000;
+                                sessionPayload.sessionNumber = newRand;
+                                sessionPayload.SessionNumber = newRand; // <-- Fix: ensure both cases are updated for the retry!
                                 newSession = await apiPost('/api/sessions', sessionPayload);
                             } else {
                                 throw err; // Not a duplicate error, throw normally
                             }
                         }
-
                         // Save the new session ID
                         currentSessionId = newSession.Id || newSession.id || newSession.SessionId;
                         generatedOfflineSessionId = currentSessionId;

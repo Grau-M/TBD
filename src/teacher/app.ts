@@ -666,10 +666,10 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
                 studentId: studentAuthUserId
               });
             }
-          } else if (reqContext === 'class') {
+         } else if (reqContext === 'class') {
             for (const rawStudentId of selectionIds) {
               const sidStudent = Number(rawStudentId);
-              if (!sidStudent) continue;
+              if (!sidStudent) { continue; }
 
               const rows = await storageManager.listAssignmentStudentSessions(
                 classId,

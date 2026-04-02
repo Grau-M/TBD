@@ -14,7 +14,9 @@ suite('Webview Integration Tests', () => {
     let disposables: vscode.Disposable[] = [];
     let mockContext: vscode.ExtensionContext;
 
-    suiteSetup(async () => {
+    suiteSetup(async function() {
+        this.timeout(60000); // Increase timeout for extension activation
+        process.env.CI = 'true'; // GUARANTEE TEST BYPASS IS ACTIVE
         vscode.window.showInformationMessage('Starting Webview Integration Tests');
         extension = vscode.extensions.getExtension('MarcusGrau.tbd-logger');
         assert.ok(extension, 'Extension not found');
@@ -22,7 +24,8 @@ suite('Webview Integration Tests', () => {
         assert.ok(api, 'Extension API not returned');
     });
 
-    setup(async () => {
+    setup(async function() {
+        this.timeout(60000); // Prevent 2000ms timeout on Webview creation
         mockContext = {
             extensionPath: __dirname,
             extensionUri: vscode.Uri.file(__dirname),

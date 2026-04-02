@@ -77,13 +77,16 @@ export function createEditListener(): vscode.Disposable {
         let clipboardText = state.externalCopiedText || '';
         if (isMultiCharAtomic) {
             try {
-                clipboardText = await vscode.env.clipboard.readText();
+                // Wrap in a timeout to prevent hanging in headless CI environments
+                clipboardText = await Promise.race([
+                    vscode.env.clipboard.readText(),
+                    new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Clipboard timeout')), 500))
+                ]);
                 state.externalCopiedText = clipboardText; // Keep state synced
             } catch (err) {
-                // fallback to state if clipboard read fails
+                // fallback to state if clipboard read fails or times out
             }
         }
-
         const normalize = (str: string) => str.replace(/\s+/g, '');
         const isExternalCopy = (text: string) => {
             if (!clipboardText) { return false; }
@@ -151,7 +154,7 @@ export function createEditListener(): vscode.Disposable {
                     pendingEditEvent.pasteCharCount = pendingEditEvent.charsAdded;
                 }
 
-                if (editDebounceTimer) clearTimeout(editDebounceTimer);
+                if (editDebounceTimer) { clearTimeout(editDebounceTimer); }
                 editDebounceTimer = setTimeout(pushPendingEvent, DEBOUNCE_MS);
                 return;
             } else {
@@ -185,7 +188,7 @@ export function createEditListener(): vscode.Disposable {
         }
 
         // Start quiet timer
-        if (editDebounceTimer) clearTimeout(editDebounceTimer);
+        if (editDebounceTimer) { clearTimeout(editDebounceTimer); }
         editDebounceTimer = setTimeout(pushPendingEvent, DEBOUNCE_MS);
     });
 }

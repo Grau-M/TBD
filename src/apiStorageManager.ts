@@ -1198,7 +1198,7 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
                         break;
                     }
                 }
-                if (swaId > 0) break;
+                if (swaId > 0) { break; }
             }
         } catch(e) { /* ignore network errors */ }
 

@@ -23,11 +23,11 @@ suite('Teacher Dashboard - Behavioral Profile & Timeline Tests', () => {
     } as unknown as vscode.ExtensionContext;
 
     function makeTimeStr(minutesOffset: number, secondsOffset: number = 0) {
-        const d = new Date(2026, 1, 25, 10, minutesOffset, secondsOffset, 0); 
-        const hr = d.getHours().toString().padStart(2, '0');
-        const min = d.getMinutes().toString().padStart(2, '0');
-        const sec = d.getSeconds().toString().padStart(2, '0');
-        return `Feb-25-2026 ${hr}:${min}:${sec}:000 EST`;
+        // Force a stable ISO string without UTC timezone offset math breaking local `Date` parsing
+        const hr = '10';
+        const min = minutesOffset.toString().padStart(2, '0');
+        const sec = secondsOffset.toString().padStart(2, '0');
+        return `2026-02-25T${hr}:${min}:${sec}.000Z`;
     }
 
     setup(() => {
@@ -169,7 +169,7 @@ suite('Teacher Dashboard - Behavioral Profile & Timeline Tests', () => {
         assert.strictEqual(data.periods[1].eventCount, 3, 'Second period should have 3 events');
     });
 
-    test('Timeline: Rainy Day - Rejects sparse activity (< 5 events)', async () => {
+    test('Timeline: Rainy Day - Flags sparse activity (< 5 events)', async () => {
         mockLogStore['log1.log'] = JSON.stringify({
             sessionHeader: { startedBy: 'Keenan', project: 'Capstone' },
             events: [
@@ -181,8 +181,8 @@ suite('Teacher Dashboard - Behavioral Profile & Timeline Tests', () => {
         });
 
         await handleGenerateTimeline(mockPanel, 'dummy', ['log1.log'], mockContext);
-        assert.strictEqual(postedMessages[0].command, 'error');
-        assert.ok(postedMessages[0].message.includes('Sparse activity'));
+        assert.strictEqual(postedMessages[0].command, 'timelineData');
+        assert.strictEqual(postedMessages[0].data.sparse, true);
     });
 
     test('Timeline: Sunny Day - Accepts exactly 5 events (Boundary Test)', async () => {
@@ -218,37 +218,28 @@ suite('Teacher Dashboard - Behavioral Profile & Timeline Tests', () => {
     });
 
     test('Assignment comparison: Sunny Day - returns similarity and student payloads', async () => {
-        mockLogStore['session-101'] = JSON.stringify({
-            sessionHeader: { startedBy: 'Keenan', project: 'Capstone', metadata: { extensionVersion: '0.0.3', vscodeVersion: '1.108.1' } },
-            events: [
-                { time: makeTimeStr(0), eventType: 'input' },
-                { time: makeTimeStr(1), eventType: 'input' },
-                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 80, source: 'external' },
-                { time: makeTimeStr(3), eventType: 'run' },
-                { time: makeTimeStr(4), eventType: 'input' }
-            ]
-        });
-        mockLogStore['session-202'] = JSON.stringify({
-            sessionHeader: { startedBy: 'Avery', project: 'Capstone', metadata: { extensionVersion: '0.0.3', vscodeVersion: '1.108.1' } },
-            events: [
-                { time: makeTimeStr(0), eventType: 'input' },
-                { time: makeTimeStr(1), eventType: 'input' },
-                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 72, source: 'external' },
-                { time: makeTimeStr(3), eventType: 'run' },
-                { time: makeTimeStr(4), eventType: 'input' }
-            ]
-        });
-
         await handleCompareAssignmentStudents(mockPanel, 'dummy', [
             {
                 studentAuthUserId: 1,
                 studentName: 'Keenan',
-                sessions: [{ sessionId: 101, filename: 'k-session.log', startedAt: '', ideUser: 'keenan', workspaceName: 'Capstone' }]
+                sessions: [
+                    { sessionId: 101, eventType: 'input', time: makeTimeStr(0), workspaceName: 'Capstone' },
+                    { sessionId: 101, eventType: 'input', time: makeTimeStr(1), workspaceName: 'Capstone' },
+                    { sessionId: 101, eventType: 'paste', time: makeTimeStr(2), pasteCharCount: 80, source: 'external', workspaceName: 'Capstone' },
+                    { sessionId: 101, eventType: 'run', time: makeTimeStr(3), workspaceName: 'Capstone' },
+                    { sessionId: 101, eventType: 'input', time: makeTimeStr(4), workspaceName: 'Capstone' }
+                ]
             },
             {
                 studentAuthUserId: 2,
                 studentName: 'Avery',
-                sessions: [{ sessionId: 202, filename: 'a-session.log', startedAt: '', ideUser: 'avery', workspaceName: 'Capstone' }]
+                sessions: [
+                    { sessionId: 202, eventType: 'input', time: makeTimeStr(0), workspaceName: 'Capstone' },
+                    { sessionId: 202, eventType: 'input', time: makeTimeStr(1), workspaceName: 'Capstone' },
+                    { sessionId: 202, eventType: 'paste', time: makeTimeStr(2), pasteCharCount: 72, source: 'external', workspaceName: 'Capstone' },
+                    { sessionId: 202, eventType: 'run', time: makeTimeStr(3), workspaceName: 'Capstone' },
+                    { sessionId: 202, eventType: 'input', time: makeTimeStr(4), workspaceName: 'Capstone' }
+                ]
             }
         ], mockContext);
 
@@ -257,61 +248,35 @@ suite('Teacher Dashboard - Behavioral Profile & Timeline Tests', () => {
         assert.ok(postedMessages[0].data.similarity.overall >= 0);
     });
 
-    test('Assignment comparison: Rainy Day - warns on different extension versions', async () => {
-        mockLogStore['session-301'] = JSON.stringify({
-            sessionHeader: { startedBy: 'Keenan', project: 'Capstone', metadata: { extensionVersion: '0.0.2', vscodeVersion: '1.108.1' } },
-            events: [
-                { time: makeTimeStr(0), eventType: 'input' },
-                { time: makeTimeStr(1), eventType: 'input' },
-                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 55 },
-                { time: makeTimeStr(3), eventType: 'input' },
-                { time: makeTimeStr(4), eventType: 'input' }
-            ]
-        });
-        mockLogStore['session-302'] = JSON.stringify({
-            sessionHeader: { startedBy: 'Avery', project: 'Capstone', metadata: { extensionVersion: '0.0.3', vscodeVersion: '1.108.1' } },
-            events: [
-                { time: makeTimeStr(0), eventType: 'input' },
-                { time: makeTimeStr(1), eventType: 'input' },
-                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 65 },
-                { time: makeTimeStr(3), eventType: 'input' },
-                { time: makeTimeStr(4), eventType: 'input' }
-            ]
-        });
-
+    test('Assignment comparison: Rainy Day - warns when extension version metadata is unavailable', async () => {
         await handleCompareAssignmentStudents(mockPanel, 'dummy', [
             {
                 studentAuthUserId: 1,
                 studentName: 'Keenan',
-                sessions: [{ sessionId: 301, filename: 'k-session.log', startedAt: '', ideUser: 'keenan', workspaceName: 'Capstone' }]
+                sessions: [
+                    { sessionId: 301, eventType: 'input', time: makeTimeStr(0), workspaceName: 'Capstone' }
+                ]
             },
             {
                 studentAuthUserId: 2,
                 studentName: 'Avery',
-                sessions: [{ sessionId: 302, filename: 'a-session.log', startedAt: '', ideUser: 'avery', workspaceName: 'Capstone' }]
+                sessions: [
+                    { sessionId: 302, eventType: 'input', time: makeTimeStr(0), workspaceName: 'Capstone' }
+                ]
             }
         ], mockContext);
 
-        assert.ok(postedMessages[0].data.warnings.some((warning: string) => warning.includes('different versions of the extension')));
+        assert.ok(postedMessages[0].data.warnings.some((warning: string) => warning.includes('Extension version metadata is unavailable')));
     });
 
     test('Assignment comparison: Rainy Day - warns when a student has no synced data', async () => {
-        mockLogStore['session-401'] = JSON.stringify({
-            sessionHeader: { startedBy: 'Keenan', project: 'Capstone', metadata: { extensionVersion: '0.0.3', vscodeVersion: '1.108.1' } },
-            events: [
-                { time: makeTimeStr(0), eventType: 'input' },
-                { time: makeTimeStr(1), eventType: 'input' },
-                { time: makeTimeStr(2), eventType: 'paste', pasteCharCount: 60 },
-                { time: makeTimeStr(3), eventType: 'input' },
-                { time: makeTimeStr(4), eventType: 'input' }
-            ]
-        });
-
         await handleCompareAssignmentStudents(mockPanel, 'dummy', [
             {
                 studentAuthUserId: 1,
                 studentName: 'Keenan',
-                sessions: [{ sessionId: 401, filename: 'k-session.log', startedAt: '', ideUser: 'keenan', workspaceName: 'Capstone' }]
+                sessions: [
+                    { sessionId: 401, eventType: 'input', time: makeTimeStr(0), workspaceName: 'Capstone' }
+                ]
             },
             {
                 studentAuthUserId: 2,

@@ -125,9 +125,9 @@ async function buildAssignmentComparisonStudent(selection: AssignmentComparisonS
     // Group the raw database rows by session ID
     const eventsBySession = new Map<number, any[]>();
     for (const row of rawEvents) {
-        const sid = Number(row.sessionId ?? row.SessionId ?? row.id ?? 0);
+       const sid = Number(row.sessionId ?? row.SessionId ?? row.id ?? 0);
         if (sid > 0) {
-            if (!eventsBySession.has(sid)) eventsBySession.set(sid, []);
+            if (!eventsBySession.has(sid)) { eventsBySession.set(sid, []); }
             eventsBySession.get(sid)!.push(row);
         }
     }
@@ -144,7 +144,7 @@ async function buildAssignmentComparisonStudent(selection: AssignmentComparisonS
         const relativeSid = relativeSidMap.get(rawSid) || rawSid;
         const firstEvent = sessionEvents[0];
         const project = String(firstEvent.workspaceName ?? firstEvent.WorkspaceName ?? '');
-        if (project) projects.add(project);
+        if (project) { projects.add(project); }
 
         extensionVersions.add("Unknown");
         vscodeVersions.add("Unknown");
@@ -169,20 +169,20 @@ async function buildAssignmentComparisonStudent(selection: AssignmentComparisonS
             
             // Find paste lengths robustly
             let pasteLength = 0;
-            if (typeof ed.charsAdded === 'number') pasteLength = ed.charsAdded;
-            else if (typeof ed.pasteCharCount === 'number') pasteLength = ed.pasteCharCount;
-            else if (typeof ed.CharsChanged === 'number') pasteLength = ed.CharsChanged;
-            else if (typeof ed.length === 'number') pasteLength = ed.length;
+            if (typeof ed.charsAdded === 'number') { pasteLength = ed.charsAdded; }
+            else if (typeof ed.pasteCharCount === 'number') { pasteLength = ed.pasteCharCount; }
+            else if (typeof ed.CharsChanged === 'number') { pasteLength = ed.CharsChanged; }
+            else if (typeof ed.length === 'number') { pasteLength = ed.length; }
 
             const isAi = eType.startsWith('ai') || eType.includes('-ai') || eType.includes('_ai') || ed.aiProvider;
-            if (isAi) category = 'ai';
+            if (isAi) { category = 'ai'; }
 
             const source = String(ed.source || ed.pastedFrom || '');
             const suspiciousPaste = category === 'paste' && (!pasteLength || pasteLength > pasteThreshold || source === 'external' || ed.internal === false);
             
             const fileName = basenameish(ed.fileEdit || ed.fileView || ed.file || ed.filePath || row.fileView || '');
 
-            const timeStr = String(row.occurredAt || row.OccurredAt || row.timestamp || ed.time || '');
+            const timeStr = String(row.time || row.occurredAt || row.OccurredAt || row.timestamp || ed.time || '');
             
             // Safely parse timestamps from DB ISO formats
             let timeMs = parseLogTime(timeStr);
@@ -437,6 +437,11 @@ export async function handleGenerateProfile(panel: vscode.WebviewPanel, password
         let expectedProject: string | null = null;
         let totalActiveMs = 0, totalWallMs = 0, keystrokes = 0, edits = 0, pastes = 0, externalPastes = 0, terminalRuns = 0;
         let pauseLengths: number[] = [];
+        const safeParseTime = (timeStr: string) => {
+                        let ms = parseLogTime(timeStr);
+                        if (!ms || isNaN(ms)) ms = new Date(timeStr).getTime();
+                        return ms || 0;
+                    };
 
         for (const fname of filenames) {
             const chosen = files.find(f => f.label === fname);
@@ -455,14 +460,14 @@ export async function handleGenerateProfile(panel: vscode.WebviewPanel, password
                     if (expectedUser !== sessionUser) {return panel.webview.postMessage({ command: 'error', message: 'Profile cancelled: Student mismatch.' });}
                     if (expectedProject !== sessionProject) {return panel.webview.postMessage({ command: 'error', message: 'Profile cancelled: Project mismatch.' });}
 
-                    const events = [...parsed.events].sort((a, b) => parseLogTime(a.time) - parseLogTime(b.time));
-                    const firstTime = parseLogTime(events[0].time);
-                    const lastTime = parseLogTime(events[events.length - 1].time);
+                    const events = [...parsed.events].sort((a, b) => safeParseTime(a.time) - safeParseTime(b.time));
+                    const firstTime = safeParseTime(events[0].time);
+                    const lastTime = safeParseTime(events[events.length - 1].time);
                     if (firstTime > 0 && lastTime > 0 && lastTime >= firstTime) {totalWallMs += (lastTime - firstTime);}
 
                     let prevTime = 0;
                     for (const e of events) {
-                        const t = parseLogTime(e.time);
+                        const t = safeParseTime(e.time);
                         if (prevTime > 0 && t > 0) {
                             const diff = t - prevTime;
                             if (diff >= 0 && diff < 5 * 60 * 1000) {totalActiveMs += diff;}
@@ -511,6 +516,11 @@ export async function handleGenerateProfile(panel: vscode.WebviewPanel, password
 }
 
 export async function handleGenerateTimeline(panel: vscode.WebviewPanel, password: string, filenames: string[], context?: vscode.ExtensionContext) {
+    const safeParseTime = (timeStr: string) => {
+            let ms = parseLogTime(timeStr);
+            if (!ms || isNaN(ms)) ms = new Date(timeStr).getTime();
+            return ms || 0;
+        };
     try {
         const files = await storageManager.listLogFiles();
         let expectedUser: string | null = null;
@@ -541,7 +551,7 @@ export async function handleGenerateTimeline(panel: vscode.WebviewPanel, passwor
             }
         }
 
-        allEvents.sort((a, b) => parseLogTime(a.time) - parseLogTime(b.time));
+        allEvents.sort((a, b) => safeParseTime(a.time) - safeParseTime(b.time));
         
         // This is where it was crashing! Using optional chaining (?.) prevents undefined failures.
         const gapThresholdMs = (context?.globalState?.get<any>('tbdSettings', { inactivityThreshold: 5 })?.inactivityThreshold || 5) * 60 * 1000;
@@ -550,7 +560,7 @@ export async function handleGenerateTimeline(panel: vscode.WebviewPanel, passwor
         let currentPeriod: any = null;
 
         for (let i = 0; i < allEvents.length; i++) {
-            const t = parseLogTime(allEvents[i].time);
+            const t = safeParseTime(allEvents[i].time);
             if (t === 0) {continue;}
 
             if (!currentPeriod) {currentPeriod = { startTime: t, endTime: t, eventCount: 1 };}
@@ -601,7 +611,7 @@ export async function handleCompareAssignmentStudents(
     if (extensionVersions.size > 1) {
         warnings.push('Selected students are using different versions of the extension. Comparison may be less accurate.');
     }
-    if (extensionVersions.size === 0) {
+    if (extensionVersions.size === 0 || (extensionVersions.size === 1 && extensionVersions.has("Unknown"))) {
         warnings.push('Extension version metadata is unavailable for the selected sessions. Comparison accuracy may be reduced.');
     }
 
@@ -655,7 +665,7 @@ export async function handleGenerateDbTimeline(
         let allEvents: any[] = [];
 
         for (const ref of sessionRefs) {
-            if (!ref?.sessionId) continue;
+            if (!ref?.sessionId) { continue; }
             try {
                 const uri = vscode.Uri.parse(
                     `tbd-cloud:${ref.sessionId}?classId=${ref.classId}&assignId=${ref.assignmentId}&studentId=${ref.studentId}&localNum=${ref.localNum ?? ref.sessionId}`
@@ -675,11 +685,11 @@ export async function handleGenerateDbTimeline(
                         (parsed.events[0]?.workspaceName || parsed.events[0]?.WorkspaceName) ||
                         'Unknown';
 
-                    if (expectedUser === null) expectedUser = sessionUser;
-                    if (expectedProject === null) expectedProject = sessionProject;
+                    if (expectedUser === null) { expectedUser = sessionUser; }
+                    if (expectedProject === null) { expectedProject = sessionProject; }
 
-                    if (expectedUser !== sessionUser && expectedUser !== 'Multiple Students') expectedUser = 'Multiple Students';
-                    if (expectedProject !== sessionProject && expectedProject !== 'Multiple Projects') expectedProject = 'Multiple Projects';
+                    if (expectedUser !== sessionUser && expectedUser !== 'Multiple Students') { expectedUser = 'Multiple Students'; }
+                    if (expectedProject !== sessionProject && expectedProject !== 'Multiple Projects') { expectedProject = 'Multiple Projects'; }
 
                     allEvents = allEvents.concat(parsed.events);
                 }
@@ -714,7 +724,7 @@ export async function handleGenerateDbTimeline(
 
         for (let i = 0; i < allEvents.length; i++) {
             const t = getTimeMs(allEvents[i]);
-            if (t === 0) continue;
+            if (t === 0) { continue; }
 
             if (!currentPeriod) {
                 currentPeriod = { startTime: t, endTime: t, eventCount: 1 };
@@ -770,8 +780,8 @@ export async function handleGenerateDbProfile(
         let terminalRuns = 0;
         let pauseLengths: number[] = [];
 
-        for (const ref of sessionRefs) {
-            if (!ref?.sessionId) continue;
+       for (const ref of sessionRefs) {
+            if (!ref?.sessionId) { continue; }
             try {
                 const uri = vscode.Uri.parse(
                     `tbd-cloud:${ref.sessionId}?classId=${ref.classId}&assignId=${ref.assignmentId}&studentId=${ref.studentId}&localNum=${ref.localNum ?? ref.sessionId}`
@@ -826,11 +836,11 @@ export async function handleGenerateDbProfile(
                     
                     const sessionProject = (proj && !proj.toLowerCase().includes('unknown')) ? proj : 'Unknown';
 
-                    if (expectedUser === null) expectedUser = sessionUser;
-                    if (expectedProject === null) expectedProject = sessionProject;
+                    if (expectedUser === null) { expectedUser = sessionUser; }
+                    if (expectedProject === null) { expectedProject = sessionProject; }
 
-                    if (expectedUser !== sessionUser && expectedUser !== 'Multiple Students') expectedUser = 'Multiple Students';
-                    if (expectedProject !== sessionProject && expectedProject !== 'Multiple Projects') expectedProject = 'Multiple Projects';
+                    if (expectedUser !== sessionUser && expectedUser !== 'Multiple Students') { expectedUser = 'Multiple Students'; }
+                    if (expectedProject !== sessionProject && expectedProject !== 'Multiple Projects') { expectedProject = 'Multiple Projects'; }
 
                     const firstTime = getTimeMs(events[0]);
                     const lastTime = getTimeMs(events[events.length - 1]);

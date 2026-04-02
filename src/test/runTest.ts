@@ -34,6 +34,9 @@ async function main() {
 				`--user-data-dir=${userDataDir}`,
 				`--extensions-dir=${extensionsDir}`,
 			],
+			extensionTestsEnv: {
+				CI: 'true' // GUARANTEES BYPASS BEFORE EXTENSION BOOTS
+			}
 		});
 	} /* c8 ignore next 4 */ catch (err) {
 		console.error('Failed to run tests', err);

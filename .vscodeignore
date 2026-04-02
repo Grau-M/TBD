@@ -2,7 +2,6 @@
 .vscode-test/**
 out/**
 node_modules/**
-src/**
 .gitignore
 .yarnrc
 webpack.config.js
@@ -16,3 +15,13 @@ vsc-extension-quickstart.md
 .env
 .env.*
 test-db-diagnostic.js
+
+# Ignore TypeScript files in src
+src/**/*.ts
+
+# BUT explicitly keep HTML, standard JS, CSS, and Images inside src!
+!src/**/*.html
+!src/**/*.js
+!src/**/*.css
+!src/**/*.png
+!src/**/*.ico

@@ -7,7 +7,8 @@ import { startUiTimer } from '../../uiTimer';
 import { computeConfidence } from '../../confidenceIndicator';
 import { state } from '../../state';
 
-suite('Code Coverage: UI Components', () => {
+suite('Code Coverage: UI Components', function () {
+    this.timeout(10000); 
     let context: vscode.ExtensionContext;
     let disposables: vscode.Disposable[] = [];
 

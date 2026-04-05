@@ -5436,6 +5436,27 @@
                 ? "none"
                 : "inline";
             }
+
+            const noteLabel = eventRow?.querySelector(".loaded-note-text");
+            const noteTextClean = noteText.trim();
+            if (noteTextClean) {
+              let label = noteLabel;
+              if (!label) {
+                label = document.createElement("div");
+                label.className = "loaded-note-text";
+                label.style.cssText =
+                  "margin-top:10px; padding:10px 14px; border-left:4px solid #10b981; background:rgba(16, 185, 129, 0.1); color:#10b981; font-size:0.9rem; border-radius:4px; font-weight: 500; font-family: monospace;";
+                if (notesArea) {
+                  eventRow?.insertBefore(label, notesArea);
+                } else {
+                  eventRow?.appendChild(label);
+                }
+              }
+              label.innerHTML = `<strong>📝 Teacher note:</strong> ${noteTextClean}`;
+            } else if (noteLabel) {
+              noteLabel.remove();
+            }
+
             if (notesArea) {
               notesArea.style.display = "none";
             }
@@ -5918,6 +5939,26 @@
               emptyIcon.style.display = isEmpty ? "inline" : "none";
               filledIcon.style.display = isEmpty ? "none" : "inline";
             }
+          }
+
+          const noteLabel = eventRow?.querySelector(".loaded-note-text");
+          const noteTextClean = noteText.trim();
+          if (noteTextClean) {
+            let label = noteLabel;
+            if (!label) {
+              label = document.createElement("div");
+              label.className = "loaded-note-text";
+              label.style.cssText =
+                "margin-top:10px; padding:10px 14px; border-left:4px solid #10b981; background:rgba(16, 185, 129, 0.1); color:#10b981; font-size:0.9rem; border-radius:4px; font-weight: 500; font-family: monospace;";
+              if (notesArea) {
+                eventRow?.insertBefore(label, notesArea);
+              } else {
+                eventRow?.appendChild(label);
+              }
+            }
+            label.innerHTML = `<strong>📝 Teacher note:</strong> ${noteTextClean}`;
+          } else if (noteLabel) {
+            noteLabel.remove();
           }
 
           if (notesArea) {

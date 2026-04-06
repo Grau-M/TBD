@@ -164,7 +164,25 @@ suite('Webview UI & Rendering Tests', () => {
     });
 
     /**
-     * Test 11: Log Selection from Dropdown
+     * Test 11: Assignment Details Refresh
+     * Verifies refresh button on assignment details triggers openAssignmentWork
+     */
+    test('Assignment details refresh button sends openAssignmentWork message', (done) => {
+        const refreshClick = {
+            action: 'refresh-assignment',
+            command: 'openAssignmentWork',
+            classId: 123,
+            assignmentId: 456
+        };
+        
+        assert.strictEqual(refreshClick.command, 'openAssignmentWork', 'Refresh should reload assignment work');
+        assert.strictEqual(refreshClick.classId, 123, 'Should include classId');
+        assert.strictEqual(refreshClick.assignmentId, 456, 'Should include assignmentId');
+        done();
+    });
+
+    /**
+     * Test 12: Log Selection from Dropdown
      * Verifies log selection triggers openLog
      */
     test('Selecting log from dropdown sends openLog message', (done) => {

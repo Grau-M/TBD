@@ -4662,7 +4662,7 @@
       btnViewList.onclick = (e) => {
         e.target.className = "btn btn-primary";
         btnViewTimeline.className = "btn btn-secondary";
-        if (btnViewBehavior) btnViewBehavior.className = "btn btn-secondary";
+        if (btnViewBehavior) {btnViewBehavior.className = "btn btn-secondary";}
         listContainer.style.display = "flex";
         timelineContainer.style.display = "none";
         behaviorContainer.style.display = "none";
@@ -4671,7 +4671,7 @@
       btnViewTimeline.onclick = (e) => {
         e.target.className = "btn btn-primary";
         btnViewList.className = "btn btn-secondary";
-        if (btnViewBehavior) btnViewBehavior.className = "btn btn-secondary";
+        if (btnViewBehavior) {btnViewBehavior.className = "btn btn-secondary";}
         listContainer.style.display = "none";
         timelineContainer.style.display = "flex";
         behaviorContainer.style.display = "none";

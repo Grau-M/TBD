@@ -4071,13 +4071,13 @@
         ? payload.classStudents
         : [];
       const studentReport = payload.studentReport || null;
-      const rawStudentsWorkRows = Array.isArray(
-        payload.studentWorkRawResponse?.students,
-      )
-        ? payload.studentWorkRawResponse.students
-        : Array.isArray(payload.studentWorkRawResponse?.data)
-          ? payload.studentWorkRawResponse.data
-          : students;
+      const rawStudentsWorkRows = Array.isArray(students)
+        ? students
+        : Array.isArray(payload.studentWorkRawResponse?.students)
+          ? payload.studentWorkRawResponse.students
+          : Array.isArray(payload.studentWorkRawResponse?.data)
+            ? payload.studentWorkRawResponse.data
+            : [];
 
       const view = $("assignment-work-view");
 
@@ -4101,6 +4101,8 @@
       currentAssignmentStudents = rawStudentsWorkRows.map((student) => {
         const studentAuthUserId = Number(
           student?.authUserId ??
+            student?.studentAuthUserId ??
+            student?.StudentAuthUserId ??
             student?.AuthUserId ??
             student?.UserId ??
             student?.userId ??

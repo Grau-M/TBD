@@ -355,11 +355,13 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
             console.warn('Failed to load assignment student work for openAssignmentWork:', error);
           }
           const studentWorkRawResponse = (students as any)?.rawResponse ?? null;
-          const studentWorkRows = Array.isArray(studentWorkRawResponse?.students)
-            ? studentWorkRawResponse.students
-            : (Array.isArray(studentWorkRawResponse?.data) ? studentWorkRawResponse.data : students);
+          const studentWorkRows = Array.isArray(students)
+            ? students
+            : Array.isArray(studentWorkRawResponse?.students)
+              ? studentWorkRawResponse.students
+              : (Array.isArray(studentWorkRawResponse?.data) ? studentWorkRawResponse.data : []);
           // start of AI detection and count fix
-           if (Array.isArray(studentWorkRows)) {
+          if (Array.isArray(studentWorkRows)) {
             await Promise.all(studentWorkRows.map(async (student) => {
               const studentId = Number(student?.authUserId ?? student?.UserId ?? student?.userId ?? 0);
               if (studentId > 0) {
@@ -398,7 +400,7 @@ export async function openTeacherView(context: vscode.ExtensionContext) {
               }
             }));
           } // end of AI detection and count fix
-          const focusedStudentWorkRow = (studentWorkRows || []).find((studentRow: any) => Number(studentRow?.authUserId ?? studentRow?.UserId ?? studentRow?.userId ?? 0) === focusStudentAuthUserId) || null;
+          const focusedStudentWorkRow = (studentWorkRows || []).find((studentRow: any) => Number(studentRow?.authUserId ?? studentRow?.studentAuthUserId ?? studentRow?.StudentAuthUserId ?? studentRow?.UserId ?? studentRow?.userId ?? 0) === focusStudentAuthUserId) || null;
 
           let studentReport: any = null;
           try {

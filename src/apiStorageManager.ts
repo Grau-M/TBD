@@ -1470,23 +1470,28 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         const rows = Array.isArray(result)
             ? result
             : (Array.isArray(result?.students) ? result.students : (Array.isArray(result?.data) ? result.data : []));
-        const normalizedRows = rows.map((row: any) => ({
-            ...row,
-            authUserId: Number(row.UserId || row.userId || row.authUserId || 0),
-            studentName: String(row.StudentName || row.studentName || row.displayName || 'Unknown Student'),
-            studentEmail: String(row.StudentEmail || row.studentEmail || row.email || ''),
-            role: this.normalizeRole(row.Role || row.role || row.assignedRole || row.AssignedRole),
-            sessionCount: Number(this.pick(row, ['SessionCount', 'sessionCount', 'totalSessions', 'TotalSessions']) ?? 0),
-            totalEvents: Number(this.pick(row, ['TotalEvents', 'totalEvents', 'eventCount', 'EventCount']) ?? 0),
-            lastActive: String(this.pick(row, ['LastActive', 'lastActive']) || ''),
-            workspaceName: String(row.WorkspaceName || row.workspaceName || ''),
-            workspaceRootPath: String(row.WorkspaceRootPath || row.workspaceRootPath || ''),
-            linkedAt: String(this.pick(row, ['LinkedAt', 'linkedAt']) || ''),
-            synced: Boolean(row.synced ?? row.Synced ?? false),
-            aiEventCount: Number(row.AiEventCount || row.aiEventCount || 0),
-            totalPasteEvents: Number(row.TotalPasteEvents || row.totalPasteEvents || 0),
-            suspiciousPasteCount: Number(row.SuspiciousPasteCount || row.suspiciousPasteCount || 0)
-        }));
+        const normalizedRows = rows.map((row: any) => {
+            const authUserId = Number(this.pick(row, ['authUserId', 'AuthUserId', 'studentAuthUserId', 'StudentAuthUserId', 'userId', 'UserId', 'id', 'Id']) ?? 0);
+            return {
+                ...row,
+                authUserId,
+                studentAuthUserId: authUserId,
+                StudentAuthUserId: authUserId,
+                studentName: String(row.StudentName || row.studentName || row.displayName || 'Unknown Student'),
+                studentEmail: String(row.StudentEmail || row.studentEmail || row.email || ''),
+                role: this.normalizeRole(row.Role || row.role || row.assignedRole || row.AssignedRole),
+                sessionCount: Number(this.pick(row, ['SessionCount', 'sessionCount', 'totalSessions', 'TotalSessions']) ?? 0),
+                totalEvents: Number(this.pick(row, ['TotalEvents', 'totalEvents', 'eventCount', 'EventCount']) ?? 0),
+                lastActive: String(this.pick(row, ['LastActive', 'lastActive']) || ''),
+                workspaceName: String(row.WorkspaceName || row.workspaceName || ''),
+                workspaceRootPath: String(row.WorkspaceRootPath || row.workspaceRootPath || ''),
+                linkedAt: String(this.pick(row, ['LinkedAt', 'linkedAt']) || ''),
+                synced: Boolean(row.synced ?? row.Synced ?? false),
+                aiEventCount: Number(row.AiEventCount || row.aiEventCount || 0),
+                totalPasteEvents: Number(row.TotalPasteEvents || row.totalPasteEvents || 0),
+                suspiciousPasteCount: Number(row.SuspiciousPasteCount || row.suspiciousPasteCount || 0)
+            };
+        });
         (normalizedRows as any).rawResponse = result;
         return normalizedRows;
     }
@@ -1498,7 +1503,7 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
         teacherAuthUserId?: number
     ): Promise<any[]> {
         const teacherId = Number(teacherAuthUserId ?? 0);
-        const primaryPath = `/api/classes/assignment-student-sessions?classId=${classId}&assignmentId=${assignmentId}&studentAuthUserId=${studentAuthUserId}`;
+        const primaryPath = `/api/classes/assignment-student-sessions?classId=${classId}&assignmentId=${assignmentId}&studentAuthUserId=${studentAuthUserId}&teacherAuthUserId=${teacherId}`;
         const fallbackPath = `/api/classes/${classId}/assignments/${assignmentId}/students/${studentAuthUserId}/sessions?teacherAuthUserId=${teacherId}`;
 
         let result: any;
@@ -1513,7 +1518,15 @@ async flush(_newEvents: StandardEvent[]): Promise<void> {
 
         const rows = Array.isArray(result)
             ? result
-            : (Array.isArray(result?.sessions) ? result.sessions : (Array.isArray(result?.data) ? result.data : []));
+            : (Array.isArray(result?.sessions)
+                ? result.sessions
+                : (Array.isArray(result?.data)
+                    ? result.data
+                    : (Array.isArray(result?.rows)
+                        ? result.rows
+                        : (Array.isArray(result?.events)
+                            ? result.events
+                            : []))));
         return rows;
     }
 

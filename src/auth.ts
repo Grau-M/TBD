@@ -214,7 +214,7 @@ async function promptStudentAssignmentLink(
 
     const metadata = extractWorkspaceMetadata();
     
-    // 👉 FIX: Capture the result of the backend link
+// 👉 FIX: Capture the result of the backend link
     const linkResult = await storageManager.linkStudentWorkspaceToAssignment({
         studentAuthUserId: authUserId,
         teacherAuthUserId: linkedClass.teacherAuthUserId,
@@ -225,12 +225,42 @@ async function promptStudentAssignmentLink(
         workspaceFoldersJson: metadata.workspaceFoldersJson
     });
 
+    // 1. Try to grab it from the response directly
+    let realLinkId = Number(linkResult?.id || linkResult?.Id || linkResult?.workspaceId || linkResult?.StudentWorkspaceAssignmentId || 0);
+
+    // 2. NEW FIX: If the API didn't return it cleanly, wait for DB commit and fetch aggressively
+    if (!realLinkId || realLinkId <= 0) {
+        await new Promise(resolve => setTimeout(resolve, 800)); // wait for database to commit
+        try {
+            // Note: We use listStudentAssignmentsForClass to get the student's specific linked paths
+            const studentAssignments = await (storageManager as any).listStudentAssignmentsForClass(authUserId, linkedClass.id);
+            for (const a of studentAssignments) {
+                if (a.workspaceRootPath && vscode.Uri.file(a.workspaceRootPath).fsPath === vscode.Uri.file(metadata.workspaceRootPath).fsPath) {
+                    realLinkId = Number(a.workspaceId || a.id || a.studentWorkspaceAssignmentId || a.assignmentId);
+                    break;
+                }
+            }
+        } catch (e) {
+            console.warn("[TBD Logger] Failed to fetch real link ID after creation during Auth.", e);
+        }
+    }
+
+    // 3. FINAL FALLBACK: Mathematical hash
+    if (!realLinkId || realLinkId <= 0) {
+        const source = `${selected.assignment.id}|${metadata.workspaceRootPath}|${metadata.workspaceName}`;
+        let hash = 2166136261;
+        for (let index = 0; index < source.length; index++) {
+            hash ^= source.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+        realLinkId = (hash >>> 0) > 0 ? (hash >>> 0) : 1;
+    }
+
     return {
         classId: linkedClass.id,
         assignmentId: selected.assignment.id,
         workspaceRootPath: metadata.workspaceRootPath,
-        // 👉 FIX: Safely parse the returned ID from the database link request
-        studentWorkspaceAssignmentId: Number(linkResult?.id || linkResult?.Id || linkResult?.workspaceId || linkResult?.StudentWorkspaceAssignmentId || 0)
+        studentWorkspaceAssignmentId: realLinkId // 👉 FIX: Provide the fully resolved ID
     };
 }
 

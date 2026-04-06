@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { WorkspaceAuthSession } from '../../auth';
+import { state } from '../../state';
 import { getAccountHtml } from './getHtml';
 import { getThemePreference, normalizeThemePreference, setThemePreference } from '../../themePreference';
 import { registerWebviewPanel } from '../../webviewRegistry';
@@ -348,6 +349,20 @@ export async function openAccountView(
                     });
 
                     const refreshed = await storageManager.listStudentAssignmentsForClass(currentSession.authUserId, classId);
+
+                    session.workspaceLinkedClassId = classId;
+                    session.workspaceLinkedAssignmentId = assignmentId;
+                    session.workspaceRootPath = folderUri.fsPath;
+                    if (linkedWorkspace?.studentWorkspaceAssignmentId) {
+                        session.studentWorkspaceAssignmentId = linkedWorkspace.studentWorkspaceAssignmentId;
+                    }
+                    await context.workspaceState.update(WORKSPACE_AUTH_KEY, session);
+
+                    state.activeCourse = selectedClass?.courseName || selectedClass?.courseCode || `Class ${classId}`;
+                    state.activeAssignment = target.assignmentName || target.name || `Assignment ${assignmentId}`;
+                    state.isSessionActive = true;
+                    state.currentUserRole = 'Student';
+
                     accountPanel?.webview.postMessage({
                         command: 'studentAssignmentWorkspaceLinked',
                         data: {
@@ -359,6 +374,8 @@ export async function openAccountView(
                             workspaceRootPath: folderUri.fsPath
                         }
                     });
+
+                    await vscode.commands.executeCommand('tbd-logger.refreshStatusBar');
                     break;
                 }
             }

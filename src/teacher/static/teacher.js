@@ -29,6 +29,7 @@
   let editingClassId = null;
   let currentClassAssignments = [];
   let classRefreshAnimationTimer = null;
+  let assignmentRefreshAnimationTimer = null;
   let currentAssignmentId = null;
   let currentAssignmentName = "";
   let currentClassDetailTab = "assignments";
@@ -2862,6 +2863,9 @@
             $("btn-create-assignment").disabled = false;
             $("btn-create-assignment").textContent = "Create Assignment";
           }
+          if ($("btn-refresh-assignment")) {
+            setAssignmentRefreshLoading(false);
+          }
           if (status) {
             status.textContent = "Error: " + (msg.message || "");
           }
@@ -3073,6 +3077,7 @@
         }
 
         case "assignmentWorkData": {
+          setAssignmentRefreshLoading(false);
           renderAssignmentWork(msg.data || {});
           if (status) {
             status.textContent = "Assignment work loaded.";
@@ -3547,6 +3552,36 @@
       btn.disabled = true;
       btn.textContent = frames[frameIndex];
       classRefreshAnimationTimer = window.setInterval(() => {
+        frameIndex = (frameIndex + 1) % frames.length;
+        btn.textContent = frames[frameIndex];
+      }, 250);
+    }
+
+    function setAssignmentRefreshLoading(isLoading) {
+      const btn = $("btn-refresh-assignment");
+      if (!btn) {
+        return;
+      }
+
+      if (!isLoading) {
+        if (assignmentRefreshAnimationTimer) {
+          clearInterval(assignmentRefreshAnimationTimer);
+          assignmentRefreshAnimationTimer = null;
+        }
+        btn.disabled = false;
+        btn.textContent = "↻ Refresh";
+        return;
+      }
+
+      if (assignmentRefreshAnimationTimer) {
+        return;
+      }
+
+      const frames = ["↻ Refresh.", "↻ Refresh..", "↻ Refresh..."];
+      let frameIndex = 0;
+      btn.disabled = true;
+      btn.textContent = frames[frameIndex];
+      assignmentRefreshAnimationTimer = window.setInterval(() => {
         frameIndex = (frameIndex + 1) % frames.length;
         btn.textContent = frames[frameIndex];
       }, 250);
@@ -6065,6 +6100,17 @@
       }
       clearAssignmentComparisonSelection();
       restoreAssignmentListVisibility();
+    });
+
+    $("btn-refresh-assignment")?.addEventListener("click", () => {
+      if (!currentClassId || !currentAssignmentId) {
+        return;
+      }
+      setAssignmentRefreshLoading(true);
+      post("openAssignmentWork", {
+        classId: currentClassId,
+        assignmentId: currentAssignmentId,
+      });
     });
 
     $("btn-back-to-assignment-students")?.addEventListener("click", () => {

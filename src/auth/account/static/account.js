@@ -740,6 +740,12 @@
 
     $("btn-submit-join-class")?.addEventListener("click", submitJoinCode);
     $("btn-close-join-class")?.addEventListener("click", closeJoinPanel);
+    $("btn-refresh-student-class")?.addEventListener("click", () => {
+      if (!state.selectedClassId) {
+        return;
+      }
+      loadAssignments(state.selectedClassId);
+    });
 
     $("join-class-input")?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
